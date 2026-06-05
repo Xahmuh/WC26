@@ -1,46 +1,58 @@
 {
   "expo": {
-    "name": "WC26 Predictor",
-    "slug": "world-cup-predictions",
+    "name": "WC26",
+    "slug": "wc26-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "wcpredictions",
+    "scheme": "wc26",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/favicon.png",
+
     "splash": {
       "image": "./assets/splashscreen.png",
       "resizeMode": "contain",
       "backgroundColor": "#F8F4D7"
     },
+
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.worldcup.predictions"
+      "bundleIdentifier": "org.wc26.app",
+      "icon": "./assets/favicon.png"
     },
+
     "android": {
-      "package": "org.worldcup.predictions",
+      "package": "org.wc26.app",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/favicon.png",
         "backgroundColor": "#0D0F0E"
       }
     },
+
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
       "expo-router",
       "expo-asset"
     ],
+
     "experiments": {
       "typedRoutes": true
     },
+
     "extra": {
       "supabaseUrl": "https://sjqhsmyqlgjbimwkruqd.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcWhzbXlxbGdqYmltd2tydXFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MDYwNTIsImV4cCI6MjA5NjE4MjA1Mn0.PltPN4xYQR3vu1H6XaXw4FsmNIvLEFRmYu-WuhZ7I2o",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcWhzbXlxbGdqYmltd2tydXFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MDYwNTIsImV4cCI6MjA5NjE4MjA1Mn0.PltPN4xYQR3vu1H6XaXw4XfMIvLEFRmYu-WuhZ7I2o",
       "router": {},
       "eas": {
         "projectId": "f9895b4d-0f6b-42ca-8c89-28c329599ca7"
       }
     },
+
     "owner": "xahmuh"
   }
 }

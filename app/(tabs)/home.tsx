@@ -277,9 +277,12 @@ interface StatTileProps {
 
 function StatTile({ label, value }: StatTileProps): React.JSX.Element {
   return (
-    <Card className="flex-1 items-center gap-1 p-3 border border-bgBorder bg-bgSurface2">
-      <Text className="text-xl font-bold text-textPrimary">{value}</Text>
-      <Text className="text-center text-[11px] text-textSecondary">{label}</Text>
+    <Card 
+      className="flex-1 items-center gap-1 p-3"
+      style={{ backgroundColor: Theme.colors.accent, borderColor: Theme.colors.accent }}
+    >
+      <Text className="text-xl font-extrabold" style={{ color: Theme.colors.accentDark }}>{value}</Text>
+      <Text className="text-center text-[11px] font-bold" style={{ color: Theme.colors.accentDark }}>{label}</Text>
     </Card>
   );
 }

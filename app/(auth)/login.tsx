@@ -138,10 +138,13 @@ export default function LoginScreen(): React.JSX.Element {
                   className="text-center text-base uppercase tracking-[0.2em] text-textPrimary font-extrabold"
                   style={{ marginTop: -5 }}
                 >
-                  No budget Gambling
+                  
                 </Text>
-                <Text className="text-center text-xs uppercase tracking-[0.25em] text-textSecondary font-semibold mt-1">
-                  Predict. Believe. Win
+                <Text 
+                  className="text-center text-xs uppercase tracking-[0.25em] text-textSecondary font-semibold"
+                  style={{ marginTop: 18 }}
+                >
+                  Compete. Climb. Lead
                 </Text>
               </View>
             </View>

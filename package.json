@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "fix-html": "node scripts/fix-html.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

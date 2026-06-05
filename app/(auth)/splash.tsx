@@ -83,15 +83,16 @@ export default function CustomSplashScreen(): React.JSX.Element {
         <Image
           source={require('../../assets/splashscreen.png')}
           style={{ width: '100%', height: '100%' }}
-          resizeMode="contain"
+          resizeMode="cover"
         />
       </View>
 
-      {/* Floating Animated Circular Button with Ripples (Raised slightly to top: 83% height) */}
+      {/* Floating Animated Circular Button with Ripples (Raised slightly to top: 73% height, lowered 7px total) */}
       <View 
         style={{ 
           position: 'absolute',
-          top: '83%',
+          top: '73%',
+          marginTop: 35,
           left: 0,
           right: 0,
           alignItems: 'center',
