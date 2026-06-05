@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "World Cup Predictions",
+    "slug": "world-cup-predictions",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "wcpredictions",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splashscreen.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F4D7"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.worldcup.predictions"
+    },
+    "android": {
+      "package": "org.worldcup.predictions",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0F0E"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "supabaseUrl": "https://sjqhsmyqlgjbimwkruqd.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcWhzbXlxbGdqYmltd2tydXFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MDYwNTIsImV4cCI6MjA5NjE4MjA1Mn0.PltPN4xYQR3vu1H6XaXw4FsmNIvLEFRmYu-WuhZ7I2o"
+    }
+  }
+}

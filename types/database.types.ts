@@ -1,0 +1,644 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
+  public: {
+    Tables: {
+      competition_groups: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competition_groups_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "competition_groups_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_members: {
+        Row: {
+          group_id: string
+          joined_at: string
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          joined_at?: string
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          joined_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "competition_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "group_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      matches: {
+        Row: {
+          away_score: number | null
+          away_team_id: string
+          created_at: string
+          external_id: number
+          group_name: string | null
+          home_score: number | null
+          home_team_id: string
+          id: string
+          kickoff_time: string
+          last_synced_at: string | null
+          points_multiplier: number
+          stage: Database["public"]["Enums"]["match_stage"]
+          status: Database["public"]["Enums"]["match_status"]
+          venue: string | null
+        }
+        Insert: {
+          away_score?: number | null
+          away_team_id: string
+          created_at?: string
+          external_id: number
+          group_name?: string | null
+          home_score?: number | null
+          home_team_id: string
+          id?: string
+          kickoff_time: string
+          last_synced_at?: string | null
+          points_multiplier?: number
+          stage?: Database["public"]["Enums"]["match_stage"]
+          status?: Database["public"]["Enums"]["match_status"]
+          venue?: string | null
+        }
+        Update: {
+          away_score?: number | null
+          away_team_id?: string
+          created_at?: string
+          external_id?: number
+          group_name?: string | null
+          home_score?: number | null
+          home_team_id?: string
+          id?: string
+          kickoff_time?: string
+          last_synced_at?: string | null
+          points_multiplier?: number
+          stage?: Database["public"]["Enums"]["match_stage"]
+          status?: Database["public"]["Enums"]["match_status"]
+          venue?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_away_team_id_fkey"
+            columns: ["away_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_home_team_id_fkey"
+            columns: ["home_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      points: {
+        Row: {
+          away_goal_points: number
+          calculated_at: string
+          exact_bonus: number
+          home_goal_points: number
+          id: string
+          match_id: string | null
+          question_id: string | null
+          total_points: number
+          user_id: string
+          winner_points: number
+        }
+        Insert: {
+          away_goal_points?: number
+          calculated_at?: string
+          exact_bonus?: number
+          home_goal_points?: number
+          id?: string
+          match_id?: string | null
+          question_id?: string | null
+          total_points?: number
+          user_id: string
+          winner_points?: number
+        }
+        Update: {
+          away_goal_points?: number
+          calculated_at?: string
+          exact_bonus?: number
+          home_goal_points?: number
+          id?: string
+          match_id?: string | null
+          question_id?: string | null
+          total_points?: number
+          user_id?: string
+          winner_points?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "points_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "points_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "prediction_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "points_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "points_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prediction_questions: {
+        Row: {
+          correct_answer: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          lock_at: string
+          options: Json
+          points: number
+          question_text: string
+          resolved_at: string | null
+          status: string
+        }
+        Insert: {
+          correct_answer?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lock_at?: string
+          options: Json
+          points?: number
+          question_text: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Update: {
+          correct_answer?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lock_at?: string
+          options?: Json
+          points?: number
+          question_text?: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prediction_questions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "prediction_questions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      predictions: {
+        Row: {
+          created_at: string
+          id: string
+          is_locked: boolean
+          match_id: string
+          pred_away_score: number
+          pred_home_score: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          match_id: string
+          pred_away_score: number
+          pred_home_score: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          match_id?: string
+          pred_away_score?: number
+          pred_home_score?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predictions_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          code: string | null
+          created_at: string
+          external_id: number
+          flag_url: string | null
+          group_name: string | null
+          id: string
+          name: string
+          short_name: string | null
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          external_id: number
+          flag_url?: string | null
+          group_name?: string | null
+          id?: string
+          name: string
+          short_name?: string | null
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          external_id?: number
+          flag_url?: string | null
+          group_name?: string | null
+          id?: string
+          name?: string
+          short_name?: string | null
+        }
+        Relationships: []
+      }
+      user_question_predictions: {
+        Row: {
+          created_at: string
+          id: string
+          prediction: string
+          question_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          prediction: string
+          question_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          prediction?: string
+          question_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_question_predictions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "prediction_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_question_predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "user_question_predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string
+          email: string | null
+          id: string
+          last_login: string | null
+          role: string
+          supported_teams: string[] | null
+          total_points: number
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name: string
+          email?: string | null
+          id: string
+          last_login?: string | null
+          role?: string
+          supported_teams?: string[] | null
+          total_points?: number
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          email?: string | null
+          id?: string
+          last_login?: string | null
+          role?: string
+          supported_teams?: string[] | null
+          total_points?: number
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      leaderboard: {
+        Row: {
+          avatar_url: string | null
+          display_name: string | null
+          exact_predictions: number | null
+          predictions_made: number | null
+          predictions_scored: number | null
+          rank: number | null
+          supported_teams: string[] | null
+          total_points: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+    }
+    Functions: {
+      is_admin: { Args: never; Returns: boolean }
+      lock_predictions_at_kickoff: { Args: never; Returns: undefined }
+      refresh_leaderboard: { Args: never; Returns: undefined }
+      resolve_prediction_question: {
+        Args: { p_correct_answer: string; p_question_id: string }
+        Returns: undefined
+      }
+    }
+    Enums: {
+      match_stage:
+        | "GROUP"
+        | "ROUND_OF_16"
+        | "QUARTER_FINAL"
+        | "SEMI_FINAL"
+        | "THIRD_PLACE"
+        | "FINAL"
+      match_status:
+        | "SCHEDULED"
+        | "IN_PLAY"
+        | "FINISHED"
+        | "POSTPONED"
+        | "CANCELLED"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      match_stage: [
+        "GROUP",
+        "ROUND_OF_16",
+        "QUARTER_FINAL",
+        "SEMI_FINAL",
+        "THIRD_PLACE",
+        "FINAL",
+      ],
+      match_status: [
+        "SCHEDULED",
+        "IN_PLAY",
+        "FINISHED",
+        "POSTPONED",
+        "CANCELLED",
+      ],
+    },
+  },
+} as const
