@@ -35,7 +35,12 @@
     },
     "extra": {
       "supabaseUrl": "https://sjqhsmyqlgjbimwkruqd.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcWhzbXlxbGdqYmltd2tydXFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MDYwNTIsImV4cCI6MjA5NjE4MjA1Mn0.PltPN4xYQR3vu1H6XaXw4FsmNIvLEFRmYu-WuhZ7I2o"
-    }
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcWhzbXlxbGdqYmltd2tydXFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MDYwNTIsImV4cCI6MjA5NjE4MjA1Mn0.PltPN4xYQR3vu1H6XaXw4FsmNIvLEFRmYu-WuhZ7I2o",
+      "router": {},
+      "eas": {
+        "projectId": "f9895b4d-0f6b-42ca-8c89-28c329599ca7"
+      }
+    },
+    "owner": "xahmuh"
   }
 }
