@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { memo, useEffect, useRef } from 'react';
+import { Animated, Platform, Pressable, Text, View } from 'react-native';
 
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Icon } from '@/components/ui/Icon';
@@ -31,7 +31,38 @@ function MatchCardComponent({
   onPress,
 }: MatchCardProps): React.JSX.Element {
   const isFinished = match.status === 'FINISHED';
-  const hasFinalScore = match.home_score !== null && match.away_score !== null;
+  const isLive = match.status === 'IN_PLAY';
+  const hasScore = match.home_score !== null && match.away_score !== null;
+
+  // ClutchTime "live state": pulse the red indicator dot while in play.
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isLive) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isLive, pulse]);
+
+  // Red border + glow (iOS) / elevation (Android) for live cards — kit spec.
+  const liveCardStyle = isLive
+    ? [
+        { borderColor: Theme.colors.live, borderWidth: 1.5, backgroundColor: '#1E1E1E' },
+        Platform.select({
+          ios: {
+            shadowColor: Theme.colors.live,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.35,
+            shadowRadius: 14,
+          },
+          android: { elevation: 8 },
+        }),
+      ]
+    : undefined;
 
   return (
     <Pressable
@@ -39,9 +70,19 @@ function MatchCardComponent({
       accessibilityLabel={`${match.home_team.name} versus ${match.away_team.name}`}
       onPress={() => onPress?.(match.id)}
       className="rounded-2xl border border-bgBorder bg-bgSurface2 p-4 active:opacity-80"
+      style={liveCardStyle}
     >
       <View className="mb-3 flex-row items-center justify-between">
-        <Badge label={STATUS_LABELS[match.status]} tone={STATUS_TONE[match.status]} />
+        {isLive ? (
+          <View className="flex-row items-center gap-1.5">
+            <Animated.View
+              style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: Theme.colors.live, opacity: pulse }}
+            />
+            <Text className="text-xs font-bold uppercase tracking-wider text-live">Live</Text>
+          </View>
+        ) : (
+          <Badge label={STATUS_LABELS[match.status]} tone={STATUS_TONE[match.status]} />
+        )}
         {match.group_name ? (
           <Text className="text-xs font-medium text-textTertiary">
             Group {match.group_name}
@@ -62,8 +103,8 @@ function MatchCardComponent({
         </View>
 
         <View className="px-3">
-          {isFinished && hasFinalScore ? (
-            <Text className="text-lg font-bold text-textPrimary">
+          {hasScore ? (
+            <Text className={`text-lg font-bold ${isLive ? 'text-live' : 'text-textPrimary'}`}>
               {match.home_score} – {match.away_score}
             </Text>
           ) : (
@@ -84,12 +125,14 @@ function MatchCardComponent({
 
       {/* Meta row */}
       <View className="mt-3 flex-row items-center justify-between border-t border-bgBorder pt-3">
-        {!isFinished ? (
+        {isLive ? (
+          <Text className="text-xs font-semibold text-live">In progress</Text>
+        ) : isFinished ? (
+          <Text className="text-xs text-textSecondary">Full time</Text>
+        ) : (
           <Text className="text-xs text-textSecondary">
             {formatKickoff(match.kickoff_time)}
           </Text>
-        ) : (
-          <Text className="text-xs text-textSecondary">Full time</Text>
         )}
 
         {prediction ? (

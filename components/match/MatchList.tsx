@@ -20,6 +20,8 @@ interface MatchListProps {
   onPressMatch?: (matchId: string) => void;
   emptyTitle?: string;
   emptyDescription?: string;
+  /** Extra bottom padding so the last card clears the floating tab bar / nav bar. */
+  bottomInset?: number;
 }
 
 export function MatchList({
@@ -35,6 +37,7 @@ export function MatchList({
   onPressMatch,
   emptyTitle = 'No matches',
   emptyDescription,
+  bottomInset = 32,
 }: MatchListProps): React.JSX.Element {
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Match>) => (
@@ -61,7 +64,8 @@ export function MatchList({
       data={matches}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
-      contentContainerClassName="gap-3 px-4 pb-8 pt-2"
+      contentContainerClassName="gap-3 px-6 pt-2"
+      contentContainerStyle={{ paddingBottom: bottomInset }}
       ItemSeparatorComponent={null}
       ListEmptyComponent={
         <EmptyState title={emptyTitle} description={emptyDescription} />

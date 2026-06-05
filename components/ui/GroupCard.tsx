@@ -12,7 +12,7 @@ interface GroupCardProps {
 
 export function GroupCard({ name, code, memberCount, onPress }: GroupCardProps): React.JSX.Element {
   return (
-    <Pressable onPress={onPress} className="active:scale-[0.99] transition-transform">
+    <Pressable onPress={onPress} className="active:opacity-90">
       <Card className="flex-row items-center justify-between p-4 border border-bgBorder bg-bgSurface2">
         <View className="flex-1 gap-1">
           <Text className="text-base font-bold text-textPrimary">{name}</Text>

@@ -7,8 +7,8 @@
 // the design-system Theme. Spec: ui kit/DESIGN_SYSTEM.md → "Bottom Navigation".
 // ============================================================================
 
-import { useRef } from 'react';
-import { View, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, TouchableOpacity, StyleSheet, Animated, Platform, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
@@ -39,6 +39,13 @@ const NAV = {
   dotSize: 4,
   bottomOffset: 16,
 };
+
+// Vertical space the floating pill occupies above the screen's safe-area bottom.
+// Screens add this (plus insets.bottom) as scroll padding so the last row never
+// hides behind the pill or the system navigation bar.
+// pill height (~58: paddingVertical 20 + icon 22 + item padding 8 + breathing)
+// + bottomOffset (16) + extra margin (22).
+export const TAB_BAR_CLEARANCE = 96;
 
 function NavItem({
   routeName,
@@ -83,8 +90,23 @@ function NavItem({
   );
 }
 
-export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps): React.JSX.Element {
+export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps): React.JSX.Element | null {
   const insets = useSafeAreaInsets();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  // Hide the floating pill while the keyboard is up so it never overlaps inputs.
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  if (keyboardOpen) return null;
 
   return (
     <View style={[styles.container, { bottom: insets.bottom + NAV.bottomOffset }]} pointerEvents="box-none">

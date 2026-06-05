@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MatchList } from '@/components/match/MatchList';
 import { CalendarModal } from '@/components/ui/CalendarModal';
+import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { Icon } from '@/components/ui/Icon';
 import Theme from '@/constants/theme/design-system';
 import { useMatches } from '@/hooks/useMatches';
@@ -34,6 +35,7 @@ function applyFilter(matches: Match[], filter: MatchFilter): Match[] {
 
 export default function MatchesScreen(): React.JSX.Element {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const filter = useAppStore((s) => s.matchFilter);
   const setFilter = useAppStore((s) => s.setMatchFilter);
 
@@ -70,8 +72,8 @@ export default function MatchesScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
-      <View className="px-4 pb-2 pt-2">
-        <Text className="mb-3 text-2xl font-bold text-textPrimary">Matches</Text>
+      <View className="px-6 pb-2 pt-2">
+        <Text className="mb-3 text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Matches</Text>
         <View className="flex-row items-center gap-2">
           <View className="flex-row flex-1 gap-1.5">
             {FILTERS.map((f) => {
@@ -133,6 +135,7 @@ export default function MatchesScreen(): React.JSX.Element {
         onPressMatch={(id) => router.push(`/match/${id}`)}
         emptyTitle="No matches here"
         emptyDescription={selectedDate ? `No matches on ${selectedDate}.` : "Try a different filter."}
+        bottomInset={insets.bottom + TAB_BAR_CLEARANCE}
       />
 
       <CalendarModal

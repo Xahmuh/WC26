@@ -74,7 +74,7 @@ export default function RegisterScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep">
       <LinearGradient
-        colors={['#0C2517', '#08140E', '#0D0F0E']}
+        colors={['#1F1F1F', '#141414', '#0D0D0D']}
         locations={[0, 0.4, 1]}
         className="flex-1"
       >
@@ -88,28 +88,28 @@ export default function RegisterScreen(): React.JSX.Element {
             style={{ position: 'absolute', top: 0, left: 0 }}
           >
             {/* Outer Boundary */}
-            <Rect x="20" y="20" width="360" height="760" rx="4" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
+            <Rect x="20" y="20" width="360" height="760" rx="4" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
             
             {/* Center Line & Center Circle */}
-            <Line x1="20" y1="400" x2="380" y2="400" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="400" r="55" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="400" r="2.5" fill="#C9DF6A" opacity={0.06} />
+            <Line x1="20" y1="400" x2="380" y2="400" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Circle cx="200" cy="400" r="55" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Circle cx="200" cy="400" r="2.5" fill="#C8FF00" opacity={0.06} />
 
             {/* Top Penalty Area */}
-            <Rect x="100" y="20" width="200" height="110" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Rect x="145" y="20" width="110" height="35" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="95" r="2" fill="#C9DF6A" opacity={0.06} />
+            <Rect x="100" y="20" width="200" height="110" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Rect x="145" y="20" width="110" height="35" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Circle cx="200" cy="95" r="2" fill="#C8FF00" opacity={0.06} />
             
             {/* Bottom Penalty Area */}
-            <Rect x="100" y="670" width="200" height="110" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Rect x="145" y="745" width="110" height="35" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="705" r="2" fill="#C9DF6A" opacity={0.06} />
+            <Rect x="100" y="670" width="200" height="110" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Rect x="145" y="745" width="110" height="35" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Circle cx="200" cy="705" r="2" fill="#C8FF00" opacity={0.06} />
 
             {/* Corner Arcs */}
-            <Path d="M 20 28 A 8 8 0 0 0 28 20" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Path d="M 372 20 A 8 8 0 0 0 380 28" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Path d="M 20 772 A 8 8 0 0 0 28 780" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
-            <Path d="M 372 780 A 8 8 0 0 0 380 772" fill="none" stroke="#C9DF6A" strokeWidth="1.2" opacity={0.06} />
+            <Path d="M 20 28 A 8 8 0 0 0 28 20" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Path d="M 372 20 A 8 8 0 0 0 380 28" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Path d="M 20 772 A 8 8 0 0 0 28 780" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
+            <Path d="M 372 780 A 8 8 0 0 0 380 772" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
           </Svg>
         </View>
 

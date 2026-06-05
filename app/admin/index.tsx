@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ScrollView, Text, View, TextInput, Pressable, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,8 +6,10 @@ import { useRouter } from 'expo-router';
 import Theme from '@/constants/theme/design-system';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { HeroCarousel } from '@/components/ui/HeroCarousel';
+import { DateTimePickerModal } from '@/components/ui/DateTimePickerModal';
 import { useMatches } from '@/hooks/useMatches';
 import { usePredictionQuestions } from '@/hooks/usePredictionQuestions';
 import { useTeams } from '@/hooks/useTeams';
@@ -17,6 +19,8 @@ import {
   useCreatePredictionQuestion,
   useResolvePredictionQuestion,
   useUpdateQuestionStatus,
+  useUpdatePredictionQuestion,
+  useDeletePredictionQuestion,
   useQuestionSubmissions,
   useAuditUserPrediction,
   useCreateCustomMatch,
@@ -226,18 +230,42 @@ export default function AdminDashboard(): React.JSX.Element {
   const createQuestionMutation = useCreatePredictionQuestion();
   const resolveQuestionMutation = useResolvePredictionQuestion();
   const updateQuestionStatusMutation = useUpdateQuestionStatus();
+  const updateQuestionMutation = useUpdatePredictionQuestion();
+  const deleteQuestionMutation = useDeletePredictionQuestion();
   const auditMutation = useAuditUserPrediction();
   const createMatchMutation = useCreateCustomMatch();
   const updateResultMutation = useUpdateMatchResult();
 
+  const scrollRef = useRef<ScrollView>(null);
+
+  const goToMatchesPage = (next: number) => {
+    setMatchesPage(next);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
   // Create Question Form State
   const [qText, setQText] = useState('');
   const [qPoints, setQPoints] = useState('10');
-  const [qLockDate, setQLockDate] = useState('');
-  const [qLockTime, setQLockTime] = useState('');
+  const [qLockAt, setQLockAt] = useState<Date | null>(null);
+  const [isQLockPickerOpen, setIsQLockPickerOpen] = useState(false);
+
+  // Edit Question Accordion State
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [editQText, setEditQText] = useState('');
+  const [editQPoints, setEditQPoints] = useState('10');
+  const [editQLockAt, setEditQLockAt] = useState<Date | null>(null);
+  const [isEditQLockPickerOpen, setIsEditQLockPickerOpen] = useState(false);
+
+  // Delete Question confirmation
+  const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Match search state
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Matches list pagination
+  const [matchesPage, setMatchesPage] = useState(0);
+  const MATCHES_PER_PAGE = 8;
 
   // Auditing section expanded state
   const [expandedAudits, setExpandedAudits] = useState<Record<string, boolean>>({});
@@ -248,8 +276,8 @@ export default function AdminDashboard(): React.JSX.Element {
   const [stage, setStage] = useState<MatchStage>('GROUP');
   const [groupName, setGroupName] = useState('');
   const [venue, setVenue] = useState('');
-  const [dateStr, setDateStr] = useState(new Date().toISOString().slice(0, 10));
-  const [timeStr, setTimeStr] = useState('18:00');
+  const [kickoffDate, setKickoffDate] = useState<Date | null>(null);
+  const [isKickoffPickerOpen, setIsKickoffPickerOpen] = useState(false);
   const [isHomePickerOpen, setIsHomePickerOpen] = useState(false);
   const [isAwayPickerOpen, setIsAwayPickerOpen] = useState(false);
 
@@ -287,18 +315,12 @@ export default function AdminDashboard(): React.JSX.Element {
       return;
     }
 
-    if (!qLockDate.trim() || !qLockTime.trim()) {
+    if (!qLockAt) {
       Alert.alert('Error', 'Please specify the deadline date and time.');
       return;
     }
 
-    const lockAtDate = new Date(`${qLockDate.trim()}T${qLockTime.trim()}:00`);
-    if (isNaN(lockAtDate.getTime())) {
-      Alert.alert('Error', 'Invalid date or time format. Use YYYY-MM-DD and HH:MM.');
-      return;
-    }
-
-    if (lockAtDate.getTime() <= Date.now()) {
+    if (qLockAt.getTime() <= Date.now()) {
       Alert.alert('Error', 'Deadline must be in the future.');
       return;
     }
@@ -308,14 +330,13 @@ export default function AdminDashboard(): React.JSX.Element {
         questionText: qText.trim(),
         options: [],
         points: pointsVal,
-        lockAtIso: lockAtDate.toISOString(),
+        lockAtIso: qLockAt.toISOString(),
       },
       {
         onSuccess: () => {
           setQText('');
           setQPoints('10');
-          setQLockDate('');
-          setQLockTime('');
+          setQLockAt(null);
           Alert.alert('Success', 'Prediction question created!');
         },
         onError: (err: any) => {
@@ -377,6 +398,72 @@ export default function AdminDashboard(): React.JSX.Element {
     );
   };
 
+  const handleStartEditQuestion = (q: { id: string; question_text: string; points: number; lock_at?: string | null }) => {
+    setEditingQuestionId(q.id);
+    setEditQText(q.question_text);
+    setEditQPoints(String(q.points));
+    setEditQLockAt(q.lock_at ? new Date(q.lock_at) : null);
+  };
+
+  const handleSaveEditQuestion = (questionId: string) => {
+    if (!editQText.trim()) {
+      Alert.alert('Error', 'Question text is required.');
+      return;
+    }
+    const pointsVal = parseInt(editQPoints, 10);
+    if (isNaN(pointsVal) || pointsVal <= 0) {
+      Alert.alert('Error', 'Points must be a positive number.');
+      return;
+    }
+    if (!editQLockAt) {
+      Alert.alert('Error', 'Please specify the deadline date and time.');
+      return;
+    }
+
+    updateQuestionMutation.mutate(
+      {
+        questionId,
+        questionText: editQText.trim(),
+        points: pointsVal,
+        lockAtIso: editQLockAt.toISOString(),
+      },
+      {
+        onSuccess: () => {
+          setEditingQuestionId(null);
+          Alert.alert('Success', 'Question updated!');
+        },
+        onError: (err: any) => {
+          Alert.alert('Error', err.message || 'Failed to update question.');
+        },
+      }
+    );
+  };
+
+  // Delete uses an in-app confirmation Modal (Alert.alert buttons don't work on
+  // react-native-web, so the confirm dialog never appeared there).
+  const cancelDelete = () => {
+    setDeletingQuestionId(null);
+    setDeleteError(null);
+  };
+
+  const confirmDelete = () => {
+    if (!deletingQuestionId) return;
+    const questionId = deletingQuestionId;
+    setDeleteError(null);
+    deleteQuestionMutation.mutate(
+      { questionId },
+      {
+        onSuccess: () => {
+          if (editingQuestionId === questionId) setEditingQuestionId(null);
+          setDeletingQuestionId(null);
+        },
+        onError: (err: any) => {
+          setDeleteError(err.message || 'Failed to delete question.');
+        },
+      }
+    );
+  };
+
   const handleMultiplierChange = (matchId: string, currentMult: number, targetMult: number) => {
     if (currentMult === targetMult) return;
     setMultiplierMutation.mutate({ matchId, multiplier: targetMult });
@@ -391,64 +478,37 @@ export default function AdminDashboard(): React.JSX.Element {
       Alert.alert('Error', 'Home and away teams cannot be the same.');
       return;
     }
-    
-    // Parse date and time in local timezone
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    const timeRegex = /^\d{2}:\d{2}$/;
-    
-    if (!dateRegex.test(dateStr.trim())) {
-      Alert.alert('Error', 'Please enter date in YYYY-MM-DD format.');
-      return;
-    }
-    if (!timeRegex.test(timeStr.trim())) {
-      Alert.alert('Error', 'Please enter time in HH:MM format.');
+
+    if (!kickoffDate) {
+      Alert.alert('Error', 'Please select the kickoff date and time.');
       return;
     }
 
-    try {
-      const dateParts = dateStr.trim().split('-').map(Number);
-      const timeParts = timeStr.trim().split(':').map(Number);
-      const year = dateParts[0] ?? 2026;
-      const month = dateParts[1] ?? 1;
-      const day = dateParts[2] ?? 1;
-      const hour = timeParts[0] ?? 0;
-      const minute = timeParts[1] ?? 0;
-      
-      const localDate = new Date(year, month - 1, day, hour, minute);
-      if (isNaN(localDate.getTime())) {
-        Alert.alert('Error', 'Invalid date or time entered.');
-        return;
-      }
-
-      createMatchMutation.mutate(
-        {
-          homeTeamId: homeTeam.id,
-          awayTeamId: awayTeam.id,
-          stage,
-          groupName: groupName.trim() || null,
-          kickoffTime: localDate.toISOString(),
-          venue: venue.trim() || null,
+    createMatchMutation.mutate(
+      {
+        homeTeamId: homeTeam.id,
+        awayTeamId: awayTeam.id,
+        stage,
+        groupName: groupName.trim() || null,
+        kickoffTime: kickoffDate.toISOString(),
+        venue: venue.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          setHomeTeam(null);
+          setAwayTeam(null);
+          setStage('GROUP');
+          setGroupName('');
+          setVenue('');
+          setKickoffDate(null);
+          Alert.alert('Success', 'Custom match created!');
+          setActiveTab('matches');
         },
-        {
-          onSuccess: () => {
-            setHomeTeam(null);
-            setAwayTeam(null);
-            setStage('GROUP');
-            setGroupName('');
-            setVenue('');
-            setDateStr(new Date().toISOString().slice(0, 10));
-            setTimeStr('18:00');
-            Alert.alert('Success', 'Custom match created!');
-            setActiveTab('matches');
-          },
-          onError: (err: any) => {
-            Alert.alert('Error', err.message || 'Failed to create match.');
-          },
-        }
-      );
-    } catch (err) {
-      Alert.alert('Error', 'Failed to parse kickoff date and time.');
-    }
+        onError: (err: any) => {
+          Alert.alert('Error', err.message || 'Failed to create match.');
+        },
+      }
+    );
   };
 
   const handleSaveResult = (matchId: string) => {
@@ -500,13 +560,24 @@ export default function AdminDashboard(): React.JSX.Element {
       {/* Header */}
       <View className="px-4 py-3 flex-row items-center justify-between border-b border-bgBorder">
         <View className="flex-row items-center gap-3">
-          <Pressable onPress={() => router.back()} className="p-2">
-            <Text className="text-xl text-accent font-bold">←</Text>
+          <Pressable
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/home');
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            className="w-9 h-9 rounded-full bg-accent items-center justify-center active:opacity-80"
+          >
+            <Icon name="back" size={20} color={Theme.colors.accentDark} fixed />
           </Pressable>
           <Text className="text-xl font-bold text-textPrimary">Admin Control Panel</Text>
         </View>
-        <View className="bg-red-500/20 px-2 py-0.5 rounded">
-          <Text className="text-[10px] font-bold text-red-400 uppercase">Live DB</Text>
+        <View className="bg-liveDim px-2 py-0.5 rounded">
+          <Text className="text-[10px] font-bold text-live uppercase">Live DB</Text>
         </View>
       </View>
 
@@ -544,7 +615,7 @@ export default function AdminDashboard(): React.JSX.Element {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerClassName="p-4 gap-6">
+      <ScrollView ref={scrollRef} contentContainerClassName="p-4 gap-6">
         {/* Hero Banner Slides */}
         <HeroCarousel />
         {/* Matches Multiplier Tab */}
@@ -558,14 +629,20 @@ export default function AdminDashboard(): React.JSX.Element {
             <View className="relative">
               <TextInput
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(t) => {
+                  setSearchQuery(t);
+                  setMatchesPage(0);
+                }}
                 placeholder="Search team (e.g. Argentina, BRA)..."
                 placeholderTextColor={Theme.colors.textTertiary}
                 className="h-11 rounded-lg border border-bgBorder bg-bgSurface2 px-3 pr-10 text-sm text-textPrimary"
               />
               {searchQuery.length > 0 && (
                 <Pressable
-                  onPress={() => setSearchQuery('')}
+                  onPress={() => {
+                    setSearchQuery('');
+                    setMatchesPage(0);
+                  }}
                   className="absolute right-3 top-3"
                 >
                   <Text className="text-textSecondary text-sm font-bold">✕</Text>
@@ -606,7 +683,14 @@ export default function AdminDashboard(): React.JSX.Element {
                     );
                   }
 
-                  return filtered.map((match) => {
+                  const totalPages = Math.ceil(filtered.length / MATCHES_PER_PAGE);
+                  const page = Math.min(matchesPage, totalPages - 1);
+                  const pageStart = page * MATCHES_PER_PAGE;
+                  const pageItems = filtered.slice(pageStart, pageStart + MATCHES_PER_PAGE);
+
+                  return (
+                    <>
+                      {pageItems.map((match) => {
                     const currentMult = match.points_multiplier || 1;
                     const isMutating =
                       setMultiplierMutation.isPending &&
@@ -757,7 +841,43 @@ export default function AdminDashboard(): React.JSX.Element {
                         )}
                       </Card>
                     );
-                  });
+                  })}
+
+                      {/* Pagination controls */}
+                      {totalPages > 1 && (
+                        <View className="flex-row items-center justify-between pt-2 mt-1">
+                          <Pressable
+                            disabled={page <= 0}
+                            onPress={() => goToMatchesPage(page - 1)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Previous page"
+                            className={`w-10 h-10 rounded-full bg-accent items-center justify-center ${
+                              page <= 0 ? 'opacity-30' : 'active:opacity-80'
+                            }`}
+                          >
+                            <Icon name="back" size={20} color={Theme.colors.accentDark} fixed />
+                          </Pressable>
+
+                          <Text className="text-xs font-bold text-textSecondary">
+                            Page {page + 1} of {totalPages}
+                            <Text className="text-textTertiary font-normal"> · {filtered.length} matches</Text>
+                          </Text>
+
+                          <Pressable
+                            disabled={page >= totalPages - 1}
+                            onPress={() => goToMatchesPage(page + 1)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Next page"
+                            className={`w-10 h-10 rounded-full bg-accent items-center justify-center ${
+                              page >= totalPages - 1 ? 'opacity-30' : 'active:opacity-80'
+                            }`}
+                          >
+                            <Icon name="forward" size={20} color={Theme.colors.accentDark} fixed />
+                          </Pressable>
+                        </View>
+                      )}
+                    </>
+                  );
                 })()}
               </View>
             )}
@@ -855,28 +975,18 @@ export default function AdminDashboard(): React.JSX.Element {
                 />
               </View>
 
-              {/* Date & Time */}
-              <View className="flex-row gap-3">
-                <View className="flex-1 gap-1.5">
-                  <Text className="text-xs font-semibold text-textSecondary uppercase">Date (YYYY-MM-DD)</Text>
-                  <TextInput
-                    value={dateStr}
-                    onChangeText={setDateStr}
-                    placeholder="2026-06-11"
-                    placeholderTextColor={Theme.colors.textTertiary}
-                    className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
-                  />
-                </View>
-                <View className="flex-1 gap-1.5">
-                  <Text className="text-xs font-semibold text-textSecondary uppercase">Time (HH:MM)</Text>
-                  <TextInput
-                    value={timeStr}
-                    onChangeText={setTimeStr}
-                    placeholder="18:00"
-                    placeholderTextColor={Theme.colors.textTertiary}
-                    className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
-                  />
-                </View>
+              {/* Kickoff Date & Time */}
+              <View className="gap-1.5">
+                <Text className="text-xs font-semibold text-textSecondary uppercase">Kickoff Date & Time</Text>
+                <Pressable
+                  onPress={() => setIsKickoffPickerOpen(true)}
+                  className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 flex-row items-center justify-between"
+                >
+                  <Text className={`text-sm ${kickoffDate ? 'text-textPrimary font-bold' : 'text-textTertiary'}`}>
+                    {kickoffDate ? formatKickoff(kickoffDate.toISOString()) : 'Select kickoff date & time…'}
+                  </Text>
+                  <Text className="text-textTertiary text-xs">🗓️</Text>
+                </Pressable>
               </View>
 
               <Button
@@ -919,29 +1029,16 @@ export default function AdminDashboard(): React.JSX.Element {
               </View>
 
               <View className="gap-1.5">
-                <Text className="text-xs font-semibold text-textSecondary uppercase">Deadline</Text>
-                <View className="flex-row gap-3">
-                  <View className="flex-1 gap-1">
-                    <Text className="text-[10px] text-textTertiary">Date (YYYY-MM-DD)</Text>
-                    <TextInput
-                      value={qLockDate}
-                      onChangeText={setQLockDate}
-                      placeholder="2026-06-15"
-                      placeholderTextColor={Theme.colors.textTertiary}
-                      className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
-                    />
-                  </View>
-                  <View className="flex-1 gap-1">
-                    <Text className="text-[10px] text-textTertiary">Time (HH:MM)</Text>
-                    <TextInput
-                      value={qLockTime}
-                      onChangeText={setQLockTime}
-                      placeholder="18:00"
-                      placeholderTextColor={Theme.colors.textTertiary}
-                      className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
-                    />
-                  </View>
-                </View>
+                <Text className="text-xs font-semibold text-textSecondary uppercase">Deadline (Date & Time)</Text>
+                <Pressable
+                  onPress={() => setIsQLockPickerOpen(true)}
+                  className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 flex-row items-center justify-between"
+                >
+                  <Text className={`text-sm ${qLockAt ? 'text-textPrimary font-bold' : 'text-textTertiary'}`}>
+                    {qLockAt ? formatKickoff(qLockAt.toISOString()) : 'Select deadline date & time…'}
+                  </Text>
+                  <Text className="text-textTertiary text-xs">🗓️</Text>
+                </Pressable>
               </View>
 
               <Button
@@ -1026,6 +1123,104 @@ export default function AdminDashboard(): React.JSX.Element {
                         <Text className="text-xs text-textSecondary">
                           Deadline: <Text className="text-textPrimary font-semibold">{formatKickoff(q.lock_at || '')}</Text>
                         </Text>
+
+                        {/* Admin Edit / Delete actions */}
+                        <View className="flex-row gap-2">
+                          <Pressable
+                            onPress={() =>
+                              editingQuestionId === q.id
+                                ? setEditingQuestionId(null)
+                                : handleStartEditQuestion(q)
+                            }
+                            className="flex-1 items-center justify-center rounded-lg border border-bgBorder bg-bgSurface1 py-2 active:opacity-80"
+                          >
+                            <Text className="text-xs font-bold text-accent">
+                              {editingQuestionId === q.id ? '✕ Close Edit' : '✏️ Edit'}
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => {
+                              setDeleteError(null);
+                              setDeletingQuestionId(q.id);
+                            }}
+                            disabled={deleteQuestionMutation.isPending}
+                            className="flex-1 items-center justify-center rounded-lg border border-live/30 bg-liveDim py-2 active:opacity-80"
+                          >
+                            <Text className="text-xs font-bold text-live">🗑️ Delete</Text>
+                          </Pressable>
+                        </View>
+
+                        {/* Inline Edit Form */}
+                        {editingQuestionId === q.id && (
+                          <View className="bg-bgSurface1 rounded-xl p-3 border border-bgBorder gap-3">
+                            <Text className="text-xs font-bold text-textSecondary uppercase">
+                              Edit Question
+                            </Text>
+
+                            <View className="gap-1">
+                              <Text className="text-[10px] text-textTertiary uppercase font-semibold">
+                                Question Text
+                              </Text>
+                              <TextInput
+                                value={editQText}
+                                onChangeText={setEditQText}
+                                placeholder="Question text"
+                                placeholderTextColor={Theme.colors.textTertiary}
+                                multiline
+                                className="min-h-11 rounded-lg border border-bgBorder bg-bgSurface2 px-3 py-2 text-sm text-textPrimary"
+                              />
+                            </View>
+
+                            <View className="gap-1">
+                              <Text className="text-[10px] text-textTertiary uppercase font-semibold">
+                                Points Reward
+                              </Text>
+                              <TextInput
+                                value={editQPoints}
+                                onChangeText={setEditQPoints}
+                                keyboardType="numeric"
+                                placeholder="10"
+                                placeholderTextColor={Theme.colors.textTertiary}
+                                className="h-11 rounded-lg border border-bgBorder bg-bgSurface2 px-3 text-sm text-textPrimary"
+                              />
+                            </View>
+
+                            <View className="gap-1">
+                              <Text className="text-[10px] text-textTertiary uppercase font-semibold">
+                                Deadline (Date & Time)
+                              </Text>
+                              <Pressable
+                                onPress={() => setIsEditQLockPickerOpen(true)}
+                                className="h-11 rounded-lg border border-bgBorder bg-bgSurface2 px-3 flex-row items-center justify-between"
+                              >
+                                <Text className={`text-sm ${editQLockAt ? 'text-textPrimary font-bold' : 'text-textTertiary'}`}>
+                                  {editQLockAt ? formatKickoff(editQLockAt.toISOString()) : 'Select deadline…'}
+                                </Text>
+                                <Text className="text-textTertiary text-xs">🗓️</Text>
+                              </Pressable>
+                            </View>
+
+                            <View className="flex-row gap-2 justify-end">
+                              <Pressable
+                                onPress={() => setEditingQuestionId(null)}
+                                className="px-3 py-2 rounded-lg bg-bgSurface2 border border-bgBorder active:opacity-75"
+                              >
+                                <Text className="text-xs font-bold text-textSecondary">Cancel</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() => handleSaveEditQuestion(q.id)}
+                                disabled={updateQuestionMutation.isPending}
+                                className="px-3 py-2 rounded-lg bg-accent active:opacity-75"
+                              >
+                                {updateQuestionMutation.isPending ? (
+                                  <ActivityIndicator size="small" color={Theme.colors.accentDark} />
+                                ) : (
+                                  <Text className="text-xs font-bold text-accentDark">Save Changes</Text>
+                                )}
+                              </Pressable>
+                            </View>
+                          </View>
+                        )}
 
                         {/* List Options */}
                         {q.options && q.options.length > 0 && (
@@ -1114,6 +1309,73 @@ export default function AdminDashboard(): React.JSX.Element {
         teams={teamsQuery.data || []}
         title="Select Away Team"
       />
+
+      {/* Date & Time Pickers */}
+      <DateTimePickerModal
+        visible={isKickoffPickerOpen}
+        onClose={() => setIsKickoffPickerOpen(false)}
+        value={kickoffDate}
+        onConfirm={(date) => setKickoffDate(date)}
+        title="Kickoff Date & Time"
+      />
+      <DateTimePickerModal
+        visible={isQLockPickerOpen}
+        onClose={() => setIsQLockPickerOpen(false)}
+        value={qLockAt}
+        onConfirm={(date) => setQLockAt(date)}
+        title="Deadline Date & Time"
+        minDate={new Date()}
+      />
+      <DateTimePickerModal
+        visible={isEditQLockPickerOpen}
+        onClose={() => setIsEditQLockPickerOpen(false)}
+        value={editQLockAt}
+        onConfirm={(date) => setEditQLockAt(date)}
+        title="Edit Deadline"
+      />
+
+      {/* Delete Question confirmation (works on web + native, unlike Alert) */}
+      <Modal
+        visible={deletingQuestionId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelDelete}
+      >
+        <Pressable
+          onPress={cancelDelete}
+          className="flex-1 items-center justify-center bg-black/70 px-8"
+        >
+          <Pressable className="w-full max-w-sm rounded-2xl border border-bgBorder bg-bgSurface2 p-6 gap-5">
+            <View className="items-center gap-3">
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-liveDim border border-live/30">
+                <Text className="text-xl">🗑️</Text>
+              </View>
+              <Text className="text-lg font-bold text-textPrimary text-center">Delete Question</Text>
+              <Text className="text-sm text-textSecondary text-center">
+                Are you sure you want to delete this question? All user submissions and awarded
+                points for it will be permanently removed.
+              </Text>
+              {deleteError && (
+                <Text className="text-xs text-live font-semibold text-center">{deleteError}</Text>
+              )}
+            </View>
+
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <Button label="Cancel" variant="secondary" onPress={cancelDelete} />
+              </View>
+              <View className="flex-1">
+                <Button
+                  label="Delete"
+                  variant="danger"
+                  loading={deleteQuestionMutation.isPending}
+                  onPress={confirmDelete}
+                />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

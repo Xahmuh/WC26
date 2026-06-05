@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import Theme from '@/constants/theme/design-system';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { GroupCard } from '@/components/ui/GroupCard';
 import { useJoinedGroups, useCreateGroup, useJoinGroup } from '@/hooks/useGroups';
@@ -84,11 +85,13 @@ export default function GroupsDashboard(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
       {/* Header */}
-      <View className="px-4 py-3 flex-row items-center gap-3 border-b border-bgBorder">
-        <Pressable onPress={() => router.back()} className="p-2">
-          <Text className="text-xl text-accent font-bold">←</Text>
+      <View className="px-6 py-3 flex-row items-center gap-2 border-b border-bgBorder">
+        <Pressable onPress={() => router.back()} className="-ml-2 p-2 active:opacity-70">
+          <Icon name="back" size={22} color={Theme.colors.accent} />
         </Pressable>
-        <Text className="text-xl font-bold text-textPrimary">Mini-Leagues</Text>
+        <Text className="text-xl font-extrabold uppercase tracking-tight text-textPrimary">
+          Mini-Leagues
+        </Text>
       </View>
 
       {/* Tabs */}
@@ -115,7 +118,7 @@ export default function GroupsDashboard(): React.JSX.Element {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerClassName="p-4 gap-6">
+      <ScrollView contentContainerClassName="px-6 py-4 gap-6">
         {/* List Tab */}
         {activeTab === 'list' && (
           <View className="gap-4">
@@ -123,7 +126,7 @@ export default function GroupsDashboard(): React.JSX.Element {
               <LoadingSpinner label="Loading mini-leagues..." />
             ) : joinedGroupsQuery.data?.length === 0 ? (
               <View className="items-center gap-4 py-10">
-                <Text className="text-5xl">🏆</Text>
+                <Icon name="trophy" size={48} color={Theme.colors.accent} />
                 <Text className="text-lg font-bold text-textPrimary text-center">
                   Compete in Private Mini-Leagues
                 </Text>

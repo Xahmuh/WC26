@@ -4,6 +4,8 @@ import {
   resolvePredictionQuestion,
   setMatchMultiplier,
   updateQuestionStatus,
+  updatePredictionQuestion,
+  deletePredictionQuestion,
   getQuestionSubmissions,
   auditUserPrediction,
   createCustomMatch,
@@ -50,6 +52,40 @@ export function useResolvePredictionQuestion() {
   return useMutation({
     mutationFn: ({ questionId, correctAnswer }: { questionId: string; correctAnswer: string }) =>
       resolvePredictionQuestion(questionId, correctAnswer),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['predictionQuestions'] });
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['myPoints'] });
+    },
+  });
+}
+
+export function useUpdatePredictionQuestion() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      questionId,
+      questionText,
+      points,
+      lockAtIso,
+    }: {
+      questionId: string;
+      questionText: string;
+      points: number;
+      lockAtIso: string;
+    }) => updatePredictionQuestion(questionId, { questionText, points, lockAtIso }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['predictionQuestions'] });
+    },
+  });
+}
+
+export function useDeletePredictionQuestion() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ questionId }: { questionId: string }) => deletePredictionQuestion(questionId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['predictionQuestions'] });
       void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });

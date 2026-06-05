@@ -5,9 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PredictionForm } from '@/components/prediction/PredictionForm';
 import { PredictionResult } from '@/components/prediction/PredictionResult';
 import { Badge } from '@/components/ui/Badge';
+import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorState } from '@/components/ui/States';
 import { TeamFlag } from '@/components/ui/TeamFlag';
+import Theme from '@/constants/theme/design-system';
 import { useMatch } from '@/hooks/useMatches';
 import { useMyPoints } from '@/hooks/usePoints';
 import { useMyPredictions } from '@/hooks/usePredictions';
@@ -57,7 +59,7 @@ export default function MatchDetailScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['bottom']}>
       <Stack.Screen options={{ title: STAGE_LABELS[match.stage] }} />
-      <ScrollView contentContainerClassName="px-4 pb-10 pt-4 gap-5">
+      <ScrollView contentContainerClassName="px-6 pb-10 pt-4 gap-5">
         {/* Header */}
         <View className="items-center gap-3 rounded-2xl border border-bgBorder bg-bgSurface2 p-5">
           <View className="flex-row items-center justify-between gap-4">
@@ -93,7 +95,10 @@ export default function MatchDetailScreen(): React.JSX.Element {
             {formatKickoff(match.kickoff_time)}
           </Text>
           {match.venue ? (
-            <Text className="text-xs text-textTertiary">📍 {match.venue}</Text>
+            <View className="flex-row items-center gap-1">
+              <Icon name="stadium" size={12} color={Theme.colors.textTertiary} />
+              <Text className="text-xs text-textTertiary">{match.venue}</Text>
+            </View>
           ) : null}
         </View>
 

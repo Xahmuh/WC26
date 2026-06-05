@@ -4,7 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import Theme from '@/constants/theme/design-system';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useGroupLeaderboard } from '@/hooks/useGroups';
 import { useAuthStore } from '@/stores/auth.store';
@@ -41,17 +43,14 @@ export default function GroupDetailsScreen(): React.JSX.Element {
   if (isError || !group) {
     return (
       <SafeAreaView className="flex-1 bg-bgDeep justify-center items-center px-6">
-        <Text className="text-4xl">⚠️</Text>
+        <Icon name="warning" size={40} color={Theme.colors.live} />
         <Text className="text-xl font-bold text-textPrimary mt-4">Failed to load group</Text>
         <Text className="text-sm text-textSecondary text-center mt-2">
           {error?.message || 'The group does not exist or you do not have permission to view it.'}
         </Text>
-        <Pressable
-          onPress={() => router.back()}
-          className="mt-6 h-12 px-6 bg-accent rounded-full justify-center items-center active:opacity-90"
-        >
-          <Text className="text-base font-bold text-accentDark">GO BACK</Text>
-        </Pressable>
+        <View className="mt-6 w-40">
+          <Button label="Go back" variant="secondary" onPress={() => router.back()} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -59,19 +58,21 @@ export default function GroupDetailsScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
       {/* Header */}
-      <View className="px-4 py-3 flex-row items-center justify-between border-b border-bgBorder">
-        <View className="flex-row items-center gap-3">
-          <Pressable onPress={() => router.back()} className="p-2">
-            <Text className="text-xl text-accent font-bold">←</Text>
+      <View className="px-6 py-3 flex-row items-center justify-between border-b border-bgBorder">
+        <View className="flex-1 flex-row items-center gap-2">
+          <Pressable onPress={() => router.back()} className="-ml-2 p-2 active:opacity-70">
+            <Icon name="back" size={22} color={Theme.colors.accent} />
           </Pressable>
-          <Text className="text-xl font-bold text-textPrimary">{group.name}</Text>
+          <Text numberOfLines={1} className="flex-1 text-xl font-extrabold uppercase tracking-tight text-textPrimary">
+            {group.name}
+          </Text>
         </View>
-        <Pressable onPress={() => void refetch()} className="p-2 active:opacity-75">
-          <Text className="text-sm text-accent">Refresh</Text>
+        <Pressable onPress={() => void refetch()} className="p-2 active:opacity-70">
+          <Icon name="refresh" size={20} color={Theme.colors.accent} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerClassName="p-4 gap-6">
+      <ScrollView contentContainerClassName="px-6 py-4 gap-6">
         {/* Invite Code Share Card */}
         <Card className="p-5 border border-accentBorder bg-accentDim/5 gap-3">
           <View className="items-center gap-1">
@@ -82,10 +83,11 @@ export default function GroupDetailsScreen(): React.JSX.Element {
           </View>
           <Pressable
             onPress={handleShareCode}
-            className="h-10 bg-accent rounded-full justify-center items-center active:opacity-85"
+            className="h-10 flex-row gap-2 bg-accent rounded-full justify-center items-center active:opacity-85"
           >
+            <Icon name="share" size={15} color={Theme.colors.accentDark} />
             <Text className="text-xs font-bold text-accentDark uppercase tracking-wide">
-              Share Invite Code 📤
+              Share Invite Code
             </Text>
           </Pressable>
         </Card>
@@ -146,7 +148,7 @@ export default function GroupDetailsScreen(): React.JSX.Element {
                           style={{ width: 26, height: 26, borderRadius: 13 }}
                         />
                       ) : (
-                        <View className="h-6.5 w-6.5 items-center justify-center rounded-full bg-bgSurface3">
+                        <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-bgSurface3">
                           <Text className="text-[10px] font-bold text-textSecondary">{initials}</Text>
                         </View>
                       )}

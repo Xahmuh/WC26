@@ -51,6 +51,42 @@ export async function createPredictionQuestion(
 }
 
 /**
+ * Updates an existing prediction question's text, points, and deadline.
+ */
+export async function updatePredictionQuestion(
+  questionId: string,
+  updates: { questionText: string; points: number; lockAtIso: string }
+): Promise<void> {
+  const { error } = await supabase
+    .from('prediction_questions')
+    .update({
+      question_text: updates.questionText,
+      points: updates.points,
+      lock_at: updates.lockAtIso,
+    })
+    .eq('id', questionId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Permanently deletes a prediction question. User submissions and any awarded
+ * points cascade-delete via the table's foreign keys.
+ */
+export async function deletePredictionQuestion(questionId: string): Promise<void> {
+  const { error } = await supabase
+    .from('prediction_questions')
+    .delete()
+    .eq('id', questionId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Resolves a tournament prediction question with the correct answer.
  * Triggers database RPC to award points and refresh the leaderboard.
  */

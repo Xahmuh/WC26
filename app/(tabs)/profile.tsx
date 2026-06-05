@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, Text, View, Image, Alert, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Modal, ScrollView, Text, View, Image, Alert, Pressable } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import Theme from '@/constants/theme/design-system';
+import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
@@ -17,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen(): React.JSX.Element {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
   const email = useAuthStore((s) => s.session?.user.email);
@@ -26,6 +29,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const { data: teams = [] } = useTeams();
   const [showPicker, setShowPicker] = useState(false);
   const [savingTeams, setSavingTeams] = useState(false);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   const handleSaveTeams = async (teamsList: string[]) => {
     if (!userId) return;
@@ -67,8 +71,11 @@ export default function ProfileScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
-      <ScrollView contentContainerClassName="px-4 pb-8 pt-2 gap-6">
-        <Text className="text-2xl font-bold text-textPrimary">Profile</Text>
+      <ScrollView
+        contentContainerClassName="px-6 pt-2 gap-6"
+        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
+      >
+        <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
 
         <Card className="items-center gap-3 p-6 border border-bgBorder bg-bgSurface2">
           {profile?.avatar_url ? (
@@ -88,8 +95,8 @@ export default function ProfileScreen(): React.JSX.Element {
                 {profile?.display_name ?? 'Player'}
               </Text>
               {isAdmin && (
-                <View className="bg-red-500/20 border border-red-500/30 rounded px-1.5 py-0.5">
-                  <Text className="text-[10px] font-bold text-red-400 uppercase tracking-wider">
+                <View className="bg-liveDim border border-live rounded px-1.5 py-0.5">
+                  <Text className="text-[10px] font-bold text-live uppercase tracking-wider">
                     Admin
                   </Text>
                 </View>
@@ -144,7 +151,7 @@ export default function ProfileScreen(): React.JSX.Element {
         </View>
 
         <View className="mt-2">
-          <Button label="Sign out" variant="danger" onPress={() => void signOut()} />
+          <Button label="Sign out" variant="primary" onPress={() => setShowSignOutConfirm(true)} />
         </View>
       </ScrollView>
 
@@ -157,6 +164,51 @@ export default function ProfileScreen(): React.JSX.Element {
           saving={savingTeams}
         />
       )}
+
+      {/* Sign-out confirmation popup */}
+      <Modal
+        visible={showSignOutConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSignOutConfirm(false)}
+      >
+        <Pressable
+          onPress={() => setShowSignOutConfirm(false)}
+          className="flex-1 items-center justify-center bg-black/70 px-8"
+        >
+          <Pressable className="w-full max-w-sm rounded-2xl border border-bgBorder bg-bgSurface2 p-6 gap-5">
+            <View className="items-center gap-3">
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-accentDim border border-accentBorder">
+                <Icon name="logout" size={24} color={Theme.colors.accent} />
+              </View>
+              <Text className="text-lg font-bold text-textPrimary text-center">Sign out</Text>
+              <Text className="text-sm text-textSecondary text-center">
+                Are you sure you want to exit the application?
+              </Text>
+            </View>
+
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <Button
+                  label="Yes"
+                  variant="primary"
+                  onPress={() => {
+                    setShowSignOutConfirm(false);
+                    void signOut();
+                  }}
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  label="No"
+                  variant="primary"
+                  onPress={() => setShowSignOutConfirm(false)}
+                />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

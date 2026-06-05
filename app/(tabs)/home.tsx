@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { Dimensions, RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Theme from '@/constants/theme/design-system';
+import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { MatchCard } from '@/components/match/MatchCard';
 import { Card } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -25,8 +26,13 @@ import { isToday } from '@/lib/dates';
 import { useAuthStore } from '@/stores/auth.store';
 import type { PredictionQuestion } from '@/types';
 
+// Horizontal slider sizing — cards are fixed-width so the next one peeks in.
+const SLIDER_GAP = 12;
+const SLIDER_CARD_WIDTH = Math.min(320, Dimensions.get('window').width - 80);
+
 export default function HomeScreen(): React.JSX.Element {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
@@ -123,7 +129,8 @@ export default function HomeScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <ScrollView
-        contentContainerClassName="px-6 pb-32 pt-2 gap-6"
+        contentContainerClassName="px-6 pt-2 gap-6"
+        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -155,18 +162,25 @@ export default function HomeScreen(): React.JSX.Element {
         {questions.length > 0 && (
           <View className="gap-3">
             <Text className="text-lg font-semibold text-textPrimary">Tournament Predictions</Text>
-            <View className="gap-3">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={SLIDER_CARD_WIDTH + SLIDER_GAP}
+              decelerationRate="fast"
+              contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
+            >
               {questions.map((q) => (
-                <PredictionQuestionCard
-                  key={q.id}
-                  question={q}
-                  predictionRecord={userPreds.get(q.id)}
-                  onOptionSelect={handleOptionSelect}
-                  isSubmitting={submitPredMutation.isPending && submitPredMutation.variables?.questionId === q.id}
-                  submittingOption={submitPredMutation.isPending && submitPredMutation.variables?.questionId === q.id ? submitPredMutation.variables?.prediction : undefined}
-                />
+                <View key={q.id} style={{ width: SLIDER_CARD_WIDTH }}>
+                  <PredictionQuestionCard
+                    question={q}
+                    predictionRecord={userPreds.get(q.id)}
+                    onOptionSelect={handleOptionSelect}
+                    isSubmitting={submitPredMutation.isPending && submitPredMutation.variables?.questionId === q.id}
+                    submittingOption={submitPredMutation.isPending && submitPredMutation.variables?.questionId === q.id ? submitPredMutation.variables?.prediction : undefined}
+                  />
+                </View>
               ))}
-            </View>
+            </ScrollView>
           </View>
         )}
 
@@ -187,17 +201,24 @@ export default function HomeScreen(): React.JSX.Element {
               icon="calendar"
             />
           ) : (
-            <View className="gap-3">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={SLIDER_CARD_WIDTH + SLIDER_GAP}
+              decelerationRate="fast"
+              contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
+            >
               {todaysMatches.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  prediction={predictions?.get(match.id)}
-                  points={points?.get(match.id)}
-                  onPress={(id) => router.push(`/match/${id}`)}
-                />
+                <View key={match.id} style={{ width: SLIDER_CARD_WIDTH }}>
+                  <MatchCard
+                    match={match}
+                    prediction={predictions?.get(match.id)}
+                    points={points?.get(match.id)}
+                    onPress={(id) => router.push(`/match/${id}`)}
+                  />
+                </View>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
 
@@ -213,17 +234,24 @@ export default function HomeScreen(): React.JSX.Element {
               icon="edit"
             />
           ) : (
-            <View className="gap-3">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={SLIDER_CARD_WIDTH + SLIDER_GAP}
+              decelerationRate="fast"
+              contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
+            >
               {myRecentPredictions.map(({ prediction, match }) => (
-                <MatchCard
-                  key={prediction.id}
-                  match={match}
-                  prediction={prediction}
-                  points={points?.get(match.id)}
-                  onPress={(id) => router.push(`/match/${id}`)}
-                />
+                <View key={prediction.id} style={{ width: SLIDER_CARD_WIDTH }}>
+                  <MatchCard
+                    match={match}
+                    prediction={prediction}
+                    points={points?.get(match.id)}
+                    onPress={(id) => router.push(`/match/${id}`)}
+                  />
+                </View>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
       </ScrollView>
