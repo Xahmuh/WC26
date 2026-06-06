@@ -163,7 +163,8 @@ export default function ProfileScreen(): React.JSX.Element {
     [leaderboardQuery.data, userId]
   );
 
-  const initials = (profile?.display_name ?? '?').slice(0, 2).toUpperCase();
+  const displayHandle = (profile?.username || profile?.display_name) ?? '?';
+  const initials = displayHandle.slice(0, 2).toUpperCase();
   const isAdmin = profile?.role === 'admin';
 
   return (
@@ -214,7 +215,7 @@ export default function ProfileScreen(): React.JSX.Element {
                     numberOfLines={1}
                     className="flex-1 text-[20px] font-bold text-white tracking-tight"
                   >
-                    {profile?.display_name ?? 'Player'}
+                    {(profile?.username || profile?.display_name) ?? 'Player'}
                   </Text>
                   <View
                     style={

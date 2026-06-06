@@ -50,6 +50,7 @@ export function useMyPoints(): UseQueryResult<Map<string, PointsRecord>, Error> 
 export interface MatchTopScorer {
   user_id: string;
   display_name: string;
+  username: string | null;
   avatar_url: string | null;
   total_points: number;
 }
@@ -67,6 +68,7 @@ export function useMatchTopScorer(matchId?: string) {
           user_id,
           users (
             display_name,
+            username,
             avatar_url
           )
         `)
@@ -88,7 +90,8 @@ export function useMatchTopScorer(matchId?: string) {
 
       return {
         user_id: data.user_id,
-        display_name: user?.display_name || 'Unknown',
+        display_name: user?.username || user?.display_name || 'Unknown',
+        username: user?.username || null,
         avatar_url: user?.avatar_url || null,
         total_points: data.total_points,
       } as MatchTopScorer;

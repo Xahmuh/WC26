@@ -201,6 +201,7 @@ export interface QuestionSubmission {
   created_at: string;
   user: {
     display_name: string;
+    username: string | null;
     email: string | null;
     avatar_url: string | null;
   };
@@ -217,11 +218,12 @@ export async function getQuestionSubmissions(questionId: string): Promise<Questi
       prediction,
       status,
       created_at,
-      user:user_id (
-        display_name,
-        email,
-        avatar_url
-      )
+        user:user_id (
+          display_name,
+          username,
+          email,
+          avatar_url
+        )
     `)
     .eq('question_id', questionId)
     .order('created_at', { ascending: false });
@@ -313,4 +315,36 @@ export async function updateMatchResult(
   // If status is 'FINISHED', invoke the 'calculate-points' edge function.
   // Points are calculated by the DB trigger (matches_after_write → score_match)
   // in migration 013. No edge function is needed.
+}
+
+/**
+ * Permanently deletes a user from auth.users (cascades to public.users and all
+ * dependent rows via FK). Invalidates all active sessions immediately.
+ */
+export async function deleteUser(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_delete_user', {
+    p_user_id: userId,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Soft-deletes a user: sets is_deleted = true. RLS blocks all subsequent
+ * reads/writes. Use restoreUser() to reverse.
+ */
+export async function softDeleteUser(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_soft_delete_user', {
+    p_user_id: userId,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Restores a soft-deleted user by clearing is_deleted.
+ */
+export async function restoreUser(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_restore_user', {
+    p_user_id: userId,
+  });
+  if (error) throw new Error(error.message);
 }

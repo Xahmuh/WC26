@@ -18,8 +18,9 @@ function generateInviteCode(): string {
  * The current user is automatically added as a member by the DB trigger.
  */
 export async function createGroup(name: string): Promise<CompetitionGroup> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData?.user) throw new Error('Not authenticated');
+  const user = authData.user;
 
   const nameTrim = name.trim();
   if (nameTrim.length < 3) {
@@ -60,8 +61,9 @@ export async function createGroup(name: string): Promise<CompetitionGroup> {
  * Joins a competition group using an invite code.
  */
 export async function joinGroup(code: string): Promise<CompetitionGroup> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData?.user) throw new Error('Not authenticated');
+  const user = authData.user;
 
   const cleanCode = code.trim().toUpperCase();
   if (cleanCode.length === 0) {
@@ -100,8 +102,9 @@ export async function joinGroup(code: string): Promise<CompetitionGroup> {
  * Fetches the competition groups joined by the current user.
  */
 export async function getJoinedGroups(): Promise<(CompetitionGroup & { memberCount: number })[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData?.user) return [];
+  const user = authData.user;
 
   // Get joined group ids
   const { data: membershipData, error: membershipError } = await supabase
@@ -163,7 +166,7 @@ export async function getGroupLeaderboard(
       group_id,
       user_id,
       joined_at,
-      user:users(display_name, avatar_url, total_points)
+        user:users(display_name, username, avatar_url, total_points)
     `)
     .eq('group_id', groupId);
 
@@ -175,7 +178,8 @@ export async function getGroupLeaderboard(
       group_id: m.group_id,
       user_id: m.user_id,
       joined_at: m.joined_at,
-      display_name: m.user?.display_name || 'Player',
+      display_name: m.user?.username || m.user?.display_name || 'Player',
+      username: m.user?.username || null,
       avatar_url: m.user?.avatar_url || null,
       total_points: m.user?.total_points || 0,
     }))

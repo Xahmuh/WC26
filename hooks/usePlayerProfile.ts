@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 export interface PlayerProfileData {
   id: string;
   display_name: string;
+  username: string | null;
   avatar_url: string | null;
   total_points: number;
   supported_teams: string[] | null;
@@ -25,7 +26,7 @@ export function usePlayerProfile(playerId: string | undefined) {
       // 1. Fetch user profile
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('id, display_name, avatar_url, total_points, supported_teams')
+        .select('id, display_name, username, avatar_url, total_points, supported_teams')
         .eq('id', playerId)
         .maybeSingle();
 
@@ -59,7 +60,8 @@ export function usePlayerProfile(playerId: string | undefined) {
 
       return {
         id: user.id,
-        display_name: user.display_name,
+        display_name: user.username || user.display_name,
+        username: user.username,
         avatar_url: user.avatar_url,
         total_points: user.total_points,
         supported_teams: user.supported_teams as string[] | null,

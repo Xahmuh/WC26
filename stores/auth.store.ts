@@ -145,7 +145,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // the user's own email from the auth session instead.
       const { data, error } = await supabase
         .from('users')
-        .select('id, display_name, avatar_url, total_points, role, supported_teams')
+        .select('id, display_name, username, avatar_url, total_points, role, supported_teams')
         .eq('id', session.user.id)
         .maybeSingle();
 

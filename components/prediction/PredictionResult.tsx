@@ -103,7 +103,7 @@ export function PredictionResult({
               <View>
                 <Text className="text-xs text-textTertiary">Highest Scorer</Text>
                 <Text className="text-sm font-bold text-textPrimary">
-                  {topScorer.display_name}
+                  {topScorer.username || topScorer.display_name}
                 </Text>
               </View>
             </View>

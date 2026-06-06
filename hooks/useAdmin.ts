@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createPredictionQuestion,
+  deleteUser,
   resolvePredictionQuestion,
+  restoreUser,
   setMatchMultiplier,
+  softDeleteUser,
   updateQuestionStatus,
   updatePredictionQuestion,
   deletePredictionQuestion,
@@ -147,6 +150,42 @@ export function useCreateCustomMatch() {
     }) => createCustomMatch(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['matches'] });
+    },
+  });
+}
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: string) => deleteUser(userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['joinedGroups'] });
+    },
+  });
+}
+
+export function useSoftDeleteUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: string) => softDeleteUser(userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['joinedGroups'] });
+    },
+  });
+}
+
+export function useRestoreUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: string) => restoreUser(userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['joinedGroups'] });
     },
   });
 }

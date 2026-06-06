@@ -29,7 +29,8 @@ export function PlayerProfileModal({
   const { data: profile, isLoading, isError, error } = usePlayerProfile(playerId);
   const { data: teams = [] } = useTeams();
 
-  const initials = profile?.display_name ? profile.display_name.slice(0, 2).toUpperCase() : '?';
+  const displayHandle = profile?.username || profile?.display_name || '?';
+  const initials = displayHandle.slice(0, 2).toUpperCase();
   const medalColor = rank ? MEDAL_COLOR[rank] : undefined;
 
   return (
@@ -83,7 +84,7 @@ export function PlayerProfileModal({
 
                 <View className="items-center gap-2">
                   <Text className="text-xl font-bold text-textPrimary text-center">
-                    {profile.display_name}
+                    {profile.username || profile.display_name}
                   </Text>
                   <View className="flex-row items-center gap-2">
                     <View className="flex-row items-center gap-1 bg-accentDim border border-accentBorder px-2.5 py-1 rounded-full">

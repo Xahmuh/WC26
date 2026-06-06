@@ -72,11 +72,11 @@ export interface LeaderboardEntry {
   rank: number;
   user_id: string;
   display_name: string;
+  username: string | null;
   avatar_url: string | null;
   total_points: number;
   predictions_made: number;
   predictions_scored: number;
-  /** Count of exact-scoreline hits — the leaderboard tie-breaker. */
   exact_predictions: number;
   supported_teams: string[] | null;
 }
@@ -84,6 +84,7 @@ export interface LeaderboardEntry {
 export interface UserProfile {
   id: string;
   display_name: string;
+  username: string | null;
   avatar_url: string | null;
   total_points: number;
   email: string | null;
@@ -141,6 +142,7 @@ export interface GroupMember {
   user_id: string;
   joined_at: string;
   display_name: string | null;
+  username: string | null;
   avatar_url: string | null;
   total_points: number;
   rank?: number;
@@ -154,6 +156,7 @@ export interface GroupMember {
 export interface UserRow {
   id: string;
   display_name: string;
+  username: string | null;
   avatar_url: string | null;
   total_points: number;
   email: string | null;
@@ -219,6 +222,7 @@ export interface PointsRow {
 export interface LeaderboardRow {
   user_id: string;
   display_name: string;
+  username: string | null;
   avatar_url: string | null;
   total_points: number;
   predictions_made: number;

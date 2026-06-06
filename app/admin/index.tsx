@@ -86,7 +86,7 @@ function SubmissionsAuditSection({
           >
             <View className="flex-1 mr-3">
               <Text className="text-sm font-bold text-textPrimary">
-                {sub.user?.display_name || 'Unknown User'}
+                {sub.user?.username || sub.user?.display_name || 'Unknown User'}
               </Text>
               {sub.user?.email && (
                 <Text className="text-[10px] text-textTertiary">

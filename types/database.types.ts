@@ -479,35 +479,44 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          deleted_at: string | null
           display_name: string
           email: string | null
           id: string
+          is_deleted: boolean
           last_login: string | null
           role: string
           supported_teams: string[] | null
           total_points: number
+          username: string | null
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          deleted_at?: string | null
           display_name: string
           email?: string | null
           id: string
+          is_deleted?: boolean
           last_login?: string | null
           role?: string
           supported_teams?: string[] | null
           total_points?: number
+          username?: string | null
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
+          deleted_at?: string | null
           display_name?: string
           email?: string | null
           id?: string
+          is_deleted?: boolean
           last_login?: string | null
           role?: string
           supported_teams?: string[] | null
           total_points?: number
+          username?: string | null
         }
         Relationships: []
       }
@@ -529,6 +538,9 @@ export type Database = {
       }
     }
     Functions: {
+      admin_delete_user: { Args: { p_user_id: string }; Returns: undefined }
+      admin_restore_user: { Args: { p_user_id: string }; Returns: undefined }
+      admin_soft_delete_user: { Args: { p_user_id: string }; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
       lock_predictions_at_kickoff: { Args: never; Returns: undefined }
       refresh_leaderboard: { Args: never; Returns: undefined }
@@ -536,6 +548,7 @@ export type Database = {
         Args: { p_correct_answer: string; p_question_id: string }
         Returns: undefined
       }
+      update_username: { Args: { p_username: string }; Returns: undefined }
     }
     Enums: {
       match_stage:

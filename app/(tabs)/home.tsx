@@ -177,7 +177,7 @@ export default function HomeScreen(): React.JSX.Element {
                 />
               </View>
               <Text className="text-xs font-bold text-textPrimary shrink" numberOfLines={1}>
-                {profile?.display_name ?? 'Profile'}
+                {(profile?.username || profile?.display_name) ?? 'Profile'}
               </Text>
             </Pressable>
           </View>

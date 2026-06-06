@@ -112,7 +112,8 @@ export default function GroupDetailsScreen(): React.JSX.Element {
             <View>
               {members.map((member) => {
                 const isMe = member.user_id === currentUserId;
-                const initials = (member.display_name ?? '?').slice(0, 2).toUpperCase();
+                const memberHandle = (member.username || member.display_name) ?? '?';
+                const initials = memberHandle.slice(0, 2).toUpperCase();
 
                 // Custom rank badge background
                 let rankBg = 'bg-bgSurface1 border-bgBorder';
@@ -154,7 +155,7 @@ export default function GroupDetailsScreen(): React.JSX.Element {
                         numberOfLines={1}
                         className={`text-sm flex-1 ${isMe ? 'font-bold text-accent' : 'text-textPrimary'}`}
                       >
-                        {member.display_name} {isMe ? '(You)' : ''}
+                        {member.username || member.display_name} {isMe ? '(You)' : ''}
                       </Text>
                     </View>
 

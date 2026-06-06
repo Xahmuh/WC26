@@ -17,7 +17,8 @@ function mapEntry(row: LeaderboardRow): LeaderboardEntry {
   return {
     rank: row.rank,
     user_id: row.user_id,
-    display_name: row.display_name,
+    display_name: row.username || row.display_name,
+    username: row.username,
     avatar_url: row.avatar_url,
     total_points: row.total_points,
     predictions_made: row.predictions_made,
