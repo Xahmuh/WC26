@@ -12,7 +12,7 @@ WebBrowser.maybeCompleteAuthSession();
  */
 export async function signInWithGoogle(): Promise<void> {
   try {
-    const redirectUrl = Linking.createURL('(auth)/login');
+    const redirectUrl = Linking.createURL('login');
     console.log('[AuthService] Generated Redirect URL:', redirectUrl);
     
     if (Platform.OS === 'web') {
@@ -45,8 +45,19 @@ export async function signInWithGoogle(): Promise<void> {
     if (data?.url) {
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
       if (result.type === 'success' && result.url) {
-        // The Supabase client automatically detects the redirected session
-        // via its onAuthStateChange handler.
+        // Extract tokens from hash fragment
+        const hash = result.url.split('#')[1];
+        if (hash) {
+          const access_token = hash.match(/access_token=([^&]+)/)?.[1];
+          const refresh_token = hash.match(/refresh_token=([^&]+)/)?.[1];
+          if (access_token && refresh_token) {
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (sessionError) throw sessionError;
+          }
+        }
       }
     }
   } catch (err) {

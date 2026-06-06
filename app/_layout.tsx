@@ -33,6 +33,7 @@ function useProtectedRoute(): void {
 }
 
 function RootNavigator(): React.JSX.Element {
+  const { width } = useWindowDimensions();
   const initialize = useAuthStore((s) => s.initialize);
   const initializing = useAuthStore((s) => s.initializing);
 
@@ -50,7 +51,6 @@ function RootNavigator(): React.JSX.Element {
     );
   }
 
-  const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
   const useMaxContainer = isWeb && width > 480;
 
