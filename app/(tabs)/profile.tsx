@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Modal, ScrollView, Text, View, Image, Alert, Pressable } from 'react-native';
+import { Modal, ScrollView, Text, View, Alert, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 
 import Theme from '@/constants/theme/design-system';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
@@ -30,6 +33,95 @@ export default function ProfileScreen(): React.JSX.Element {
   const [showPicker, setShowPicker] = useState(false);
   const [savingTeams, setSavingTeams] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const handleChangeAvatar = async () => {
+    if (!userId) return;
+    let pickedUri = '';
+
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need storage permission to change your avatar.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.6,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      pickedUri = result.assets[0].uri;
+
+      setUploadingAvatar(true);
+
+      const fileExt = pickedUri.split('.').pop() || 'jpg';
+      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      // Try uploading to Supabase storage avatars bucket
+      const formData = new FormData();
+      formData.append('file', {
+        uri: pickedUri,
+        name: fileName,
+        type: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+      } as any);
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, formData, {
+          contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+          upsert: true,
+        });
+
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+        const avatarUrl = urlData.publicUrl;
+
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ avatar_url: avatarUrl })
+          .eq('id', userId);
+
+        if (updateError) throw updateError;
+        await refreshProfile();
+        Alert.alert('Success', 'Avatar updated successfully!');
+      } else {
+        throw uploadError;
+      }
+    } catch (err: any) {
+      console.log('Storage upload failed, trying base64 fallback:', err.message);
+      if (!pickedUri) return;
+      // Fallback to Base64 in users table directly
+      try {
+        const response = await fetch(pickedUri);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const base64data = reader.result as string;
+          const { error: base64UpdateError } = await supabase
+            .from('users')
+            .update({ avatar_url: base64data })
+            .eq('id', userId);
+
+          if (base64UpdateError) {
+            Alert.alert('Error', base64UpdateError.message);
+          } else {
+            await refreshProfile();
+            Alert.alert('Success', 'Avatar updated successfully!');
+          }
+        };
+      } catch (fallbackErr: any) {
+        Alert.alert('Error', fallbackErr.message || 'Failed to update avatar.');
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleSaveTeams = async (teamsList: string[]) => {
     if (!userId) return;
@@ -77,43 +169,120 @@ export default function ProfileScreen(): React.JSX.Element {
       >
         <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
 
-        <Card className="items-center gap-3 p-6 border border-bgBorder bg-bgSurface2">
-          {profile?.avatar_url ? (
-            <Image
-              source={{ uri: profile.avatar_url }}
-              style={{ width: 80, height: 80, borderRadius: 40 }}
-              className="border border-accent"
+        <View 
+          style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.08)' }}
+          className="shadow-2xl shadow-black/50"
+        >
+          <BlurView 
+            intensity={50} 
+            tint="dark" 
+            className="items-center gap-4 p-6 bg-bgDeep/20"
+          >
+            {/* Subtle light flare background decoration */}
+            <View 
+              style={{ 
+                position: 'absolute', 
+                top: -65, 
+                right: -65, 
+                width: 130, 
+                height: 130, 
+                borderRadius: 65, 
+                backgroundColor: Theme.colors.accent, 
+                opacity: 0.15,
+              }} 
             />
-          ) : (
-            <View className="h-20 w-20 items-center justify-center rounded-full bg-bgSurface3 border border-bgBorder">
-              <Text className="text-2xl font-bold text-textSecondary">{initials}</Text>
-            </View>
-          )}
-          <View className="items-center gap-1.5">
-            <View className="flex-row items-center gap-2">
-              <Text className="text-lg font-bold text-textPrimary">
-                {profile?.display_name ?? 'Player'}
-              </Text>
-              {isAdmin && (
-                <View className="bg-liveDim border border-live rounded px-1.5 py-0.5">
-                  <Text className="text-[10px] font-bold text-live uppercase tracking-wider">
-                    Admin
-                  </Text>
+
+            <Pressable 
+              onPress={handleChangeAvatar} 
+              disabled={uploadingAvatar}
+              className="relative active:opacity-90"
+            >
+              {profile?.avatar_url ? (
+                <Image
+                  source={{ uri: profile.avatar_url }}
+                  style={{ width: 88, height: 88, borderRadius: 44 }}
+                  className="border-2 border-accent"
+                />
+              ) : (
+                <Image
+                  source={require('../../assets/avatar.webp')}
+                  style={{ width: 88, height: 88, borderRadius: 44 }}
+                  className="border-2 border-accent"
+                />
+              )}
+              
+              {/* Edit overlay badge */}
+              <View 
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  backgroundColor: Theme.colors.accent,
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 2,
+                  borderColor: '#131524',
+                  elevation: 4,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 2,
+                }}
+              >
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="small" color={Theme.colors.bgDeep} />
+                ) : (
+                  <Icon name="edit" size={12} color="#001C3D" />
+                )}
+              </View>
+            </Pressable>
+
+            <View className="items-center gap-2">
+              <View className="flex-row items-center gap-2 justify-center">
+                <Text className="text-xl font-black text-textPrimary tracking-tight">
+                  {profile?.display_name ?? 'Player'}
+                </Text>
+                {isAdmin && (
+                  <View className="bg-liveDim border border-live rounded-full px-2 py-0.5">
+                    <Text className="text-[9px] font-extrabold text-live uppercase tracking-wider">
+                      Admin
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {profile?.supported_teams && profile.supported_teams.length > 0 && (
+                <View className="flex-row gap-2 mt-1 justify-center items-center">
+                  {profile.supported_teams.map((teamId) => {
+                    const team = teams.find((t) => t.id === teamId);
+                    if (!team) return null;
+                    return (
+                      <View 
+                        key={teamId} 
+                        style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 19,
+                          overflow: 'hidden',
+                          borderWidth: 1.5,
+                          borderColor: Theme.colors.bgBorder,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          backgroundColor: Theme.colors.bgSurface3,
+                        }}
+                      >
+                        <TeamFlag team={team} size={38} fixed />
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </View>
-            {email ? <Text className="text-sm text-textSecondary">{email}</Text> : null}
-            {profile?.supported_teams && profile.supported_teams.length > 0 && (
-              <View className="flex-row gap-1.5 mt-2">
-                {profile.supported_teams.map((teamId) => {
-                  const team = teams.find((t) => t.id === teamId);
-                  if (!team) return null;
-                  return <TeamFlag key={teamId} team={team} size={20} fixed />;
-                })}
-              </View>
-            )}
-          </View>
-        </Card>
+          </BlurView>
+        </View>
 
         {/* Action Buttons */}
         <View className="gap-3">

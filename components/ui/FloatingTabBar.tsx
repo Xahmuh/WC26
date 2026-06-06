@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated, Platform, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import * as Haptics from 'expo-haptics';
 
 import Theme from '@/constants/theme/design-system';
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -116,6 +117,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           const isActive = state.index === index;
 
           const onPress = () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!isActive && !event.defaultPrevented) {
               navigation.navigate(route.name);
