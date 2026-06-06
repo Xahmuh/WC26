@@ -107,6 +107,7 @@ function useUnreadBadge(): number {
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps): React.JSX.Element | null {
   const insets = useSafeAreaInsets();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const unreadBadge = useUnreadBadge();
 
   // Hide the floating pill while the keyboard is up so it never overlaps inputs.
   useEffect(() => {
@@ -121,8 +122,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   }, []);
 
   if (keyboardOpen) return null;
-
-  const unreadBadge = useUnreadBadge();
 
   return (
     <View style={[styles.container, { bottom: insets.bottom + NAV.bottomOffset }]} pointerEvents="box-none">
