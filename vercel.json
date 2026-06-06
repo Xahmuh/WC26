@@ -1,0 +1,9 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/((?!assets/|static/|_expo/|.*\\..*$).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
