@@ -7,7 +7,7 @@
     "scheme": "wc26",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "icon": "./assets/favicon.png",
+    "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splashscreen.png",
       "resizeMode": "contain",
@@ -16,12 +16,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.wc26.app",
-      "icon": "./assets/favicon.png"
+      "icon": "./assets/icon.png"
     },
     "android": {
       "package": "org.wc26.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/favicon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0D0F0E"
       }
     },
@@ -37,6 +37,12 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos so you can set a profile picture."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#C8FF00"
         }
       ]
     ],

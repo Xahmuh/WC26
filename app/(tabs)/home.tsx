@@ -12,6 +12,7 @@ import { HeroCarousel } from '@/components/ui/HeroCarousel';
 import { EmptyState, ErrorState } from '@/components/ui/States';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
 import { PlayerProfileModal } from '@/components/ui/PlayerProfileModal';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 import { supabase } from '@/lib/supabase';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { useMatches } from '@/hooks/useMatches';
@@ -140,15 +141,15 @@ export default function HomeScreen(): React.JSX.Element {
           />
         }
       >
-        <View className="flex-row items-center justify-between border-b border-bgBorder pb-4">
-          <View className="flex-row items-center gap-2.5">
-            <View 
-              style={{ 
-                width: 5, 
-                height: 28, 
-                borderRadius: 2.5, 
-                backgroundColor: Theme.colors.accent 
-              }} 
+        <View className="flex-row items-center justify-between border-b border-bgBorder pb-4 gap-3">
+          <View className="flex-row items-center gap-2.5 shrink-0">
+            <View
+              style={{
+                width: 5,
+                height: 28,
+                borderRadius: 2.5,
+                backgroundColor: Theme.colors.accent
+              }}
             />
             <View className="flex-row items-center">
               <Text className="text-[24px] font-black uppercase tracking-tighter text-textPrimary">
@@ -160,20 +161,26 @@ export default function HomeScreen(): React.JSX.Element {
             </View>
           </View>
 
-          <Pressable 
-            onPress={() => router.push('/profile')} 
-            className="flex-row items-center gap-2 bg-bgSurface2 border border-bgBorder rounded-full py-1.5 pl-1.5 pr-3 active:opacity-80"
-          >
-            <View className="h-7 w-7 items-center justify-center rounded-full bg-bgSurface1 border border-bgBorder/50 overflow-hidden">
-              <Image
-                source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
-                style={{ width: '100%', height: '100%' }}
-              />
-            </View>
-            <Text className="text-xs font-bold text-textPrimary" numberOfLines={1}>
-              {profile?.display_name ?? 'Profile'}
-            </Text>
-          </Pressable>
+          {/* Right cluster: bell + profile pill. shrink + min-w-0 so a long
+              display name truncates instead of pushing the avatar off-screen. */}
+          <View className="flex-row items-center gap-2 shrink min-w-0">
+            <NotificationBell />
+            <Pressable
+              onPress={() => router.push('/profile')}
+              style={{ maxWidth: '60%' }}
+              className="flex-row items-center gap-2 bg-bgSurface2 border border-bgBorder rounded-full py-1.5 pl-1.5 pr-3 active:opacity-80 shrink min-w-0"
+            >
+              <View className="h-7 w-7 items-center justify-center rounded-full bg-bgSurface1 border border-bgBorder/50 overflow-hidden shrink-0">
+                <Image
+                  source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </View>
+              <Text className="text-xs font-bold text-textPrimary shrink" numberOfLines={1}>
+                {profile?.display_name ?? 'Profile'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Hero Banner Slides */}

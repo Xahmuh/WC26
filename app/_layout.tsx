@@ -16,9 +16,11 @@ if (Platform.OS === 'web') {
 
 import Theme from '@/constants/theme/design-system';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { queryClient } from '@/lib/queryClient';
 import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/services/auth.service';
+import { configureNotifications } from '@/lib/sound';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -72,6 +74,7 @@ function RootNavigator(): React.JSX.Element {
 
   useEffect(() => {
     void initialize();
+    void configureNotifications();
   }, [initialize]);
 
   useOAuthDeepLink();
@@ -117,6 +120,16 @@ function RootNavigator(): React.JSX.Element {
           presentation: 'card',
         }}
       />
+      <Stack.Screen
+        name="notifications"
+        options={{
+          headerShown: true,
+          title: 'Notifications',
+          headerStyle: { backgroundColor: Theme.colors.bgSurface2 },
+          headerTintColor: Theme.colors.textPrimary,
+          presentation: 'card',
+        }}
+      />
     </Stack>
   );
 
@@ -152,7 +165,9 @@ export default function RootLayout(): React.JSX.Element {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" />
-          <RootNavigator />
+          <ErrorBoundary>
+            <RootNavigator />
+          </ErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

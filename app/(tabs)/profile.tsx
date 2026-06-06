@@ -205,19 +205,34 @@ export default function ProfileScreen(): React.JSX.Element {
                 </View>
               </Pressable>
 
-              {/* Info on Right */}
-              <View className="flex-1 justify-center">
+              {/* Info on Right — min-w-0 lets children truncate inside the flex row */}
+              <View className="flex-1 justify-center min-w-0">
                 <View className="flex-row items-center gap-2">
-                  <Text className="text-[20px] font-bold text-white tracking-tight">
+                  {/* flex-1 + numberOfLines: long names ellipsize instead of
+                      shoving the role badge off the card. */}
+                  <Text
+                    numberOfLines={1}
+                    className="flex-1 text-[20px] font-bold text-white tracking-tight"
+                  >
                     {profile?.display_name ?? 'Player'}
                   </Text>
-                  {isAdmin && (
-                    <View style={{ backgroundColor: 'rgba(224,48,48,0.1)', borderColor: '#E03030', borderWidth: 1 }} className="rounded-full px-2 py-0.5">
-                      <Text className="text-[9px] font-extrabold text-[#E03030] uppercase tracking-wider">Admin</Text>
-                    </View>
-                  )}
+                  <View
+                    style={
+                      isAdmin
+                        ? { backgroundColor: 'rgba(224,48,48,0.1)', borderColor: '#E03030', borderWidth: 1 }
+                        : { backgroundColor: 'rgba(200,255,0,0.1)', borderColor: Theme.colors.accent, borderWidth: 1 }
+                    }
+                    className="rounded-full px-2 py-0.5 shrink-0"
+                  >
+                    <Text
+                      className="text-[9px] font-extrabold uppercase tracking-wider"
+                      style={{ color: isAdmin ? '#E03030' : Theme.colors.accent }}
+                    >
+                      {isAdmin ? 'Admin' : 'User'}
+                    </Text>
+                  </View>
                 </View>
-                {email && <Text className="text-[12px] font-medium text-[#888888] mt-1">{email}</Text>}
+                {email && <Text numberOfLines={1} className="text-[12px] font-medium text-[#888888] mt-1">{email}</Text>}
                 
                 {/* Supported Teams Badges */}
                 {profile?.supported_teams && profile.supported_teams.length > 0 && (

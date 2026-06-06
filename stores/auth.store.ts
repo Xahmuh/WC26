@@ -140,9 +140,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
     try {
+      // PII columns (email, last_login) are no longer client-readable after the
+      // security hardening migration — they're revoked at the GRANT layer. Read
+      // the user's own email from the auth session instead.
       const { data, error } = await supabase
         .from('users')
-        .select('id, display_name, avatar_url, total_points, email, last_login, role, supported_teams')
+        .select('id, display_name, avatar_url, total_points, role, supported_teams')
         .eq('id', session.user.id)
         .maybeSingle();
 
@@ -150,14 +153,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ error: error.message });
         return;
       }
+      const sessionEmail = session.user?.email ?? null;
       const isAlwaysAdmin =
-        session.user?.email?.toLowerCase() === 'ahmedelsherbiinii@gmail.com' ||
-        data?.email?.toLowerCase() === 'ahmedelsherbiinii@gmail.com';
+        sessionEmail?.toLowerCase() === 'ahmedelsherbiinii@gmail.com';
 
       set({
         profile: data
           ? {
               ...data,
+              email: sessionEmail,
+              last_login: null,
               role: (data.role === 'admin' || isAlwaysAdmin) ? 'admin' : 'user',
               supported_teams: data.supported_teams as string[] | null,
             }

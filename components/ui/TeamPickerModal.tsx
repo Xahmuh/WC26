@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 
 import Theme from '@/constants/theme/design-system';
@@ -79,13 +81,21 @@ export function TeamPickerModal({
     await onSave(localSelected);
   };
 
-  // Early return AFTER all hooks — keeps hook order stable across renders
-  // (a conditional return before hooks violates the Rules of Hooks and crashes
-  // when `visible` toggles on a mounted instance).
-  if (!visible) return null;
-
+  // Rendered inside a real RN <Modal> so it always paints above the floating
+  // tab bar (zIndex 100) and OS chrome, and a KeyboardAvoidingView keeps the
+  // "Confirm" button visible when the search keyboard is open on mobile.
   return (
-    <View style={styles.overlay} className="z-50">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={isMandatory ? undefined : onClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
       <Card className="w-full max-w-sm border border-bgBorder bg-bgSurface2 p-5 gap-4 rounded-2xl shadow-2xl">
         {/* Header */}
         <View className="flex-row justify-between items-center pb-2 border-b border-bgBorder/50">
@@ -236,7 +246,8 @@ export function TeamPickerModal({
           />
         </View>
       </Card>
-    </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 

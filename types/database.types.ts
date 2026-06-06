@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          data: Json
+          id: string
+          is_read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          data?: Json
+          id?: string
+          is_read?: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          data?: Json
+          id?: string
+          is_read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      leaderboard_state: {
+        Row: {
+          id: boolean
+          refreshed_at: string | null
+          refreshed_for_day: string | null
+          version: number
+        }
+        Insert: {
+          id?: boolean
+          refreshed_at?: string | null
+          refreshed_for_day?: string | null
+          version?: number
+        }
+        Update: {
+          id?: boolean
+          refreshed_at?: string | null
+          refreshed_for_day?: string | null
+          version?: number
+        }
+        Relationships: []
+      }
       competition_groups: {
         Row: {
           code: string

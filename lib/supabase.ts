@@ -106,9 +106,11 @@ export async function getCurrentSession(): Promise<Session | null> {
 }
 
 /**
- * Subscribes to leaderboard-affecting changes. The materialized view itself
- * cannot emit realtime events, so we listen to the underlying `points` table
- * and let the caller refetch the view when anything changes.
+ * Subscribes to leaderboard refreshes. The materialized view cannot emit
+ * realtime events, and ranks are now recalculated only once per match-day
+ * (not per match) — so we listen to the single-row `leaderboard_state` table,
+ * whose `version` is bumped by finalize_leaderboard() when ranks change. The
+ * caller refetches the view on each tick.
  *
  * Returns an unsubscribe function — always call it on cleanup.
  */
@@ -117,10 +119,10 @@ export function subscribeToLeaderboard(
 ): () => void {
   const channelId = Math.random().toString(36).substring(2, 9);
   const channel: RealtimeChannel = supabase
-    .channel(`points-changes-${channelId}`)
+    .channel(`leaderboard-state-${channelId}`)
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'points' },
+      { event: '*', schema: 'public', table: 'leaderboard_state' },
       () => onChange()
     )
     .subscribe();
