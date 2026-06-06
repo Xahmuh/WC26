@@ -311,13 +311,6 @@ export async function updateMatchResult(
   }
 
   // If status is 'FINISHED', invoke the 'calculate-points' edge function.
-  if (status === 'FINISHED') {
-    const { error: funcError } = await supabase.functions.invoke('calculate-points', {
-      body: { match_id: matchId },
-    });
-    if (funcError) {
-      console.error('Failed to trigger calculate-points:', funcError);
-      throw new Error(`Match updated but points calculation failed: ${funcError.message}`);
-    }
-  }
+  // Points are calculated by the DB trigger (matches_after_write → score_match)
+  // in migration 013. No edge function is needed.
 }

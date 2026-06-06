@@ -271,6 +271,11 @@ export default function ProfileScreen(): React.JSX.Element {
             icon="trophy"
             onPress={() => router.push('/groups' as any)}
           />
+          <ProfileOption
+            label="Notifications"
+            icon="bell"
+            onPress={() => router.push('/notifications' as any)}
+          />
           {isAdmin && (
             <ProfileOption
               label="Admin Dashboard"

@@ -158,41 +158,53 @@ Deno.serve(async (req: Request): Promise<Response> => {
       ])
     );
 
-    // 3. Upsert matches that have both teams resolved.
-    const matchRows = payload.matches
-      .filter((m) => m.homeTeam.id && m.awayTeam.id)
-      .map((m) => {
-        const homeId = idByExternal.get(m.homeTeam.id as number);
-        const awayId = idByExternal.get(m.awayTeam.id as number);
-        if (!homeId || !awayId) return null;
-        const status = mapStatus(m.status);
-        const finished = status === 'FINISHED';
-        return {
-          external_id: m.id,
-          home_team_id: homeId,
-          away_team_id: awayId,
-          home_score: finished ? m.score.fullTime.home : null,
-          away_score: finished ? m.score.fullTime.away : null,
-          status,
-          stage: mapStage(m.stage),
-          group_name: groupLetter(m.group),
-          kickoff_time: m.utcDate,
-          venue: m.venue,
-          last_synced_at: new Date().toISOString(),
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null);
+    // 3. Build match rows for EVERY fixture — including knockout placeholders
+    //    whose teams are still TBD (null ids). Resolve team uuids when known,
+    //    otherwise leave null so the bracket exists from day one.
+    const matchRows = payload.matches.map((m) => {
+      const homeId = m.homeTeam.id ? idByExternal.get(m.homeTeam.id) ?? null : null;
+      const awayId = m.awayTeam.id ? idByExternal.get(m.awayTeam.id) ?? null : null;
+      const status = mapStatus(m.status);
+      const finished = status === 'FINISHED';
+      return {
+        external_id: m.id,
+        home_team_id: homeId,
+        away_team_id: awayId,
+        status,
+        stage: mapStage(m.stage),
+        group_name: groupLetter(m.group),
+        kickoff_time: m.utcDate,
+        venue: m.venue,
+        home_score: finished ? m.score.fullTime.home : null,
+        away_score: finished ? m.score.fullTime.away : null,
+      };
+    });
 
+    // 4. Safe conditional upsert (DB function): inserts new fixtures + TBD
+    //    placeholders, fills teams progressively, NEVER overwrites finished
+    //    scores, never deletes. Keyed on external_id; fully idempotent.
+    let matchesSynced = 0;
     if (matchRows.length > 0) {
-      const { error } = await supabase
-        .from('matches')
-        .upsert(matchRows, { onConflict: 'external_id' });
-      if (error) return jsonResponse({ error: `matches upsert: ${error.message}` }, 500);
+      const { data, error } = await supabase.rpc('sync_matches', { p_matches: matchRows });
+      if (error) return jsonResponse({ error: `matches sync: ${error.message}` }, 500);
+      matchesSynced = typeof data === 'number' ? data : matchRows.length;
+    }
+
+    // 5. Tournament completeness guarantee — warn only, never fail the sync.
+    const REQUIRED_STAGES: DbStage[] = [
+      'GROUP', 'ROUND_OF_16', 'QUARTER_FINAL', 'SEMI_FINAL', 'THIRD_PLACE', 'FINAL',
+    ];
+    const { data: stageRows } = await supabase.from('matches').select('stage');
+    const present = new Set((stageRows ?? []).map((r: { stage: string }) => r.stage));
+    const missingStages = REQUIRED_STAGES.filter((s) => !present.has(s));
+    if (missingStages.length > 0) {
+      console.warn(`[sync-fixtures] missing tournament stages: ${missingStages.join(', ')}`);
     }
 
     return jsonResponse({
       teams_synced: teamRows.length,
-      matches_synced: matchRows.length,
+      matches_synced: matchesSynced,
+      missing_stages: missingStages,
     });
   } catch (err) {
     return jsonResponse(

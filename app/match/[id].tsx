@@ -90,7 +90,14 @@ export default function MatchDetailScreen(): React.JSX.Element {
             </View>
           </View>
 
-          <Badge label={STAGE_LABELS[match.stage]} tone="info" />
+          <View className="flex-row items-center gap-2">
+            <Badge label={STAGE_LABELS[match.stage]} tone="info" />
+            {match.is_placeholder && (
+              <View className="rounded bg-accentDim px-2 py-0.5 border border-accentBorder/50">
+                <Text className="text-[10px] font-bold text-accent uppercase">TBD</Text>
+              </View>
+            )}
+          </View>
           <Text className="text-xs text-textSecondary">
             {formatKickoff(match.kickoff_time)}
           </Text>
@@ -103,7 +110,15 @@ export default function MatchDetailScreen(): React.JSX.Element {
         </View>
 
         {/* Prediction or result */}
-        {isFinished ? (
+        {match.is_placeholder ? (
+          <View className="items-center gap-2 rounded-2xl border border-bgBorder bg-bgSurface2 p-5">
+            <Text className="text-sm font-semibold text-textPrimary">Knockout match — TBD</Text>
+            <Text className="text-xs text-textSecondary text-center">
+              Teams for this knockout stage match have not been decided yet.
+              Predictions will open once both teams are confirmed.
+            </Text>
+          </View>
+        ) : isFinished ? (
           <PredictionResult match={match} prediction={prediction} points={points} />
         ) : (
           <PredictionForm match={match} existing={prediction} />

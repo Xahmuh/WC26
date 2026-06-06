@@ -93,14 +93,14 @@ export function PredictionForm({
         <View className="flex-row items-center justify-center gap-6 my-2">
           <View className="items-center">
             <Text className="text-[10px] text-textSecondary uppercase font-medium">
-              {match.home_team.code || match.home_team.short_name}
+              {match.home_team.code ?? match.home_team.short_name ?? 'Home'}
             </Text>
             <Text className="text-4xl font-bold text-textPrimary mt-1">{home}</Text>
           </View>
           <Text className="text-2xl font-bold text-textTertiary">:</Text>
           <View className="items-center">
             <Text className="text-[10px] text-textSecondary uppercase font-medium">
-              {match.away_team.code || match.away_team.short_name}
+              {match.away_team.code ?? match.away_team.short_name ?? 'Away'}
             </Text>
             <Text className="text-4xl font-bold text-textPrimary mt-1">{away}</Text>
           </View>

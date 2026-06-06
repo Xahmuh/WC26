@@ -8,13 +8,14 @@
 // ============================================================================
 
 import { useEffect, useRef, useState } from 'react';
-import { View, TouchableOpacity, StyleSheet, Animated, Platform, Keyboard } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, Platform, Keyboard, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 
 import Theme from '@/constants/theme/design-system';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { useNotifications } from '@/hooks/useNotifications';
 
 // route name → semantic icon (outline + filled active variant)
 const TAB_ICONS: Record<string, { base: IconName; active: IconName }> = {
@@ -54,12 +55,14 @@ function NavItem({
   onPress,
   onLongPress,
   accessibilityLabel,
+  badgeCount,
 }: {
   routeName: string;
   isActive: boolean;
   onPress: () => void;
   onLongPress: () => void;
   accessibilityLabel?: string;
+  badgeCount?: number;
 }): React.JSX.Element {
   const scale = useRef(new Animated.Value(1)).current;
   const icons = TAB_ICONS[routeName] ?? { base: 'home', active: 'homeActive' };
@@ -86,9 +89,19 @@ function NavItem({
           color={isActive ? NAV.iconActive : NAV.iconInactive}
         />
         {isActive && <View style={styles.activeDot} />}
+        {badgeCount != null && badgeCount > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
+          </View>
+        )}
       </Animated.View>
     </TouchableOpacity>
   );
+}
+
+function useUnreadBadge(): number {
+  const result = useNotifications();
+  return result.unreadCount;
 }
 
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps): React.JSX.Element | null {
@@ -108,6 +121,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   }, []);
 
   if (keyboardOpen) return null;
+
+  const unreadBadge = useUnreadBadge();
 
   return (
     <View style={[styles.container, { bottom: insets.bottom + NAV.bottomOffset }]} pointerEvents="box-none">
@@ -136,6 +151,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               onPress={onPress}
               onLongPress={onLongPress}
               accessibilityLabel={options?.tabBarAccessibilityLabel ?? options?.title}
+              badgeCount={route.name === 'profile' ? unreadBadge : undefined}
             />
           );
         })}
@@ -186,5 +202,23 @@ const styles = StyleSheet.create({
     height: NAV.dotSize,
     borderRadius: NAV.dotSize / 2,
     backgroundColor: NAV.dotColor,
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Theme.colors.live,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 14,
   },
 });

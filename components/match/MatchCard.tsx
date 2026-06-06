@@ -32,6 +32,8 @@ function MatchCardComponent({
 }: MatchCardProps): React.JSX.Element {
   const isFinished = match.status === 'FINISHED';
   const isLive = match.status === 'IN_PLAY';
+  const isPlaceholder = match.is_placeholder;
+  const isPartial = !isPlaceholder && (!match.home_team.id || !match.away_team.id);
   const hasScore = match.home_score !== null && match.away_score !== null;
 
   // ClutchTime "live state": pulse the red indicator dot while in play.
@@ -67,22 +69,33 @@ function MatchCardComponent({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${match.home_team.name} versus ${match.away_team.name}`}
+      accessibilityLabel={
+        match.is_placeholder
+          ? `Knockout match, teams to be decided`
+          : `${match.home_team.name} versus ${match.away_team.name}`
+      }
       onPress={() => onPress?.(match.id)}
       className="rounded-2xl border border-bgBorder bg-bgSurface2 p-4 active:opacity-80"
       style={liveCardStyle}
     >
       <View className="mb-3 flex-row items-center justify-between">
-        {isLive ? (
-          <View className="flex-row items-center gap-1.5">
-            <Animated.View
-              style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: Theme.colors.live, opacity: pulse }}
-            />
-            <Text className="text-xs font-bold uppercase tracking-wider text-live">Live</Text>
-          </View>
-        ) : (
-          <Badge label={STATUS_LABELS[match.status]} tone={STATUS_TONE[match.status]} />
-        )}
+        <View className="flex-row items-center gap-1.5">
+          {isLive ? (
+            <View className="flex-row items-center gap-1.5">
+              <Animated.View
+                style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: Theme.colors.live, opacity: pulse }}
+              />
+              <Text className="text-xs font-bold uppercase tracking-wider text-live">Live</Text>
+            </View>
+          ) : (
+            <Badge label={STATUS_LABELS[match.status]} tone={STATUS_TONE[match.status]} />
+          )}
+          {match.is_placeholder && (
+            <View className="rounded bg-accentDim px-1.5 py-0.5 border border-accentBorder/50">
+              <Text className="text-[9px] font-bold text-accent uppercase">TBD</Text>
+            </View>
+          )}
+        </View>
         {match.group_name ? (
           <Text className="text-xs font-medium text-textTertiary">
             Group {match.group_name}

@@ -34,8 +34,10 @@ export interface Team {
 export interface Match {
   id: string;
   external_id: number;
+  /** TBD placeholder when the team is not yet decided (knockout bracket). */
   home_team: Team;
   away_team: Team;
+  is_placeholder: boolean;
   home_score: number | null;
   away_score: number | null;
   status: MatchStatus;
@@ -175,8 +177,8 @@ export interface TeamRow {
 export interface MatchRow {
   id: string;
   external_id: number;
-  home_team_id: string;
-  away_team_id: string;
+  home_team_id: string | null;
+  away_team_id: string | null;
   home_score: number | null;
   away_score: number | null;
   status: MatchStatus;
@@ -187,6 +189,7 @@ export interface MatchRow {
   last_synced_at: string | null;
   created_at: string;
   points_multiplier: number;
+  is_placeholder: boolean;
 }
 
 export interface PredictionRow {
@@ -234,6 +237,6 @@ export type { Database } from './database.types';
 
 // Shape returned when we select a match with its joined teams.
 export interface MatchWithTeamsRow extends MatchRow {
-  home_team: TeamRow;
-  away_team: TeamRow;
+  home_team: TeamRow | null;
+  away_team: TeamRow | null;
 }
