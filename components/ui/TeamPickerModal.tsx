@@ -77,7 +77,7 @@ export function TeamPickerModal({
   };
 
   const handleSave = async () => {
-    if (localSelected.length !== 3) return;
+    if (localSelected.length === 0) return;
     await onSave(localSelected);
   };
 
@@ -90,7 +90,7 @@ export function TeamPickerModal({
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={isMandatory ? undefined : onClose}
+      onRequestClose={onClose}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -102,14 +102,12 @@ export function TeamPickerModal({
           <View className="gap-0.5">
             <Text className="text-base font-bold text-textPrimary">{title}</Text>
             <Text className="text-[11px] text-textSecondary font-semibold">
-              Choose exactly 3 teams ({localSelected.length}/3 selected)
+              Choose up to 3 teams ({localSelected.length}/3 selected)
             </Text>
           </View>
-          {!isMandatory && (
-            <Pressable onPress={onClose} className="p-1.5 rounded-lg bg-bgSurface3 border border-bgBorder active:opacity-75">
-              <Text className="text-textSecondary text-[10px] font-bold">Cancel</Text>
-            </Pressable>
-          )}
+          <Pressable onPress={onClose} className="p-1.5 rounded-lg bg-bgSurface3 border border-bgBorder active:opacity-75">
+            <Text className="text-textSecondary text-[10px] font-bold">{isMandatory ? 'Skip' : 'Cancel'}</Text>
+          </Pressable>
         </View>
 
         {/* Search Input */}
@@ -240,7 +238,7 @@ export function TeamPickerModal({
         <View className="pt-2 border-t border-bgBorder/50">
           <Button
             label={saving ? 'Saving Choices...' : 'Confirm Selections'}
-            disabled={localSelected.length !== 3 || saving}
+            disabled={localSelected.length === 0 || saving}
             loading={saving}
             onPress={handleSave}
           />

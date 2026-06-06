@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Modal, ScrollView, Text, View, Image, Alert, Pressable } from 'react-native';
+import { Modal, ScrollView, Text, View, Image, Alert, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,6 +34,9 @@ export default function ProfileScreen(): React.JSX.Element {
   const [savingTeams, setSavingTeams] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const handleChangeAvatar = async () => {
     if (!userId) return;
@@ -147,6 +149,25 @@ export default function ProfileScreen(): React.JSX.Element {
     }
   };
 
+  const handleSaveName = async () => {
+    const name = editNameValue.trim();
+    if (!name || !userId) return;
+    setSavingName(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ display_name: name })
+        .eq('id', userId);
+      if (error) throw error;
+      await refreshProfile();
+      setEditingName(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to update name.');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   const predictionsQuery = useMyPredictions();
   const pointsQuery = useMyPoints();
   const leaderboardQuery = useLeaderboard();
@@ -170,7 +191,7 @@ export default function ProfileScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <ScrollView
-        contentContainerClassName="px-6 pt-2 gap-6"
+        contentContainerClassName="px-6 pt-6 gap-6"
         contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
       >
         <View className="flex-row items-center gap-2.5">
@@ -178,64 +199,109 @@ export default function ProfileScreen(): React.JSX.Element {
           <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
         </View>
 
-        {/* ClutchTime UI Kit Avatar Card */}
-        <View
-          style={{ borderRadius: 16, backgroundColor: '#222222', borderWidth: 1, borderColor: '#3A3A3A' }}
-          className="shadow-md shadow-black/60"
+        {/* Avatar Card */}
+        <LinearGradient
+          colors={['#1C1C1E', '#151516', '#0D0D0D']}
+          style={{ borderRadius: 20, borderWidth: 1, borderColor: '#2A2A2A' }}
+          className="shadow-lg shadow-black/80"
         >
           <View style={{ padding: 24 }}>
             <View className="flex-row items-center gap-5">
-              {/* Avatar on Left */}
+              {/* Avatar */}
               <Pressable onPress={handleChangeAvatar} disabled={uploadingAvatar} className="relative active:opacity-90">
-                <View style={{ borderRadius: 42, backgroundColor: '#111111' }}>
-                  <Image
-                    source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
-                    style={{ width: 84, height: 84, borderRadius: 42 }}
-                    className="border border-[#3A3A3A]"
-                  />
-                </View>
-                {/* Edit overlay badge */}
-                <View
-                  style={{ position: 'absolute', bottom: -2, right: -2, backgroundColor: '#C8FF00', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#222222', elevation: 4 }}
-                >
-                  {uploadingAvatar ? (
-                    <ActivityIndicator size="small" color="#111111" />
-                  ) : (
-                    <Icon name="edit" size={14} color="#111111" />
-                  )}
-                </View>
-              </Pressable>
-
-              {/* Info on Right — min-w-0 lets children truncate inside the flex row */}
-              <View className="flex-1 justify-center min-w-0">
-                <View className="flex-row items-center gap-2">
-                  {/* flex-1 + numberOfLines: long names ellipsize instead of
-                      shoving the role badge off the card. */}
-                  <Text
-                    numberOfLines={1}
-                    className="flex-1 text-[20px] font-bold text-white tracking-tight"
-                  >
-                    {(profile?.username || profile?.display_name) ?? 'Player'}
-                  </Text>
-                  <View
-                    style={
-                      isAdmin
-                        ? { backgroundColor: 'rgba(224,48,48,0.1)', borderColor: '#E03030', borderWidth: 1 }
-                        : { backgroundColor: 'rgba(200,255,0,0.1)', borderColor: Theme.colors.accent, borderWidth: 1 }
-                    }
-                    className="rounded-full px-2 py-0.5 shrink-0"
-                  >
-                    <Text
-                      className="text-[9px] font-extrabold uppercase tracking-wider"
-                      style={{ color: isAdmin ? '#E03030' : Theme.colors.accent }}
-                    >
-                      {isAdmin ? 'Admin' : 'User'}
-                    </Text>
+                <View style={{ borderRadius: 48, padding: 2, backgroundColor: 'rgba(200,255,0,0.15)' }}>
+                  <View style={{ borderRadius: 46, backgroundColor: '#111111' }}>
+                    <Image
+                      source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
+                      style={{ width: 88, height: 88, borderRadius: 44 }}
+                    />
                   </View>
                 </View>
-                {email && <Text numberOfLines={1} className="text-[12px] font-medium text-[#888888] mt-1">{email}</Text>}
-                
-                {/* Supported Teams Badges */}
+                {uploadingAvatar ? (
+                  <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="small" color={Theme.colors.accent} />
+                  </View>
+                ) : (
+                  <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: Theme.colors.accent, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#151516' }}>
+                    <Icon name="edit" size={12} color={Theme.colors.accentDark} />
+                  </View>
+                )}
+              </Pressable>
+
+              {/* Info */}
+              <View className="flex-1 min-w-0">
+                <View className="flex-row items-center gap-2">
+                  {editingName ? (
+                    <TextInput
+                      value={editNameValue}
+                      onChangeText={setEditNameValue}
+                      className="flex-1 text-[22px] font-bold text-white tracking-tight pb-0.5"
+                      style={{ borderBottomWidth: 1.5, borderBottomColor: Theme.colors.accent }}
+                      placeholder="Your name"
+                      placeholderTextColor="#666"
+                      autoFocus
+                    />
+                  ) : (
+                    <Text
+                      numberOfLines={1}
+                      className="flex-1 text-[22px] font-bold text-white tracking-tight"
+                    >
+                      {(profile?.username || profile?.display_name) ?? 'Player'}
+                    </Text>
+                  )}
+                  {editingName ? (
+                    <View className="flex-row gap-1 shrink-0">
+                      <Pressable onPress={handleSaveName} disabled={savingName || !editNameValue.trim()} className="p-1.5 active:opacity-75">
+                        {savingName ? <ActivityIndicator size="small" color={Theme.colors.accent} /> : <Icon name="check" size={18} color={Theme.colors.accent} />}
+                      </Pressable>
+                      <Pressable onPress={() => setEditingName(false)} className="p-1.5 active:opacity-75">
+                        <Icon name="close" size={18} color="#888" />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View className="flex-row items-center gap-2 shrink-0">
+                      <View
+                        style={
+                          isAdmin
+                            ? { backgroundColor: 'rgba(224,48,48,0.12)', borderColor: '#E03030', borderWidth: 1 }
+                            : { backgroundColor: 'rgba(200,255,0,0.12)', borderColor: Theme.colors.accent, borderWidth: 1 }
+                        }
+                        className="rounded-full px-2.5 py-0.5"
+                      >
+                        <Text
+                          className="text-[9px] font-extrabold uppercase tracking-wider"
+                          style={{ color: isAdmin ? '#E03030' : Theme.colors.accent }}
+                        >
+                          {isAdmin ? 'Admin' : 'User'}
+                        </Text>
+                      </View>
+                      <Pressable onPress={() => { setEditNameValue(profile?.username || profile?.display_name || ''); setEditingName(true); }} className="p-1 active:opacity-75">
+                        <Icon name="edit" size={14} color="#888" />
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+                {email && <Text numberOfLines={1} className="text-[12px] font-medium text-[#888888] mt-1 tracking-wide">{email}</Text>}
+
+                {/* Mini Stats Row */}
+                <View className="flex-row items-center gap-5 mt-4">
+                  <View className="items-center">
+                    <Text className="text-[16px] font-bold text-white">{profile?.total_points ?? 0}</Text>
+                    <Text className="text-[9px] font-semibold text-[#888888] uppercase tracking-wider mt-0.5">Points</Text>
+                  </View>
+                  <View style={{ width: 1, height: 28, backgroundColor: '#2A2A2A' }} />
+                  <View className="items-center">
+                    <Text className="text-[16px] font-bold text-white">{rank ?? '—'}</Text>
+                    <Text className="text-[9px] font-semibold text-[#888888] uppercase tracking-wider mt-0.5">Rank</Text>
+                  </View>
+                  <View style={{ width: 1, height: 28, backgroundColor: '#2A2A2A' }} />
+                  <View className="items-center">
+                    <Text className="text-[16px] font-bold text-white">{predictionsMade}</Text>
+                    <Text className="text-[9px] font-semibold text-[#888888] uppercase tracking-wider mt-0.5">Preds</Text>
+                  </View>
+                </View>
+
+                {/* Supported Teams */}
                 {profile?.supported_teams && profile.supported_teams.length > 0 && (
                   <View className="flex-row gap-2 mt-4 flex-wrap">
                     {profile.supported_teams.map((teamId) => {
@@ -244,10 +310,10 @@ export default function ProfileScreen(): React.JSX.Element {
                       return (
                         <View
                           key={teamId}
-                          style={{ paddingHorizontal: 8, paddingVertical: 6, borderRadius: 4, backgroundColor: '#2A2A2A', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                          style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', gap: 6 }}
                         >
-                          <TeamFlag team={team} size={16} fixed />
-                          <Text className="text-[10px] font-bold text-[#CCCCCC] uppercase tracking-wider">
+                          <TeamFlag team={team} size={14} fixed />
+                          <Text className="text-[10px] font-bold text-[#BBBBBB] uppercase tracking-wider">
                             {team.code ?? team.short_name ?? team.name}
                           </Text>
                         </View>
@@ -258,7 +324,7 @@ export default function ProfileScreen(): React.JSX.Element {
               </View>
             </View>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Action Buttons */}
         <View className="gap-3">

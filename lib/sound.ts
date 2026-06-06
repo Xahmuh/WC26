@@ -1,22 +1,25 @@
-// ============================================================================
-// Notification sound + foreground presentation via expo-notifications.
-// ----------------------------------------------------------------------------
-// In-app (foreground) we present an immediate local notification with the OS
-// default sound — works on Android + iOS with no bundled audio asset. Calls are
-// defensively guarded so web / Expo Go without the native module never crash.
-// Background PUSH delivery (Expo push tokens + sender) is a documented
-// follow-up; the handler/permissions wired here are the foundation for it.
-// ============================================================================
-
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 
 let configured = false;
+type NotificationsModule = typeof import('expo-notifications');
 
-/** Call once at app start. Sets the foreground handler + requests permission. */
+let _Notifications: NotificationsModule | null = null;
+async function getNotifications(): Promise<NotificationsModule | null> {
+  if (!_Notifications) {
+    try {
+      _Notifications = await import('expo-notifications');
+    } catch {
+      return null;
+    }
+  }
+  return _Notifications;
+}
+
 export async function configureNotifications(): Promise<void> {
   if (configured || Platform.OS === 'web') return;
   configured = true;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   try {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
@@ -38,19 +41,20 @@ export async function configureNotifications(): Promise<void> {
       });
     }
   } catch {
-    // Native module not present (Expo Go / pre-rebuild) — sound is a no-op.
+    // no-op
   }
 }
 
-/** Plays the notification sound (and shows a heads-up) for an in-app event. */
 export async function playNotificationSound(title: string, body?: string): Promise<void> {
   if (Platform.OS === 'web') return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
       content: { title, body: body ?? undefined, sound: 'default' },
-      trigger: null, // immediate
+      trigger: null,
     });
   } catch {
-    // no-op if the native module isn't available yet
+    // no-op
   }
 }

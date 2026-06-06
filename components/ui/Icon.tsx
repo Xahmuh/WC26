@@ -61,6 +61,8 @@ const GLYPHS = {
   mail: 'mail-outline',
   key: 'key-outline',
   trendingUp: 'trending-up',
+  trendingDown: 'trending-down',
+  minus: 'remove',
   info: 'information-circle-outline',
   warning: 'alert-circle-outline',
 } as const satisfies Record<string, IoniconName>;

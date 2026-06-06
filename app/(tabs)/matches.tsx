@@ -88,7 +88,7 @@ export default function MatchesScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
-      <View className="px-6 pb-2 pt-2">
+      <View className="px-6 pb-2 pt-6">
         <View className="mb-4 flex-row items-center gap-2.5">
           <View style={{ width: 5, height: 24, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
           <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Matches</Text>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Dimensions, RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,7 +6,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Theme from '@/constants/theme/design-system';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { MatchCard } from '@/components/match/MatchCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '@/components/ui/Card';
+import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { HeroCarousel } from '@/components/ui/HeroCarousel';
 import { EmptyState, ErrorState } from '@/components/ui/States';
@@ -41,6 +43,7 @@ export default function HomeScreen(): React.JSX.Element {
 
   const [savingTeams, setSavingTeams] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; rank?: number } | null>(null);
+const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
 
   const handleSaveTeams = async (teams: string[]) => {
     if (!userId) return;
@@ -108,6 +111,19 @@ export default function HomeScreen(): React.JSX.Element {
 
   const predictionsMade = predictions?.size ?? 0;
 
+  useEffect(() => {
+    if (myRank === null) return;
+    AsyncStorage.getItem('wc_last_rank').then((stored) => {
+      if (stored !== null) {
+        const prev = parseInt(stored, 10);
+        if (myRank < prev) setRankTrend('up');
+        else if (myRank > prev) setRankTrend('down');
+        else setRankTrend('same');
+      }
+      AsyncStorage.setItem('wc_last_rank', String(myRank));
+    });
+  }, [myRank]);
+
   const refreshing =
     matchesQuery.isRefetching ||
     predictionsQuery.isRefetching ||
@@ -131,7 +147,7 @@ export default function HomeScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <ScrollView
-        contentContainerClassName="px-6 pt-2 gap-6"
+        contentContainerClassName="px-6 pt-6 gap-6"
         contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
         refreshControl={
           <RefreshControl
@@ -195,7 +211,8 @@ export default function HomeScreen(): React.JSX.Element {
           />
           <StatTile 
             label="Rank" 
-            value={myRank ? `#${myRank}` : '—'} 
+            value={myRank ?? '—'} 
+            trend={rankTrend}
             onPress={() => router.push('/leaderboard')}
           />
           <StatTile 
@@ -350,16 +367,22 @@ interface StatTileProps {
   label: string;
   value: string | number;
   onPress?: () => void;
+  trend?: 'up' | 'down' | 'same' | null;
 }
 
-function StatTile({ label, value, onPress }: StatTileProps): React.JSX.Element {
+function StatTile({ label, value, onPress, trend }: StatTileProps): React.JSX.Element {
   return (
     <Pressable onPress={onPress} className="flex-1 active:opacity-80">
       <Card 
-        className="items-center gap-1 p-3"
+        className="items-center justify-center gap-1 p-3 min-h-[88px]"
         style={{ backgroundColor: Theme.colors.accent, borderColor: Theme.colors.accent }}
       >
-        <Text className="text-xl font-extrabold" style={{ color: Theme.colors.accentDark }}>{value}</Text>
+        <View className="flex-row items-center gap-1">
+          <Text className="text-3xl font-black text-center" style={{ color: Theme.colors.accentDark }}>{value}</Text>
+          {trend === 'up' && <Icon name="trendingUp" size={18} color="#22c55e" />}
+          {trend === 'down' && <Icon name="trendingDown" size={18} color="#ef4444" />}
+          {trend === 'same' && <Icon name="minus" size={18} color="#a1a1aa" />}
+        </View>
         <Text className="text-center text-[11px] font-bold" style={{ color: Theme.colors.accentDark }}>{label}</Text>
       </Card>
     </Pressable>
