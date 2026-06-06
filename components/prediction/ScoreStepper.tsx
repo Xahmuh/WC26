@@ -31,21 +31,21 @@ export function ScoreStepper({
       <Text numberOfLines={1} className="text-xs font-medium text-textSecondary">
         {label}
       </Text>
-      <View className="flex-row items-center gap-3">
-        <StepButton
-          symbol="−"
-          accessibilityLabel={`Decrease ${label} score`}
-          onPress={decrement}
-          disabled={disabled || atMin}
-        />
-        <View className="h-14 w-14 items-center justify-center rounded-xl border border-bgBorder bg-bgSurface2">
-          <Text className="text-2xl font-bold text-textPrimary">{value}</Text>
-        </View>
+      <View className="items-center gap-2">
         <StepButton
           symbol="+"
           accessibilityLabel={`Increase ${label} score`}
           onPress={increment}
           disabled={disabled || atMax}
+        />
+        <View className="h-16 w-16 items-center justify-center rounded-2xl border border-bgBorder bg-bgSurface2">
+          <Text className="text-3xl font-bold text-textPrimary">{value}</Text>
+        </View>
+        <StepButton
+          symbol="−"
+          accessibilityLabel={`Decrease ${label} score`}
+          onPress={decrement}
+          disabled={disabled || atMin}
         />
       </View>
     </View>

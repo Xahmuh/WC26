@@ -11,6 +11,7 @@ import type { PointsRecord, PointsRow } from '@/types';
 
 export const pointsKeys = {
   byUser: (userId: string) => ['points', userId] as const,
+  topScorer: (matchId: string) => ['points', 'topScorer', matchId] as const,
 };
 
 function mapPoints(row: PointsRow): PointsRecord {
@@ -43,5 +44,55 @@ export function useMyPoints(): UseQueryResult<Map<string, PointsRecord>, Error> 
       return new Map((data ?? []).map((r) => [r.match_id as string, mapPoints(r)]));
     },
     staleTime: 30_000,
+  });
+}
+
+export interface MatchTopScorer {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  total_points: number;
+}
+
+export function useMatchTopScorer(matchId?: string) {
+  return useQuery({
+    queryKey: pointsKeys.topScorer(matchId ?? ''),
+    enabled: Boolean(matchId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('points')
+        // We assume the foreign key from points.user_id -> users.id exists
+        .select(`
+          total_points,
+          user_id,
+          users (
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq('match_id', matchId as string)
+        .gt('total_points', 0) // Only users who actually scored points
+        .order('total_points', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null; // No rows found
+        throw new Error(error.message);
+      }
+
+      if (!data) return null;
+
+      // Handle Supabase join array vs object types safely
+      const user = Array.isArray(data.users) ? data.users[0] : data.users;
+
+      return {
+        user_id: data.user_id,
+        display_name: user?.display_name || 'Unknown',
+        avatar_url: user?.avatar_url || null,
+        total_points: data.total_points,
+      } as MatchTopScorer;
+    },
+    staleTime: 60_000,
   });
 }

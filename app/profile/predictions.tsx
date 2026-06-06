@@ -1,4 +1,5 @@
-import { ScrollView, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 
@@ -16,6 +17,9 @@ export default function MyPredictionsScreen(): React.JSX.Element {
   const matchesQuery = useMatches();
   const predictionsQuery = useMyPredictions();
   const pointsQuery = useMyPoints();
+  // NOTE: every hook must run before any conditional `return` below, or React's
+  // hook order changes between the loading/error and loaded renders and crashes.
+  const [activeTab, setActiveTab] = useState<'UPCOMING' | 'HISTORY'>('UPCOMING');
 
   const isLoading = matchesQuery.isLoading || predictionsQuery.isLoading || pointsQuery.isLoading;
   const isError = matchesQuery.isError || predictionsQuery.isError || pointsQuery.isError;
@@ -50,8 +54,10 @@ export default function MyPredictionsScreen(): React.JSX.Element {
   const predictions = predictionsQuery.data; // Map<string, Prediction>
   const points = pointsQuery.data; // Map<string, PointsRecord>
 
-  // Filter to matches where user has placed a prediction
-  const predictedMatches = matches.filter((match) => predictions?.has(match.id));
+  const upcomingMatches = matches.filter((match) => predictions?.has(match.id) && match.status !== 'FINISHED');
+  const historyMatches = matches.filter((match) => predictions?.has(match.id) && match.status === 'FINISHED');
+
+  const displayMatches = activeTab === 'UPCOMING' ? upcomingMatches : historyMatches;
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['bottom']}>
@@ -64,20 +70,58 @@ export default function MyPredictionsScreen(): React.JSX.Element {
         }}
       />
       <ScrollView contentContainerClassName="px-6 pb-10 pt-4 gap-4">
-        <Text className="text-xs text-textSecondary">
-          Every match you've predicted. Tap a finished match to see the points breakdown.
+        {/* Custom Tabs */}
+        <View className="flex-row rounded-lg bg-bgSurface3 p-1">
+          <Pressable
+            onPress={() => setActiveTab('UPCOMING')}
+            className={`flex-1 items-center justify-center rounded-md py-2 ${
+              activeTab === 'UPCOMING' ? 'bg-bgSurface2' : ''
+            }`}
+          >
+            <Text
+              className={`text-sm font-semibold ${
+                activeTab === 'UPCOMING' ? 'text-textPrimary' : 'text-textSecondary'
+              }`}
+            >
+              Upcoming
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setActiveTab('HISTORY')}
+            className={`flex-1 items-center justify-center rounded-md py-2 ${
+              activeTab === 'HISTORY' ? 'bg-bgSurface2' : ''
+            }`}
+          >
+            <Text
+              className={`text-sm font-semibold ${
+                activeTab === 'HISTORY' ? 'text-textPrimary' : 'text-textSecondary'
+              }`}
+            >
+              History
+            </Text>
+          </Pressable>
+        </View>
+
+        <Text className="text-xs text-textSecondary text-center mb-2">
+          {activeTab === 'UPCOMING'
+            ? 'These are your upcoming predictions.'
+            : 'Your past predictions and points scored.'}
         </Text>
 
-        {predictedMatches.length === 0 ? (
+        {displayMatches.length === 0 ? (
           <View className="rounded-2xl border border-bgBorder bg-bgSurface2">
             <EmptyState
-              title="No predictions yet"
-              description="Head to the Matches tab to submit your first scoreline."
-              icon="edit"
+              title={activeTab === 'UPCOMING' ? "No upcoming predictions" : "No finished matches"}
+              description={
+                activeTab === 'UPCOMING'
+                  ? "Head to the Matches tab to submit your first scoreline."
+                  : "You don't have any finished predictions yet. Once a match ends, it will appear here."
+              }
+              icon={activeTab === 'UPCOMING' ? "edit" : "time"}
             />
           </View>
         ) : (
-          predictedMatches.map((match) => {
+          displayMatches.map((match) => {
             const pred = predictions?.get(match.id);
             const pts = points?.get(match.id);
 

@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { View, Platform, useWindowDimensions } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -11,7 +12,34 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import Theme from '@/constants/theme/design-system';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { queryClient } from '@/lib/queryClient';
+import { supabase } from '@/lib/supabase';
+import { createSessionFromUrl } from '@/services/auth.service';
 import { useAuthStore } from '@/stores/auth.store';
+
+/**
+ * Catches OAuth redirects that arrive as a deep link into the app (cold start or
+ * Android) rather than being captured by the in-app browser. Completes the
+ * Supabase session from the URL — guarded so an already-signed-in session is
+ * never re-exchanged (a used PKCE code can only be exchanged once).
+ */
+function useOAuthDeepLink(): void {
+  useEffect(() => {
+    const handle = async (url: string | null): Promise<void> => {
+      if (!url || (!url.includes('code=') && !url.includes('access_token='))) return;
+      const { data } = await supabase.auth.getSession();
+      if (data.session) return;
+      try {
+        await createSessionFromUrl(url);
+      } catch (err) {
+        console.warn('[Auth] deep-link session exchange failed:', err);
+      }
+    };
+
+    void Linking.getInitialURL().then(handle);
+    const sub = Linking.addEventListener('url', ({ url }) => void handle(url));
+    return () => sub.remove();
+  }, []);
+}
 
 function useProtectedRoute(): void {
   const session = useAuthStore((s) => s.session);
@@ -41,6 +69,7 @@ function RootNavigator(): React.JSX.Element {
     void initialize();
   }, [initialize]);
 
+  useOAuthDeepLink();
   useProtectedRoute();
 
   if (initializing) {

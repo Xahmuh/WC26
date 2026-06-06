@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Dimensions, RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { Dimensions, RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { HeroCarousel } from '@/components/ui/HeroCarousel';
 import { EmptyState, ErrorState } from '@/components/ui/States';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
+import { PlayerProfileModal } from '@/components/ui/PlayerProfileModal';
 import { supabase } from '@/lib/supabase';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { useMatches } from '@/hooks/useMatches';
@@ -38,6 +39,7 @@ export default function HomeScreen(): React.JSX.Element {
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
 
   const [savingTeams, setSavingTeams] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; rank?: number } | null>(null);
 
   const handleSaveTeams = async (teams: string[]) => {
     if (!userId) return;
@@ -89,14 +91,13 @@ export default function HomeScreen(): React.JSX.Element {
     return [...predictions.values()]
       .map((p) => ({ prediction: p, match: byId.get(p.match_id) }))
       .filter((x): x is { prediction: typeof x.prediction; match: NonNullable<typeof x.match> } =>
-        Boolean(x.match)
+        x.match !== undefined && x.match.status !== 'FINISHED'
       )
       .sort(
         (a, b) =>
-          new Date(b.match.kickoff_time).getTime() -
-          new Date(a.match.kickoff_time).getTime()
-      )
-      .slice(0, 3);
+          new Date(a.match.kickoff_time).getTime() -
+          new Date(b.match.kickoff_time).getTime()
+      );
   }, [predictions, matches]);
 
   const myRank = useMemo(() => {
@@ -139,13 +140,40 @@ export default function HomeScreen(): React.JSX.Element {
           />
         }
       >
-        <View className="gap-1">
-          <Text className="text-sm text-textSecondary">
-            Hi {profile?.display_name ?? 'there'} 👋
-          </Text>
-          <Text className="text-[26px] font-extrabold uppercase tracking-tighter text-textPrimary">
-            World Cup 2026
-          </Text>
+        <View className="flex-row items-center justify-between border-b border-bgBorder pb-4">
+          <View className="flex-row items-center gap-2.5">
+            <View 
+              style={{ 
+                width: 5, 
+                height: 28, 
+                borderRadius: 2.5, 
+                backgroundColor: Theme.colors.accent 
+              }} 
+            />
+            <View className="flex-row items-center">
+              <Text className="text-[24px] font-black uppercase tracking-tighter text-textPrimary">
+                World Cup
+              </Text>
+              <Text className="text-[24px] font-black uppercase tracking-tighter text-accent ml-1.5" style={{ color: Theme.colors.accent }}>
+                2026
+              </Text>
+            </View>
+          </View>
+
+          <Pressable 
+            onPress={() => router.push('/profile')} 
+            className="flex-row items-center gap-2 bg-bgSurface2 border border-bgBorder rounded-full py-1.5 pl-1.5 pr-3 active:opacity-80"
+          >
+            <View className="h-7 w-7 items-center justify-center rounded-full bg-bgSurface1 border border-bgBorder/50 overflow-hidden">
+              <Image
+                source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
+                style={{ width: '100%', height: '100%' }}
+              />
+            </View>
+            <Text className="text-xs font-bold text-textPrimary" numberOfLines={1}>
+              {profile?.display_name ?? 'Profile'}
+            </Text>
+          </Pressable>
         </View>
 
         {/* Hero Banner Slides */}
@@ -153,15 +181,30 @@ export default function HomeScreen(): React.JSX.Element {
 
         {/* Quick stats */}
         <View className="flex-row gap-3">
-          <StatTile label="Total points" value={profile?.total_points ?? 0} />
-          <StatTile label="Rank" value={myRank ? `#${myRank}` : '—'} />
-          <StatTile label="Predictions" value={predictionsMade} />
+          <StatTile 
+            label="Total points" 
+            value={profile?.total_points ?? 0} 
+            onPress={() => userId && setSelectedPlayer({ id: userId, rank: myRank ?? undefined })}
+          />
+          <StatTile 
+            label="Rank" 
+            value={myRank ? `#${myRank}` : '—'} 
+            onPress={() => router.push('/leaderboard')}
+          />
+          <StatTile 
+            label="Predictions" 
+            value={predictionsMade} 
+            onPress={() => router.push('/profile/predictions' as any)}
+          />
         </View>
 
         {/* Special Tournament Predictions (Admin Questions) */}
         {questions.length > 0 && (
           <View className="gap-3">
-            <Text className="text-lg font-semibold text-textPrimary">Tournament Predictions</Text>
+            <View className="flex-row items-center gap-2.5">
+              <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+              <Text className="text-lg font-semibold text-textPrimary">Tournament Predictions</Text>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -186,7 +229,10 @@ export default function HomeScreen(): React.JSX.Element {
 
         {/* Today's matches */}
         <View className="gap-3">
-          <Text className="text-lg font-semibold text-textPrimary">Today’s matches</Text>
+          <View className="flex-row items-center gap-2.5">
+            <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+            <Text className="text-lg font-semibold text-textPrimary">Today’s matches</Text>
+          </View>
           {matchesQuery.isLoading ? (
             <LoadingSpinner label="Loading matches…" />
           ) : matchesQuery.isError ? (
@@ -224,7 +270,23 @@ export default function HomeScreen(): React.JSX.Element {
 
         {/* My recent predictions */}
         <View className="gap-3">
-          <Text className="text-lg font-semibold text-textPrimary">My predictions</Text>
+          <View className="flex-row items-center gap-2.5">
+            <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+            <Text className="text-lg font-semibold text-textPrimary">My predictions</Text>
+            {myRecentPredictions.length > 0 && (
+              <View 
+                className="bg-accent rounded-full min-w-[20px] h-5 items-center justify-center px-1.5"
+                style={{ backgroundColor: Theme.colors.accent }}
+              >
+                <Text 
+                  className="text-accentDark text-[11px] font-bold"
+                  style={{ color: Theme.colors.accentDark }}
+                >
+                  {myRecentPredictions.length}
+                </Text>
+              </View>
+            )}
+          </View>
           {predictionsQuery.isLoading ? (
             <LoadingSpinner label="Loading predictions…" />
           ) : myRecentPredictions.length === 0 ? (
@@ -266,6 +328,13 @@ export default function HomeScreen(): React.JSX.Element {
           isMandatory={true}
         />
       )}
+
+      <PlayerProfileModal
+        visible={selectedPlayer !== null}
+        onClose={() => setSelectedPlayer(null)}
+        playerId={selectedPlayer?.id}
+        rank={selectedPlayer?.rank}
+      />
     </SafeAreaView>
   );
 }
@@ -273,17 +342,20 @@ export default function HomeScreen(): React.JSX.Element {
 interface StatTileProps {
   label: string;
   value: string | number;
+  onPress?: () => void;
 }
 
-function StatTile({ label, value }: StatTileProps): React.JSX.Element {
+function StatTile({ label, value, onPress }: StatTileProps): React.JSX.Element {
   return (
-    <Card 
-      className="flex-1 items-center gap-1 p-3"
-      style={{ backgroundColor: Theme.colors.accent, borderColor: Theme.colors.accent }}
-    >
-      <Text className="text-xl font-extrabold" style={{ color: Theme.colors.accentDark }}>{value}</Text>
-      <Text className="text-center text-[11px] font-bold" style={{ color: Theme.colors.accentDark }}>{label}</Text>
-    </Card>
+    <Pressable onPress={onPress} className="flex-1 active:opacity-80">
+      <Card 
+        className="items-center gap-1 p-3"
+        style={{ backgroundColor: Theme.colors.accent, borderColor: Theme.colors.accent }}
+      >
+        <Text className="text-xl font-extrabold" style={{ color: Theme.colors.accentDark }}>{value}</Text>
+        <Text className="text-center text-[11px] font-bold" style={{ color: Theme.colors.accentDark }}>{label}</Text>
+      </Card>
+    </Pressable>
   );
 }
 

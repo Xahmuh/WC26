@@ -2,7 +2,7 @@ import { ActivityIndicator, Pressable, Text, type PressableProps } from 'react-n
 
 import Theme from '@/constants/theme/design-system';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'lime';
 
 interface ButtonProps extends Omit<PressableProps, 'children'> {
   label: string;
@@ -18,6 +18,7 @@ const CONTAINER: Record<Variant, string> = {
   secondary: 'bg-transparent border-[1.5px] border-accent active:opacity-80',
   ghost: 'bg-accentDim border border-accentBorder active:opacity-80',
   danger: 'bg-liveDim border border-live/30 active:opacity-80',
+  lime: 'bg-[#C8FF00] active:opacity-80 shadow-md shadow-lime-500/20',
 };
 
 const LABEL: Record<Variant, string> = {
@@ -25,6 +26,7 @@ const LABEL: Record<Variant, string> = {
   secondary: 'text-accent',
   ghost: 'text-accent',
   danger: 'text-live',
+  lime: 'text-[#111111]',
 };
 
 const SPINNER: Record<Variant, string> = {
@@ -32,6 +34,7 @@ const SPINNER: Record<Variant, string> = {
   secondary: Theme.colors.accent,
   ghost: Theme.colors.accent,
   danger: Theme.colors.live,
+  lime: '#111111',
 };
 
 export function Button({

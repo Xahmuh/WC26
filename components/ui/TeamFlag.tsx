@@ -32,14 +32,16 @@ function isSvg(url: string): boolean {
 export function TeamFlag({ team, size = 28, fixed = false }: TeamFlagProps): React.JSX.Element {
   const [failed, setFailed] = useState(false);
   const dim = fixed ? size : scale(size);
-  const radius = Math.round(dim / 5);
+  const width = Math.round(dim * 1.4);
+  const height = dim;
+  const radius = 6;
 
   const fallback = (
     <View
       accessibilityLabel={team.name}
       style={{
-        width: dim,
-        height: dim,
+        width: width,
+        height: height,
         borderRadius: radius,
         backgroundColor: Theme.colors.bgSurface3,
         borderWidth: 1,
@@ -48,7 +50,7 @@ export function TeamFlag({ team, size = 28, fixed = false }: TeamFlagProps): Rea
         justifyContent: 'center',
       }}
     >
-      <Text style={{ fontSize: Math.max(8, dim / 2.8), fontWeight: '700', color: Theme.colors.textSecondary }}>
+      <Text style={{ fontSize: Math.max(8, height / 2.8), fontWeight: '700', color: Theme.colors.textSecondary }}>
         {team.code ?? team.short_name?.slice(0, 3) ?? team.name.slice(0, 3)}
       </Text>
     </View>
@@ -63,7 +65,7 @@ export function TeamFlag({ team, size = 28, fixed = false }: TeamFlagProps): Rea
         <Image
           accessibilityLabel={`${team.name} flag`}
           source={{ uri: team.flag_url }}
-          style={{ width: dim, height: dim, borderRadius: radius, backgroundColor: Theme.colors.bgSurface3 }}
+          style={{ width: width, height: height, borderRadius: radius, backgroundColor: Theme.colors.bgSurface3 }}
           resizeMode="cover"
           onError={() => setFailed(true)}
         />
@@ -73,12 +75,13 @@ export function TeamFlag({ team, size = 28, fixed = false }: TeamFlagProps): Rea
     return (
       <View
         accessibilityLabel={`${team.name} flag`}
-        style={{ width: dim, height: dim, borderRadius: radius, overflow: 'hidden', backgroundColor: Theme.colors.bgSurface3 }}
+        style={{ width: width, height: height, borderRadius: radius, overflow: 'hidden', backgroundColor: Theme.colors.bgSurface3, alignItems: 'center', justifyContent: 'center' }}
       >
         <SvgUri
           uri={team.flag_url}
-          width={dim}
-          height={dim}
+          width="100%"
+          height="100%"
+          preserveAspectRatio="xMidYMid slice"
           onError={() => setFailed(true)}
         />
       </View>
@@ -90,7 +93,7 @@ export function TeamFlag({ team, size = 28, fixed = false }: TeamFlagProps): Rea
     <Image
       accessibilityLabel={`${team.name} flag`}
       source={{ uri: team.flag_url }}
-      style={{ width: dim, height: dim, borderRadius: radius, backgroundColor: Theme.colors.bgSurface3 }}
+      style={{ width: width, height: height, borderRadius: radius, backgroundColor: Theme.colors.bgSurface3 }}
       resizeMode="cover"
       onError={() => setFailed(true)}
     />

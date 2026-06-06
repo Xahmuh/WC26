@@ -118,9 +118,9 @@ export function PlayerProfileModal({
                       return (
                         <View
                           key={teamId}
-                          className="flex-row items-center gap-1.5 bg-bgSurface3 border border-bgBorder pl-1 pr-2.5 py-1 rounded-full"
+                          className="flex-row items-center gap-1.5 bg-bgSurface3 border border-bgBorder pl-1 pr-2.5 py-1 rounded-lg"
                         >
-                          <View className="overflow-hidden rounded-full border border-bgBorder">
+                          <View className="overflow-hidden rounded-sm border border-bgBorder">
                             <TeamFlag team={team} size={18} fixed />
                           </View>
                           <Text className="text-xs font-semibold text-textPrimary">{team.name}</Text>

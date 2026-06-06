@@ -5,10 +5,15 @@
 // ============================================================================
 
 import { create } from 'zustand';
-import type { Session } from '@supabase/supabase-js';
+import type { Session, Subscription } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
+import { queryClient } from '@/lib/queryClient';
 import type { UserProfile } from '@/types';
+
+// Module-scoped guard so we only ever attach ONE onAuthStateChange listener,
+// even if initialize() is called more than once.
+let authListener: Subscription | null = null;
 
 interface AuthState {
   session: Session | null;
@@ -52,15 +57,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await get().refreshProfile();
       }
 
-      // Keep the store in lock-step with Supabase auth events.
-      supabase.auth.onAuthStateChange((_event, session) => {
-        set({ session });
-        if (session) {
-          void get().refreshProfile();
-        } else {
-          set({ profile: null });
-        }
-      });
+      // Keep the store in lock-step with Supabase auth events. Subscribe once.
+      if (!authListener) {
+        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+          set({ session });
+          if (session) {
+            void get().refreshProfile();
+          } else {
+            set({ profile: null });
+          }
+        });
+        authListener = data.subscription;
+      }
     } catch (err) {
       set({ error: toMessage(err, 'Failed to restore session.') });
     } finally {
@@ -119,6 +127,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ error: toMessage(err, 'Sign-out failed.') });
     } finally {
       set({ session: null, profile: null });
+      // Drop all cached server data so the next user never sees the previous
+      // account's groups / question answers (those queries use global keys).
+      queryClient.clear();
     }
   },
 

@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 
-export type MatchFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'FINISHED';
+export type MatchFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'FINISHED' | 'MY_TEAMS';
 
 interface AppState {
   matchFilter: MatchFilter;

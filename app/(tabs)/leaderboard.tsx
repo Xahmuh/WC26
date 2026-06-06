@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, Text, View, Pressable, type ListRenderItemInfo } from 'react-native';
+import { FlatList, RefreshControl, Text, View, Pressable, Image, type ListRenderItemInfo } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Theme from '@/constants/theme/design-system';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
-import { Icon } from '@/components/ui/Icon';
+import { PodiumSection } from '@/components/leaderboard/PodiumSection';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState, ErrorState } from '@/components/ui/States';
 import { TeamFlag } from '@/components/ui/TeamFlag';
@@ -14,12 +14,6 @@ import { useTeams } from '@/hooks/useTeams';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LeaderboardEntry, Team } from '@/types';
 
-const RANK_COLOR: Record<number, string> = {
-  1: Theme.colors.gold,
-  2: Theme.colors.silver,
-  3: Theme.colors.bronze,
-};
-
 export default function LeaderboardScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((s) => s.session?.user.id);
@@ -28,33 +22,59 @@ export default function LeaderboardScreen(): React.JSX.Element {
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; rank: number } | null>(null);
 
   const entries = query.data ?? [];
-  const hasPodium = entries.length >= 3;
-  const podium = useMemo(() => (hasPodium ? entries.slice(0, 3) : []), [entries, hasPodium]);
-  const listData = useMemo(() => (hasPodium ? entries.slice(3) : entries), [entries, hasPodium]);
+  const hasEntries = entries.length > 0;
+
+  // Deterministic ranking: points DESC, then user_id as a stable tie-breaker so
+  // the order never jitters even when every player shares the same score (e.g.
+  // everyone on 0 points before any match finishes).
+  const sorted = useMemo(
+    () =>
+      [...entries].sort((a, b) => {
+        if (b.total_points !== a.total_points) {
+          return b.total_points - a.total_points;
+        }
+        const aId = a.user_id || (a as any).id || '';
+        const bId = b.user_id || (b as any).id || '';
+        return aId.localeCompare(bId);
+      }),
+    [entries]
+  );
+
+  // Podium = top 3; list = rank #4 and below. A user is never in both sections.
+  const podium = useMemo(() => sorted.slice(0, 3), [sorted]);
+  const list = useMemo(() => sorted.slice(3), [sorted]);
 
   const openPlayer = useCallback(
-    (entry: LeaderboardEntry) => setSelectedPlayer({ id: entry.user_id, rank: entry.rank }),
+    (entry: LeaderboardEntry, rank: number) => setSelectedPlayer({ id: entry.user_id, rank }),
     []
   );
 
+  // List rows continue the ranking from #4 (position = sorted index + 1).
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<LeaderboardEntry>) => (
-      <LeaderboardRow
-        entry={item}
-        isCurrentUser={item.user_id === userId}
-        teams={teams}
-        onPress={() => openPlayer(item)}
-      />
-    ),
+    ({ item, index }: ListRenderItemInfo<LeaderboardEntry>) => {
+      const rank = index + 4;
+      return (
+        <LeaderboardRow
+          entry={item}
+          rank={rank}
+          isCurrentUser={item.user_id === userId}
+          teams={teams}
+          onPress={() => openPlayer(item, rank)}
+        />
+      );
+    },
     [userId, teams, openPlayer]
   );
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <View className="px-6 pb-2 pt-2">
-        <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">
-          Leaderboard
-        </Text>
+        <View className="flex-row items-center gap-2.5">
+          <View style={{ width: 5, height: 24, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+          <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">
+            Leaderboard
+          </Text>
+        </View>
         {entries.length > 0 && (
           <Text className="mt-0.5 text-xs text-textSecondary">
             {entries.length} {entries.length === 1 ? 'player' : 'players'} competing
@@ -68,18 +88,24 @@ export default function LeaderboardScreen(): React.JSX.Element {
         <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />
       ) : (
         <FlatList
-          data={listData}
+          data={list}
           keyExtractor={(item) => item.user_id}
           renderItem={renderItem}
           contentContainerClassName="gap-2 px-6 pt-2"
           contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
           ListHeaderComponent={
-            hasPodium ? (
-              <Podium entries={podium} teams={teams} currentUserId={userId} onSelect={openPlayer} />
+            podium.length > 0 ? (
+              <PodiumSection
+                entries={podium}
+                currentUserId={userId}
+                onSelect={(entry, place) => openPlayer(entry, place)}
+              />
             ) : null
           }
           ListEmptyComponent={
-            hasPodium ? null : (
+            // No rows means 0 players (show empty state) or ≤3 players (the
+            // podium already covers everyone, so the list stays empty).
+            hasEntries ? null : (
               <EmptyState
                 title="No rankings yet"
                 description="Scores appear here once matches finish."
@@ -107,116 +133,12 @@ export default function LeaderboardScreen(): React.JSX.Element {
   );
 }
 
-// ── Podium (top 3) ──────────────────────────────────────────────────────────
-
-interface PodiumProps {
-  entries: LeaderboardEntry[];
-  teams: Team[];
-  currentUserId: string | undefined;
-  onSelect: (entry: LeaderboardEntry) => void;
-}
-
-function Podium({ entries, teams, currentUserId, onSelect }: PodiumProps): React.JSX.Element {
-  // Display order: 2nd, 1st, 3rd so the champion sits centre / tallest.
-  const byRank = (r: number) => entries.find((e) => e.rank === r);
-  const ordered = [byRank(2), byRank(1), byRank(3)].filter(Boolean) as LeaderboardEntry[];
-
-  return (
-    <View className="mb-4 flex-row items-end justify-center gap-3 px-1 pt-4">
-      {ordered.map((entry) => (
-        <PodiumColumn
-          key={entry.user_id}
-          entry={entry}
-          teams={teams}
-          isCurrentUser={entry.user_id === currentUserId}
-          onPress={() => onSelect(entry)}
-        />
-      ))}
-    </View>
-  );
-}
-
-function PodiumColumn({
-  entry,
-  teams,
-  isCurrentUser,
-  onPress,
-}: {
-  entry: LeaderboardEntry;
-  teams: Team[];
-  isCurrentUser: boolean;
-  onPress: () => void;
-}): React.JSX.Element {
-  const color = RANK_COLOR[entry.rank] ?? Theme.colors.textSecondary;
-  const isFirst = entry.rank === 1;
-  const avatarSize = isFirst ? 76 : 60;
-  const pedestalHeight = isFirst ? 78 : entry.rank === 2 ? 60 : 46;
-  const initials = entry.display_name.slice(0, 2).toUpperCase();
-
-  return (
-    <Pressable onPress={onPress} className="flex-1 items-center active:opacity-85">
-      {isFirst && (
-        <View className="mb-1">
-          <Icon name="trophy" size={22} color={Theme.colors.gold} />
-        </View>
-      )}
-
-      {/* Avatar with colored ring + rank badge */}
-      <View
-        style={{
-          width: avatarSize,
-          height: avatarSize,
-          borderRadius: avatarSize / 2,
-          borderColor: color,
-          borderWidth: 2.5,
-        }}
-        className="items-center justify-center bg-bgSurface3"
-      >
-        <Text className="font-extrabold text-textPrimary" style={{ fontSize: isFirst ? 24 : 19 }}>
-          {initials}
-        </Text>
-        <View
-          style={{ backgroundColor: color }}
-          className="absolute -bottom-2.5 h-6 w-6 items-center justify-center rounded-full border-2 border-bgDeep"
-        >
-          <Text className="text-[11px] font-black text-bgDeep">{entry.rank}</Text>
-        </View>
-      </View>
-
-      <Text numberOfLines={1} className="mt-4 max-w-[96px] text-xs font-bold text-textPrimary">
-        {entry.display_name}
-        {isCurrentUser ? ' (you)' : ''}
-      </Text>
-      <View className="mt-1 rounded-full bg-accent px-3 py-0.5">
-        <Text numberOfLines={1} adjustsFontSizeToFit className="text-xs font-extrabold text-accentDark">
-          {entry.total_points}
-        </Text>
-      </View>
-
-      {/* Supported teams */}
-      <View className="mt-1 h-5 items-center justify-center">
-        <SupportedTeamCrests teamIds={entry.supported_teams} teams={teams} size={16} max={3} />
-      </View>
-
-      {/* Pedestal */}
-      <View
-        style={{ height: pedestalHeight, borderColor: color }}
-        className={`mt-2 w-full items-center justify-start rounded-t-xl border border-b-0 pt-2 ${
-          isCurrentUser ? 'bg-accentDim' : 'bg-bgSurface2'
-        }`}
-      >
-        <Text style={{ color }} className="text-2xl font-black">
-          {entry.rank}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
 // ── Ranked list row ─────────────────────────────────────────────────────────
 
 interface LeaderboardRowProps {
   entry: LeaderboardEntry;
+  /** Display rank — the position in the full deterministic ranking (4, 5, …). */
+  rank: number;
   isCurrentUser: boolean;
   teams: Team[];
   onPress: () => void;
@@ -249,7 +171,7 @@ function SupportedTeamCrests({
   return (
     <View className="flex-row items-center gap-1">
       {shown.map((team) => (
-        <View key={team.id} className="overflow-hidden rounded-full border border-bgBorder">
+        <View key={team.id} className="overflow-hidden rounded-md border border-bgBorder">
           <TeamFlag team={team} size={size} fixed />
         </View>
       ))}
@@ -265,8 +187,7 @@ function SupportedTeamCrests({
   );
 }
 
-function LeaderboardRow({ entry, isCurrentUser, teams, onPress }: LeaderboardRowProps): React.JSX.Element {
-  const initials = entry.display_name.slice(0, 2).toUpperCase();
+function LeaderboardRow({ entry, rank, isCurrentUser, teams, onPress }: LeaderboardRowProps): React.JSX.Element {
   const hasTeams = (entry.supported_teams?.length ?? 0) > 0;
 
   return (
@@ -278,12 +199,15 @@ function LeaderboardRow({ entry, isCurrentUser, teams, onPress }: LeaderboardRow
     >
       {/* Numbered rank */}
       <View className="h-9 w-9 items-center justify-center rounded-full bg-bgSurface3 border border-bgBorder">
-        <Text className="text-sm font-extrabold text-textSecondary">{entry.rank}</Text>
+        <Text className="text-sm font-extrabold text-textSecondary">{rank}</Text>
       </View>
 
       {/* Avatar */}
-      <View className="h-11 w-11 items-center justify-center rounded-full bg-bgSurface1 border border-bgBorder">
-        <Text className="text-sm font-bold text-textSecondary">{initials}</Text>
+      <View className="h-11 w-11 items-center justify-center rounded-full bg-bgSurface1 border border-bgBorder overflow-hidden">
+        <Image
+          source={entry.avatar_url ? { uri: entry.avatar_url } : require('@/assets/default_avatar.jpg')}
+          style={{ width: '100%', height: '100%' }}
+        />
       </View>
 
       {/* Identity + supported teams + stats */}

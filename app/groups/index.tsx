@@ -89,9 +89,12 @@ export default function GroupsDashboard(): React.JSX.Element {
         <Pressable onPress={() => router.back()} className="-ml-2 p-2 active:opacity-70">
           <Icon name="back" size={22} color={Theme.colors.accent} />
         </Pressable>
-        <Text className="text-xl font-extrabold uppercase tracking-tight text-textPrimary">
-          Mini-Leagues
-        </Text>
+        <View className="flex-row items-center gap-2.5">
+          <View style={{ width: 4, height: 20, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+          <Text className="text-xl font-extrabold uppercase tracking-tight text-textPrimary">
+            Mini-Leagues
+          </Text>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -161,7 +164,10 @@ export default function GroupsDashboard(): React.JSX.Element {
             {/* Join Group */}
             <Card className="p-5 border border-bgBorder bg-bgSurface2 gap-4">
               <View className="gap-1">
-                <Text className="text-base font-bold text-textPrimary">Join a Mini-League</Text>
+                <View className="flex-row items-center gap-2">
+                  <View style={{ width: 3, height: 16, borderRadius: 1.5, backgroundColor: Theme.colors.accent }} />
+                  <Text className="text-base font-bold text-textPrimary">Join a Mini-League</Text>
+                </View>
                 <Text className="text-xs text-textSecondary">
                   Enter the unique 6-character code shared by another user.
                 </Text>
@@ -189,7 +195,10 @@ export default function GroupsDashboard(): React.JSX.Element {
             {/* Create Group */}
             <Card className="p-5 border border-bgBorder bg-bgSurface2 gap-4">
               <View className="gap-1">
-                <Text className="text-base font-bold text-textPrimary">Create a Mini-League</Text>
+                <View className="flex-row items-center gap-2">
+                  <View style={{ width: 3, height: 16, borderRadius: 1.5, backgroundColor: Theme.colors.accent }} />
+                  <Text className="text-base font-bold text-textPrimary">Create a Mini-League</Text>
+                </View>
                 <Text className="text-xs text-textSecondary">
                   Create a new group of competition. You will receive an invite code to share.
                 </Text>

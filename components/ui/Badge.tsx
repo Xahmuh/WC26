@@ -25,7 +25,7 @@ const TEXT: Record<BadgeTone, string> = {
 
 export function Badge({ label, tone = 'neutral' }: BadgeProps): React.JSX.Element {
   return (
-    <View className={`self-start rounded-md px-2.5 py-1 ${TONE[tone]}`}>
+    <View className={`rounded-md px-2.5 py-1 ${TONE[tone]}`}>
       <Text className={`text-xs font-semibold uppercase tracking-wide ${TEXT[tone]}`}>
         {label}
       </Text>

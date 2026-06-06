@@ -63,6 +63,7 @@ export default function GroupDetailsScreen(): React.JSX.Element {
           <Pressable onPress={() => router.back()} className="-ml-2 p-2 active:opacity-70">
             <Icon name="back" size={22} color={Theme.colors.accent} />
           </Pressable>
+          <View style={{ width: 4, height: 20, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
           <Text numberOfLines={1} className="flex-1 text-xl font-extrabold uppercase tracking-tight text-textPrimary">
             {group.name}
           </Text>
@@ -94,7 +95,10 @@ export default function GroupDetailsScreen(): React.JSX.Element {
 
         {/* Members Leaderboard Standings */}
         <View className="gap-3">
-          <Text className="text-lg font-semibold text-textPrimary">Standings ({members.length})</Text>
+          <View className="flex-row items-center gap-2.5">
+            <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+            <Text className="text-lg font-semibold text-textPrimary">Standings ({members.length})</Text>
+          </View>
 
           <Card className="overflow-hidden border border-bgBorder bg-bgSurface2">
             {/* Table Header */}
@@ -142,16 +146,10 @@ export default function GroupDetailsScreen(): React.JSX.Element {
 
                     {/* Profile & Name */}
                     <View className="flex-grow flex-row items-center pl-2 gap-2">
-                      {member.avatar_url ? (
-                        <Image
-                          source={{ uri: member.avatar_url }}
-                          style={{ width: 26, height: 26, borderRadius: 13 }}
-                        />
-                      ) : (
-                        <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-bgSurface3">
-                          <Text className="text-[10px] font-bold text-textSecondary">{initials}</Text>
-                        </View>
-                      )}
+                      <Image
+                        source={member.avatar_url ? { uri: member.avatar_url } : require('@/assets/default_avatar.jpg')}
+                        style={{ width: 26, height: 26, borderRadius: 13 }}
+                      />
                       <Text
                         numberOfLines={1}
                         className={`text-sm flex-1 ${isMe ? 'font-bold text-accent' : 'text-textPrimary'}`}

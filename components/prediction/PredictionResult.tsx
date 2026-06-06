@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
 import Theme from '@/constants/theme/design-system';
 import { POINTS } from '@/lib/scoring';
+import { useMatchTopScorer } from '@/hooks/usePoints';
 import type { Match, PointsRecord, Prediction } from '@/types';
 
 interface PredictionResultProps {
@@ -21,6 +22,8 @@ export function PredictionResult({
   points,
 }: PredictionResultProps): React.JSX.Element {
   const hasScore = match.home_score !== null && match.away_score !== null;
+  const topScorerQuery = useMatchTopScorer(match.id);
+  const topScorer = topScorerQuery.data;
 
   return (
     <View className="gap-4 rounded-2xl border border-bgBorder bg-bgSurface2 p-4">
@@ -84,6 +87,32 @@ export function PredictionResult({
             </Text>
           )}
         </>
+      )}
+
+      {/* Match MVP Section */}
+      {topScorer && (
+        <View className="mt-4 pt-4 border-t border-bgBorder">
+          <Text className="text-xs font-semibold text-textSecondary uppercase tracking-wide mb-3">
+            Match MVP 🏆
+          </Text>
+          <View className="flex-row items-center justify-between rounded-xl bg-bgSurface p-3">
+            <View className="flex-row items-center gap-3">
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-accentDim border border-bgBorder">
+                <Icon name="profile" size={18} color={Theme.colors.accent} />
+              </View>
+              <View>
+                <Text className="text-xs text-textTertiary">Highest Scorer</Text>
+                <Text className="text-sm font-bold text-textPrimary">
+                  {topScorer.display_name}
+                </Text>
+              </View>
+            </View>
+            <View className="items-end">
+              <Text className="text-lg font-bold text-accent">{topScorer.total_points}</Text>
+              <Text className="text-[10px] text-textSecondary uppercase tracking-wider font-medium">Points</Text>
+            </View>
+          </View>
+        </View>
       )}
     </View>
   );

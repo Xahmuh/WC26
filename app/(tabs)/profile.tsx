@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Modal, ScrollView, Text, View, Alert, Pressable, ActivityIndicator } from 'react-native';
+import { Modal, ScrollView, Text, View, Image, Alert, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from 'expo-blur';
-import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import Theme from '@/constants/theme/design-system';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
@@ -47,7 +48,7 @@ export default function ProfileScreen(): React.JSX.Element {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.6,
@@ -99,22 +100,26 @@ export default function ProfileScreen(): React.JSX.Element {
       try {
         const response = await fetch(pickedUri);
         const blob = await response.blob();
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = async () => {
-          const base64data = reader.result as string;
-          const { error: base64UpdateError } = await supabase
-            .from('users')
-            .update({ avatar_url: base64data })
-            .eq('id', userId);
+        // Await the FileReader so `finally` (which clears the spinner) only runs
+        // once the upload actually completes — not while it's still pending.
+        const base64data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error ?? new Error('Failed to read image.'));
+          reader.readAsDataURL(blob);
+        });
 
-          if (base64UpdateError) {
-            Alert.alert('Error', base64UpdateError.message);
-          } else {
-            await refreshProfile();
-            Alert.alert('Success', 'Avatar updated successfully!');
-          }
-        };
+        const { error: base64UpdateError } = await supabase
+          .from('users')
+          .update({ avatar_url: base64data })
+          .eq('id', userId);
+
+        if (base64UpdateError) {
+          Alert.alert('Error', base64UpdateError.message);
+        } else {
+          await refreshProfile();
+          Alert.alert('Success', 'Avatar updated successfully!');
+        }
       } catch (fallbackErr: any) {
         Alert.alert('Error', fallbackErr.message || 'Failed to update avatar.');
       }
@@ -167,160 +172,148 @@ export default function ProfileScreen(): React.JSX.Element {
         contentContainerClassName="px-6 pt-2 gap-6"
         contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
       >
-        <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
+        <View className="flex-row items-center gap-2.5">
+          <View style={{ width: 5, height: 24, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+          <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
+        </View>
 
-        <View 
-          style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.08)' }}
-          className="shadow-2xl shadow-black/50"
+        {/* ClutchTime UI Kit Avatar Card */}
+        <View
+          style={{ borderRadius: 16, backgroundColor: '#222222', borderWidth: 1, borderColor: '#3A3A3A' }}
+          className="shadow-md shadow-black/60"
         >
-          <BlurView 
-            intensity={50} 
-            tint="dark" 
-            className="items-center gap-4 p-6 bg-bgDeep/20"
-          >
-            {/* Subtle light flare background decoration */}
-            <View 
-              style={{ 
-                position: 'absolute', 
-                top: -65, 
-                right: -65, 
-                width: 130, 
-                height: 130, 
-                borderRadius: 65, 
-                backgroundColor: Theme.colors.accent, 
-                opacity: 0.15,
-              }} 
-            />
+          <View style={{ padding: 24 }}>
+            <View className="flex-row items-center gap-5">
+              {/* Avatar on Left */}
+              <Pressable onPress={handleChangeAvatar} disabled={uploadingAvatar} className="relative active:opacity-90">
+                <View style={{ borderRadius: 42, backgroundColor: '#111111' }}>
+                  <Image
+                    source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
+                    style={{ width: 84, height: 84, borderRadius: 42 }}
+                    className="border border-[#3A3A3A]"
+                  />
+                </View>
+                {/* Edit overlay badge */}
+                <View
+                  style={{ position: 'absolute', bottom: -2, right: -2, backgroundColor: '#C8FF00', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#222222', elevation: 4 }}
+                >
+                  {uploadingAvatar ? (
+                    <ActivityIndicator size="small" color="#111111" />
+                  ) : (
+                    <Icon name="edit" size={14} color="#111111" />
+                  )}
+                </View>
+              </Pressable>
 
-            <Pressable 
-              onPress={handleChangeAvatar} 
-              disabled={uploadingAvatar}
-              className="relative active:opacity-90"
-            >
-              {profile?.avatar_url ? (
-                <Image
-                  source={{ uri: profile.avatar_url }}
-                  style={{ width: 88, height: 88, borderRadius: 44 }}
-                  className="border-2 border-accent"
-                />
-              ) : (
-                <Image
-                  source={require('../../assets/avatar.webp')}
-                  style={{ width: 88, height: 88, borderRadius: 44 }}
-                  className="border-2 border-accent"
-                />
-              )}
-              
-              {/* Edit overlay badge */}
-              <View 
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  right: 0,
-                  backgroundColor: Theme.colors.accent,
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderWidth: 2,
-                  borderColor: '#131524',
-                  elevation: 4,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 2,
-                }}
-              >
-                {uploadingAvatar ? (
-                  <ActivityIndicator size="small" color={Theme.colors.bgDeep} />
-                ) : (
-                  <Icon name="edit" size={12} color="#001C3D" />
-                )}
-              </View>
-            </Pressable>
-
-            <View className="items-center gap-2">
-              <View className="flex-row items-center gap-2 justify-center">
-                <Text className="text-xl font-black text-textPrimary tracking-tight">
-                  {profile?.display_name ?? 'Player'}
-                </Text>
-                {isAdmin && (
-                  <View className="bg-liveDim border border-live rounded-full px-2 py-0.5">
-                    <Text className="text-[9px] font-extrabold text-live uppercase tracking-wider">
-                      Admin
-                    </Text>
+              {/* Info on Right */}
+              <View className="flex-1 justify-center">
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-[20px] font-bold text-white tracking-tight">
+                    {profile?.display_name ?? 'Player'}
+                  </Text>
+                  {isAdmin && (
+                    <View style={{ backgroundColor: 'rgba(224,48,48,0.1)', borderColor: '#E03030', borderWidth: 1 }} className="rounded-full px-2 py-0.5">
+                      <Text className="text-[9px] font-extrabold text-[#E03030] uppercase tracking-wider">Admin</Text>
+                    </View>
+                  )}
+                </View>
+                {email && <Text className="text-[12px] font-medium text-[#888888] mt-1">{email}</Text>}
+                
+                {/* Supported Teams Badges */}
+                {profile?.supported_teams && profile.supported_teams.length > 0 && (
+                  <View className="flex-row gap-2 mt-4 flex-wrap">
+                    {profile.supported_teams.map((teamId) => {
+                      const team = teams.find((t) => t.id === teamId);
+                      if (!team) return null;
+                      return (
+                        <View
+                          key={teamId}
+                          style={{ paddingHorizontal: 8, paddingVertical: 6, borderRadius: 4, backgroundColor: '#2A2A2A', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                        >
+                          <TeamFlag team={team} size={16} fixed />
+                          <Text className="text-[10px] font-bold text-[#CCCCCC] uppercase tracking-wider">
+                            {team.code ?? team.short_name ?? team.name}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
               </View>
-
-              {profile?.supported_teams && profile.supported_teams.length > 0 && (
-                <View className="flex-row gap-2 mt-1 justify-center items-center">
-                  {profile.supported_teams.map((teamId) => {
-                    const team = teams.find((t) => t.id === teamId);
-                    if (!team) return null;
-                    return (
-                      <View 
-                        key={teamId} 
-                        style={{
-                          width: 38,
-                          height: 38,
-                          borderRadius: 19,
-                          overflow: 'hidden',
-                          borderWidth: 1.5,
-                          borderColor: Theme.colors.bgBorder,
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          backgroundColor: Theme.colors.bgSurface3,
-                        }}
-                      >
-                        <TeamFlag team={team} size={38} fixed />
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
             </View>
-          </BlurView>
+          </View>
         </View>
 
         {/* Action Buttons */}
         <View className="gap-3">
-          <Button
-            label="⚽ Edit Supported Teams"
-            variant="ghost"
+          <ProfileOption
+            label="Edit Supported Teams"
+            icon="shield"
             onPress={() => setShowPicker(true)}
           />
-          <Button
-            label="🏆 Mini-Leagues / Groups"
-            variant="ghost"
+          <ProfileOption
+            label="Mini-Leagues / Groups"
+            icon="trophy"
             onPress={() => router.push('/groups' as any)}
           />
           {isAdmin && (
-            <Button
-              label="🛠️ Admin Dashboard"
-              variant="secondary"
+            <ProfileOption
+              label="Admin Dashboard"
+              icon="settings"
               onPress={() => router.push('/admin' as any)}
             />
           )}
         </View>
 
-        <View className="flex-row gap-3">
-          <StatTile label="Points" value={profile?.total_points ?? 0} />
-          <StatTile label="Rank" value={rank ? `#${rank}` : '—'} />
-        </View>
-        <View className="flex-row gap-3">
-          <Pressable
-            onPress={() => router.push('/profile/predictions' as any)}
-            className="flex-1 active:opacity-80"
-          >
-            <StatTile label="Predictions" value={predictionsMade} />
-          </Pressable>
-          <StatTile label="Scored" value={scored} />
+        {/* KPIs */}
+        <View className="gap-3 mt-2">
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <StatTile 
+                label="Points" 
+                value={profile?.total_points ?? 0} 
+                icon="star"
+                iconColor="#FDE047"
+                accentColor="#CA8A04"
+              />
+            </View>
+            <View className="flex-1">
+              <StatTile 
+                label="Rank" 
+                value={rank ? `#${rank}` : '—'} 
+                icon="medal"
+                iconColor="#38BDF8"
+                accentColor="#0284C7"
+              />
+            </View>
+          </View>
+          <View className="flex-row gap-3">
+            <Pressable
+              onPress={() => router.push('/profile/predictions' as any)}
+              className="flex-1 active:opacity-80"
+            >
+              <StatTile 
+                label="Predictions" 
+                value={predictionsMade} 
+                icon="target"
+                iconColor="#C084FC"
+                accentColor="#9333EA"
+              />
+            </Pressable>
+            <View className="flex-1">
+              <StatTile 
+                label="Scored" 
+                value={scored} 
+                icon="flame"
+                iconColor="#F87171"
+                accentColor="#DC2626"
+              />
+            </View>
+          </View>
         </View>
 
-        <View className="mt-2">
-          <Button label="Sign out" variant="primary" onPress={() => setShowSignOutConfirm(true)} />
+        <View className="mt-6 mb-2">
+          <Button label="Sign out" variant="lime" onPress={() => setShowSignOutConfirm(true)} />
         </View>
       </ScrollView>
 
@@ -385,13 +378,43 @@ export default function ProfileScreen(): React.JSX.Element {
 interface StatTileProps {
   label: string;
   value: string | number;
+  icon?: any;
+  iconColor?: string;
+  accentColor?: string;
 }
 
-function StatTile({ label, value }: StatTileProps): React.JSX.Element {
+function StatTile({ label, value, icon }: StatTileProps): React.JSX.Element {
   return (
-    <Card className="flex-1 items-center gap-1 p-4 border border-bgBorder bg-bgSurface2">
-      <Text className="text-2xl font-bold text-textPrimary">{value}</Text>
-      <Text className="text-xs text-textSecondary">{label}</Text>
-    </Card>
+    <View 
+      className="flex-1 p-4 rounded-2xl shadow-md shadow-black/60"
+      style={{ minHeight: 100, backgroundColor: '#222222', borderColor: '#3A3A3A', borderWidth: 1 }}
+    >
+      <View className="flex-row items-center justify-between">
+        <Text className="text-[11px] font-bold text-[#CCCCCC] uppercase tracking-widest mt-1">
+          {label}
+        </Text>
+        {icon && (
+          <View style={{ backgroundColor: '#1A1A1A', borderRadius: 8, padding: 6, borderWidth: 1, borderColor: '#2A2A2A' }}>
+            <Icon name={icon} size={14} color="#FFFFFF" />
+          </View>
+        )}
+      </View>
+      <Text className="text-[32px] font-black text-white tracking-tighter mt-3">{value}</Text>
+    </View>
+  );
+}
+
+function ProfileOption({ label, icon, onPress }: { label: string; icon: any; onPress: () => void }): React.JSX.Element {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center bg-bgSurface2 p-4 rounded-2xl border border-bgBorder active:opacity-70 shadow-sm shadow-black/20"
+    >
+      <View className="w-11 h-11 rounded-full bg-accentDim items-center justify-center mr-4 border border-accentBorder/50">
+        <Icon name={icon} size={20} color={Theme.colors.accent} />
+      </View>
+      <Text className="flex-1 text-[15px] font-bold text-textPrimary tracking-wide">{label}</Text>
+      <Icon name="forward" size={18} color={Theme.colors.textSecondary} />
+    </Pressable>
   );
 }

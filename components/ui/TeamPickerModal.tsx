@@ -37,8 +37,6 @@ export function TeamPickerModal({
   title = 'Select 3 Teams to Support',
   isMandatory = false,
 }: TeamPickerModalProps): React.JSX.Element | null {
-  if (!visible) return null;
-
   const { data: teams = [], isLoading } = useTeams();
   const [search, setSearch] = useState('');
   const [localSelected, setLocalSelected] = useState<string[]>(selectedTeams || []);
@@ -80,6 +78,11 @@ export function TeamPickerModal({
     if (localSelected.length !== 3) return;
     await onSave(localSelected);
   };
+
+  // Early return AFTER all hooks — keeps hook order stable across renders
+  // (a conditional return before hooks violates the Rules of Hooks and crashes
+  // when `visible` toggles on a mounted instance).
+  if (!visible) return null;
 
   return (
     <View style={styles.overlay} className="z-50">

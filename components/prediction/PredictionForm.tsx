@@ -138,14 +138,14 @@ export function PredictionForm({
         </Text>
       </View>
 
-      <View className="flex-row items-start justify-center gap-6">
+      <View className="flex-row items-center justify-center gap-6">
         <ScoreStepper
           label={match.home_team.code ?? match.home_team.short_name ?? 'Home'}
           value={home}
           onChange={setHome}
           disabled={mutation.isPending}
         />
-        <Text className="mt-9 text-xl font-bold text-textTertiary">:</Text>
+        <Text className="text-2xl font-bold text-textTertiary mt-4">:</Text>
         <ScoreStepper
           label={match.away_team.code ?? match.away_team.short_name ?? 'Away'}
           value={away}
