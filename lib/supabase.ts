@@ -16,14 +16,21 @@ import {
 import { Platform } from 'react-native';
 import type { Database, LeaderboardRow } from '@/types';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+import Constants from 'expo-constants';
+
+const supabaseUrl = 
+  process.env.EXPO_PUBLIC_SUPABASE_URL || 
+  Constants.expoConfig?.extra?.supabaseUrl;
+
+const supabaseAnonKey = 
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 
+  Constants.expoConfig?.extra?.supabaseAnonKey;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   // Fail loud and early — a missing key produces confusing 401s otherwise.
   throw new Error(
     'Missing Supabase config. Set EXPO_PUBLIC_SUPABASE_URL and ' +
-      'EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env (see .env.example).'
+      'EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env (see .env.example) or extra in app.json.'
   );
 }
 
