@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Image, Animated, StyleSheet, Pressable, Text } from 'react-native';
+import { View, Image, Animated, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
@@ -74,79 +74,104 @@ export default function CustomSplashScreen(): React.JSX.Element {
     outputRange: [0.65, 0],
   });
 
+  const { width, height } = useWindowDimensions();
+
+  // The background image aspect ratio is 852 x 1846
+  const IMAGE_ASPECT_RATIO = 852 / 1846;
+
+  // Calculate the aspect-ratio matching container dimensions
+  let containerWidth = width;
+  let containerHeight = height;
+
+  if (width / height > IMAGE_ASPECT_RATIO) {
+    // Screen is wider than the image's ratio (e.g. tablet, web desktop)
+    containerWidth = height * IMAGE_ASPECT_RATIO;
+  } else {
+    // Screen is taller than the image's ratio (or matches it)
+    containerHeight = width / IMAGE_ASPECT_RATIO;
+  }
+
   return (
-    <View className="flex-1 bg-[#F8F4D7] relative justify-center items-center">
-      <StatusBar style="dark" />
+    <View className="flex-1 bg-[#01102e] relative justify-center items-center">
+      <StatusBar style="light" />
       
-      {/* Centralized Full Screen Image */}
-      <View style={StyleSheet.absoluteFillObject} className="justify-center items-center">
+      {/* Aspect Ratio Constraint Container */}
+      <View 
+        style={{ 
+          width: containerWidth, 
+          height: containerHeight, 
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Background Image */}
         <Image
           source={require('../../assets/splashscreen.png')}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
         />
-      </View>
 
-      {/* Floating Animated Circular Button with Ripples (Raised slightly to top: 73% height, lowered 7px total) */}
-      <View 
-        style={{ 
-          position: 'absolute',
-          top: '73%',
-          marginTop: 35,
-          left: 0,
-          right: 0,
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: 160,
-        }}
-      >
-        {/* Ripple Wave 1 (Behind the button) */}
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            borderWidth: 1.5,
-            borderColor: '#C9DF6A', // Lime accent border
-            backgroundColor: 'rgba(201, 223, 106, 0.12)', // Subtle translucent lime fill
-            opacity: opacity1,
-            transform: [{ scale: scale1 }],
-          }}
-        />
-
-        {/* Ripple Wave 2 (Behind the button, staggered) */}
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            borderWidth: 1.5,
-            borderColor: '#C9DF6A',
-            backgroundColor: 'rgba(201, 223, 106, 0.12)',
-            opacity: opacity2,
-            transform: [{ scale: scale2 }],
-          }}
-        />
-
-        {/* Main GO Button */}
-        <Animated.View 
+        {/* Floating Animated Circular Button with Ripples (Raised slightly to top: 73% height, lowered 7px total) */}
+        <View 
           style={{ 
-            transform: [{ scale }],
-            zIndex: 10,
+            position: 'absolute',
+            top: '73%',
+            marginTop: 35,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 160,
           }}
         >
-          <Pressable
-            onPress={() => router.push('/(auth)/login')}
-            className="w-20 h-20 rounded-full items-center justify-center shadow-lg active:opacity-80"
-            style={{ elevation: 5, backgroundColor: '#C9DF6A' }}
+          {/* Ripple Wave 1 (Behind the button) */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              borderWidth: 1.5,
+              borderColor: '#C9DF6A', // Lime accent border
+              backgroundColor: 'rgba(201, 223, 106, 0.12)', // Subtle translucent lime fill
+              opacity: opacity1,
+              transform: [{ scale: scale1 }],
+            }}
+          />
+
+          {/* Ripple Wave 2 (Behind the button, staggered) */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              borderWidth: 1.5,
+              borderColor: '#C9DF6A',
+              backgroundColor: 'rgba(201, 223, 106, 0.12)',
+              opacity: opacity2,
+              transform: [{ scale: scale2 }],
+            }}
+          />
+
+          {/* Main GO Button */}
+          <Animated.View 
+            style={{ 
+              transform: [{ scale }],
+              zIndex: 10,
+            }}
           >
-            <Text className="text-[#001C3D] text-4xl font-extrabold uppercase tracking-normal text-center leading-none">
-              GO
-            </Text>
-          </Pressable>
-        </Animated.View>
+            <Pressable
+              onPress={() => router.push('/(auth)/login')}
+              className="w-20 h-20 rounded-full items-center justify-center shadow-lg active:opacity-80"
+              style={{ elevation: 5, backgroundColor: '#C9DF6A' }}
+            >
+              <Text className="text-[#001C3D] text-4xl font-extrabold uppercase tracking-normal text-center leading-none">
+                GO
+              </Text>
+            </Pressable>
+          </Animated.View>
+        </View>
       </View>
     </View>
   );
