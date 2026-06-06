@@ -11,7 +11,7 @@
 // ============================================================================
 
 import { useEffect, useRef } from 'react';
-import { Animated, Image, Pressable, Text, View } from 'react-native';
+import { Animated, Image, Platform, Pressable, Text, View } from 'react-native';
 
 import Theme from '@/constants/theme/design-system';
 import { useResponsive } from '@/lib/responsive';
@@ -67,7 +67,7 @@ export function PodiumCard({
       toValue: 1,
       duration: Theme.animation.slow,
       delay: isFirst ? 0 : 120,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     });
     animation.start();
     return () => animation.stop();

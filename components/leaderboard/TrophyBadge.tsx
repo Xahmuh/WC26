@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { useEffect, useRef } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Platform } from 'react-native';
 
 import { Icon } from '@/components/ui/Icon';
 import Theme from '@/constants/theme/design-system';
@@ -33,8 +33,8 @@ export function TrophyBadge({
     if (!animated) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(offset, { toValue: 1, duration: 1100, useNativeDriver: true }),
-        Animated.timing(offset, { toValue: 0, duration: 1100, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 1, duration: 1100, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(offset, { toValue: 0, duration: 1100, useNativeDriver: Platform.OS !== 'web' }),
       ])
     );
     loop.start();

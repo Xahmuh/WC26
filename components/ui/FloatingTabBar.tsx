@@ -65,7 +65,7 @@ function NavItem({
   const icons = TAB_ICONS[routeName] ?? { base: 'home', active: 'homeActive' };
 
   const spring = (toValue: number) =>
-    Animated.spring(scale, { toValue, useNativeDriver: true, speed: 40, bounciness: 8 }).start();
+    Animated.spring(scale, { toValue, useNativeDriver: Platform.OS !== 'web', speed: 40, bounciness: 8 }).start();
 
   return (
     <TouchableOpacity

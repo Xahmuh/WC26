@@ -56,8 +56,8 @@ export default function MatchesScreen(): React.JSX.Element {
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 1000, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: Platform.OS !== 'web' }),
       ])
     ).start();
   }, [pulseAnim]);
@@ -94,19 +94,11 @@ export default function MatchesScreen(): React.JSX.Element {
           <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Matches</Text>
         </View>
         <View style={{ width: '100%', height: 140, borderRadius: 16, marginBottom: 16, overflow: 'hidden', position: 'relative' }}>
-          {Platform.OS === 'web' ? (
-            <img 
-              src={require('@/assets/banner.png')}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'right' }}
-              alt="Banner"
-            />
-          ) : (
-            <Image 
-              source={require('@/assets/banner.png')}
-              style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
-            />
-          )}
+          <Image 
+            source={require('@/assets/banner.png')}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
 
           {/* Animated My Teams Button */}
           <View style={{ position: 'absolute', left: 16, top: '50%', transform: [{ translateY: -16 }] }}>

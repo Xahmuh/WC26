@@ -7,7 +7,12 @@ import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { enableScreens } from 'react-native-screens';
 import { QueryClientProvider } from '@tanstack/react-query';
+
+if (Platform.OS === 'web') {
+  enableScreens(false);
+}
 
 import Theme from '@/constants/theme/design-system';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';

@@ -128,7 +128,7 @@ export const Animation = {
   normal: 250,
   slow: 400,
   spring: {
-    press: { toValue: 0.96, useNativeDriver: true },
+    press: { toValue: 0.96, useNativeDriver: false },
   },
   easing: { in: 'easeIn', out: 'easeOut', inOut: 'easeInOut' },
 } as const;

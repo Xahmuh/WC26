@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Image, Animated, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
+import { View, Image, Animated, Platform, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
@@ -18,12 +18,12 @@ export default function CustomSplashScreen(): React.JSX.Element {
         Animated.timing(scale, {
           toValue: 1.04,
           duration: 1000,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(scale, {
           toValue: 1,
           duration: 1000,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ])
     ).start();
@@ -34,7 +34,7 @@ export default function CustomSplashScreen(): React.JSX.Element {
       Animated.timing(animatedValue, {
         toValue: 1,
         duration: 2200,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }).start(() => runRipple(animatedValue));
     };
 
