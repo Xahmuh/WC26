@@ -1,7 +1,7 @@
 import '@/global.css';
 
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { View, Platform, useWindowDimensions } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -50,7 +50,11 @@ function RootNavigator(): React.JSX.Element {
     );
   }
 
-  return (
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const useMaxContainer = isWeb && width > 480;
+
+  const content = (
     <Stack
       screenOptions={{
         headerShown: false,
@@ -81,6 +85,31 @@ function RootNavigator(): React.JSX.Element {
       />
     </Stack>
   );
+
+  if (useMaxContainer) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0A0C16', justifyContent: 'center', alignItems: 'center' }}>
+        <View 
+          style={{ 
+            width: 480, 
+            height: '100%', 
+            backgroundColor: Theme.colors.bgDeep,
+            // Standard shadow styling
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.5,
+            shadowRadius: 15,
+            // Native-compatible elevation property
+            elevation: 10,
+          }}
+        >
+          {content}
+        </View>
+      </View>
+    );
+  }
+
+  return content;
 }
 
 export default function RootLayout(): React.JSX.Element {
