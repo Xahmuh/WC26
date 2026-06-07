@@ -52,7 +52,7 @@ export function useNotifications(): UseNotificationsResult {
         (payload) => {
           queryClient.invalidateQueries({ queryKey: notificationKeys.all });
           const n = payload.new as AppNotification;
-          void playNotificationSound(n.title, n.body ?? undefined);
+          void playNotificationSound(n.title, n.body ?? undefined, n.data);
         }
       )
       .on(

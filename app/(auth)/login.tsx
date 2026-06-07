@@ -16,8 +16,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Rect, Circle, Line, Path } from 'react-native-svg';
 
 import Theme from '@/constants/theme/design-system';
+import { useResponsive } from '@/lib/responsive';
 import { Button } from '@/components/ui/Button';
 import { GoogleButton } from '@/components/ui/GoogleButton';
+import { Icon } from '@/components/ui/Icon';
 import { useAuthStore } from '@/stores/auth.store';
 import { signInWithGoogle } from '@/services/auth.service';
 
@@ -33,9 +35,12 @@ const QUOTES = [
 
 export default function LoginScreen(): React.JSX.Element {
   const router = useRouter();
+  const { scale: rs } = useResponsive();
+  const logoSize = rs(230);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * QUOTES.length));
 
   const quote = QUOTES[quoteIndex] || QUOTES[0];
@@ -79,7 +84,7 @@ export default function LoginScreen(): React.JSX.Element {
         style={{ flex: 1 }}
       >
         {/* Tactical Pitch Grid Background (Glow splashes removed as requested) */}
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {/* Tactical Pitch Grid Overlay */}
           <Svg
             width="100%"
@@ -136,7 +141,7 @@ export default function LoginScreen(): React.JSX.Element {
               {/* Back Button */}
               <Pressable
                 onPress={() => router.replace('/(auth)/splash')}
-                className="absolute left-0 top-1.5 flex-row items-center gap-1 active:opacity-75 z-10"
+                className="absolute left-0 top-0 min-h-11 justify-center flex-row items-center gap-1 active:opacity-75 z-10"
               >
                 <Text className="text-accent text-lg">←</Text>
                 <Text className="text-accent text-xs font-semibold uppercase tracking-wider">Back</Text>
@@ -145,7 +150,7 @@ export default function LoginScreen(): React.JSX.Element {
               <View className="items-center justify-center pt-1">
                 <Image
                   source={require('../../assets/worldcup.webp')}
-                  style={{ width: 230, height: 230 }}
+                  style={{ width: logoSize, height: logoSize }}
                   resizeMode="contain"
                 />
                 <Text 
@@ -192,15 +197,26 @@ export default function LoginScreen(): React.JSX.Element {
                     <Text className="text-[10px] font-semibold uppercase tracking-wide text-textSecondary">
                       Password
                     </Text>
-                    <TextInput
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                      autoComplete="password"
-                      placeholder="••••••••"
-                      placeholderTextColor={Theme.colors.textTertiary}
-                      className="h-11 rounded-xl border border-bgBorder bg-bgDeep/40 px-4 text-sm text-textPrimary focus:border-accent"
-                    />
+                    <View className="relative justify-center">
+                      <TextInput
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                        autoComplete="password"
+                        placeholder="••••••••"
+                        placeholderTextColor={Theme.colors.textTertiary}
+                        className="h-11 rounded-xl border border-bgBorder bg-bgDeep/40 px-4 pr-12 text-sm text-textPrimary focus:border-accent"
+                      />
+                      <Pressable
+                        onPress={() => setShowPassword((s) => !s)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                        className="absolute right-3 h-11 justify-center"
+                      >
+                        <Icon name={showPassword ? 'eyeOff' : 'eye'} size={18} color={Theme.colors.textTertiary} />
+                      </Pressable>
+                    </View>
                   </View>
 
                   {error ? (

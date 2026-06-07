@@ -79,6 +79,7 @@ export interface LeaderboardEntry {
   predictions_scored: number;
   exact_predictions: number;
   supported_teams: string[] | null;
+  previous_rank?: number;
 }
 
 export interface UserProfile {
@@ -116,6 +117,20 @@ export interface PredictionQuestion {
   resolved_at: string | null;
   created_by: string | null;
   lock_at?: string;
+}
+
+// Hero banner slides shown at the top of the home screen (admin-managed)
+export interface HeroSlide {
+  id: string;
+  image_path: string; // path inside the `hero-banners` storage bucket
+  background_color: string;
+  title: string | null;
+  subtitle: string | null;
+  link_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface UserQuestionPrediction {

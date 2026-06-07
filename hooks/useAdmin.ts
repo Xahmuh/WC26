@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createPredictionQuestion,
+  deleteMatch,
   deleteUser,
   resolvePredictionQuestion,
   restoreUser,
@@ -13,6 +14,12 @@ import {
   auditUserPrediction,
   createCustomMatch,
   updateMatchResult,
+  getHeroSlides,
+  uploadHeroSlideImage,
+  createHeroSlide,
+  updateHeroSlide,
+  deleteHeroSlide,
+  reorderHeroSlides,
 } from '@/services/admin.service';
 import type { MatchStage, MatchStatus } from '@/types';
 
@@ -209,6 +216,102 @@ export function useUpdateMatchResult() {
       void queryClient.invalidateQueries({ queryKey: ['matches'] });
       void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
       void queryClient.invalidateQueries({ queryKey: ['myPoints'] });
+    },
+  });
+}
+
+export function useDeleteMatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (matchId: string) => deleteMatch(matchId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['matches'] });
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['myPoints'] });
+    },
+  });
+}
+
+// ============================================================================
+// Hero banner (home screen carousel) management
+// ============================================================================
+
+export function useHeroSlides() {
+  return useQuery({
+    queryKey: ['heroSlides'],
+    queryFn: getHeroSlides,
+  });
+}
+
+export function useUploadHeroSlideImage() {
+  return useMutation({
+    mutationFn: (localUri: string) => uploadHeroSlideImage(localUri),
+  });
+}
+
+export function useCreateHeroSlide() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      imagePath: string;
+      backgroundColor: string;
+      title: string | null;
+      subtitle: string | null;
+      linkUrl: string | null;
+      sortOrder: number;
+      isActive: boolean;
+    }) => createHeroSlide(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
+    },
+  });
+}
+
+export function useUpdateHeroSlide() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      slideId,
+      updates,
+    }: {
+      slideId: string;
+      updates: {
+        imagePath?: string;
+        backgroundColor?: string;
+        title?: string | null;
+        subtitle?: string | null;
+        linkUrl?: string | null;
+        sortOrder?: number;
+        isActive?: boolean;
+      };
+    }) => updateHeroSlide(slideId, updates),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
+    },
+  });
+}
+
+export function useDeleteHeroSlide() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (slideId: string) => deleteHeroSlide(slideId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
+    },
+  });
+}
+
+export function useReorderHeroSlides() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (orderedSlideIds: string[]) => reorderHeroSlides(orderedSlideIds),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
     },
   });
 }

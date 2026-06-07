@@ -64,6 +64,7 @@ export function MatchList({
       data={matches}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
+      style={{ flex: 1 }}
       contentContainerClassName="gap-3 px-6 pt-2"
       contentContainerStyle={{ paddingBottom: bottomInset }}
       ItemSeparatorComponent={null}

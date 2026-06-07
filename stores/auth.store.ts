@@ -23,8 +23,18 @@ interface AuthState {
   /** True while a sign-in / sign-up request is in flight. */
   submitting: boolean;
   error: string | null;
+  /**
+   * True for the brief window right after a fresh sign-in (Supabase's
+   * `SIGNED_IN` auth event) — NOT set when an existing session is silently
+   * restored on app launch. Screens (e.g. Home) can watch this to trigger
+   * "just logged in" UX such as the branding video popup, then call
+   * `consumeJustSignedIn()` to reset it so it doesn't repeat.
+   */
+  justSignedIn: boolean;
 
   initialize: () => Promise<void>;
+  /** Resets `justSignedIn` back to false once the consumer has reacted to it. */
+  consumeJustSignedIn: () => void;
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (
     email: string,
@@ -48,6 +58,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initializing: true,
   submitting: false,
   error: null,
+  justSignedIn: false,
+
+  consumeJustSignedIn: () => set({ justSignedIn: false }),
 
   initialize: async () => {
     try {
@@ -59,9 +72,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Keep the store in lock-step with Supabase auth events. Subscribe once.
       if (!authListener) {
-        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data } = supabase.auth.onAuthStateChange((event, session) => {
           set({ session });
           if (session) {
+            // Only a genuine fresh sign-in fires `SIGNED_IN`. Restoring a
+            // persisted session on cold start fires `INITIAL_SESSION` instead,
+            // so this won't re-trigger "just logged in" UX on every app open.
+            if (event === 'SIGNED_IN') {
+              set({ justSignedIn: true });
+            }
             void get().refreshProfile();
           } else {
             set({ profile: null });

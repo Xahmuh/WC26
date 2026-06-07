@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, Text, View, TextInput, Pressable, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { HeroCarousel } from '@/components/ui/HeroCarousel';
+import { HeroBannerManager } from '@/components/admin/HeroBannerManager';
 import { DateTimePickerModal } from '@/components/ui/DateTimePickerModal';
 import { useMatches } from '@/hooks/useMatches';
 import { usePredictionQuestions } from '@/hooks/usePredictionQuestions';
@@ -25,6 +26,7 @@ import {
   useAuditUserPrediction,
   useCreateCustomMatch,
   useUpdateMatchResult,
+  useDeleteMatch,
 } from '@/hooks/useAdmin';
 import type { Team, MatchStage, MatchStatus } from '@/types';
 import { formatKickoff } from '@/lib/dates';
@@ -88,11 +90,6 @@ function SubmissionsAuditSection({
               <Text className="text-sm font-bold text-textPrimary">
                 {sub.user?.username || sub.user?.display_name || 'Unknown User'}
               </Text>
-              {sub.user?.email && (
-                <Text className="text-[10px] text-textTertiary">
-                  {sub.user.email}
-                </Text>
-              )}
               <Text className="text-xs text-textSecondary mt-1 italic">
                 Prediction: "{sub.prediction}"
               </Text>
@@ -116,7 +113,7 @@ function SubmissionsAuditSection({
                 <View className="flex-row gap-1">
                   <Pressable
                     onPress={() => auditMutation.mutate({ predictionId: sub.id, status: 'approved' })}
-                    className={`px-2 py-1 rounded border ${
+                    className={`min-h-11 px-3 justify-center rounded border ${
                       isApproved
                         ? 'bg-successDim border-success'
                         : 'bg-bgSurface2 border-bgBorder'
@@ -128,7 +125,7 @@ function SubmissionsAuditSection({
                   </Pressable>
                   <Pressable
                     onPress={() => auditMutation.mutate({ predictionId: sub.id, status: 'rejected' })}
-                    className={`px-2 py-1 rounded border ${
+                    className={`min-h-11 px-3 justify-center rounded border ${
                       isRejected
                         ? 'bg-liveDim border-live/30'
                         : 'bg-bgSurface2 border-bgBorder'
@@ -235,6 +232,7 @@ export default function AdminDashboard(): React.JSX.Element {
   const auditMutation = useAuditUserPrediction();
   const createMatchMutation = useCreateCustomMatch();
   const updateResultMutation = useUpdateMatchResult();
+  const deleteMatchMutation = useDeleteMatch();
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -287,13 +285,13 @@ export default function AdminDashboard(): React.JSX.Element {
   const [editHomeScore, setEditHomeScore] = useState('');
   const [editAwayScore, setEditAwayScore] = useState('');
 
-  // Active tab: 'matches', 'add_match', or 'questions'
-  const [activeTab, setActiveTab] = useState<'matches' | 'add_match' | 'questions'>('matches');
+  // Active tab: 'matches', 'add_match', 'questions', or 'hero_banner'
+  const [activeTab, setActiveTab] = useState<'matches' | 'add_match' | 'questions' | 'hero_banner'>('matches');
 
   if (!isAdmin) {
     return (
       <SafeAreaView className="flex-1 bg-bgDeep justify-center items-center px-6">
-        <Text className="text-4xl">🚫</Text>
+        <Icon name="ban" size={40} color={Theme.colors.live} />
         <Text className="text-xl font-bold text-textPrimary mt-4">Access Denied</Text>
         <Text className="text-sm text-textSecondary text-center mt-2">
           Only tournament administrators can access this dashboard.
@@ -555,6 +553,35 @@ export default function AdminDashboard(): React.JSX.Element {
     );
   };
 
+  // Delete match confirmation
+  const [deletingMatchId, setDeletingMatchId] = useState<string | null>(null);
+
+  const handleDeleteMatch = useCallback((matchId: string) => {
+    Alert.alert(
+      'Delete Match',
+      'Are you sure you want to permanently delete this match? All predictions and points for this match will also be deleted. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setDeletingMatchId(matchId);
+            deleteMatchMutation.mutate(matchId, {
+              onSuccess: () => {
+                setDeletingMatchId(null);
+              },
+              onError: (err: any) => {
+                setDeletingMatchId(null);
+                Alert.alert('Delete Failed', err?.message || 'Failed to delete match. Check that no predictions reference this match.');
+              },
+            });
+          },
+        },
+      ]
+    );
+  }, [deleteMatchMutation]);
+
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
       {/* Header */}
@@ -610,14 +637,22 @@ export default function AdminDashboard(): React.JSX.Element {
           }`}
         >
           <Text className={`font-bold ${activeTab === 'questions' ? 'text-accent' : 'text-textSecondary'}`}>
-            Prediction Questions
+            Questions
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setActiveTab('hero_banner')}
+          className={`flex-1 py-3 items-center border-b-2 ${
+            activeTab === 'hero_banner' ? 'border-accent' : 'border-transparent'
+          }`}
+        >
+          <Text className={`font-bold ${activeTab === 'hero_banner' ? 'text-accent' : 'text-textSecondary'}`}>
+            Hero
           </Text>
         </Pressable>
       </View>
 
       <ScrollView ref={scrollRef} contentContainerClassName="p-4 gap-6">
-        {/* Hero Banner Slides */}
-        <HeroCarousel />
         {/* Matches Multiplier Tab */}
         {activeTab === 'matches' && (
           <View className="gap-4">
@@ -702,7 +737,17 @@ export default function AdminDashboard(): React.JSX.Element {
                           <Text className="text-[11px] text-textSecondary font-semibold">
                             {formatKickoff(match.kickoff_time)}
                           </Text>
-                          <View className="flex-row items-center gap-1.5">
+                          <View className="flex-row items-center gap-2">
+                            {deletingMatchId === match.id ? (
+                              <ActivityIndicator size="small" color={Theme.colors.live} />
+                            ) : (
+                              <Pressable
+                                onPress={() => handleDeleteMatch(match.id)}
+                                className="p-1.5 rounded-full bg-liveDim active:opacity-70"
+                              >
+                                <Icon name="trash" size={13} color={Theme.colors.live} />
+                              </Pressable>
+                            )}
                             <View className="bg-bgSurface1 px-1.5 py-0.5 rounded border border-bgBorder">
                               <Text className="text-[9px] text-textSecondary font-bold uppercase">{match.status}</Text>
                             </View>
@@ -713,9 +758,26 @@ export default function AdminDashboard(): React.JSX.Element {
                         </View>
 
                         <View className="flex-row items-center justify-between">
-                          <Text className="text-base font-bold text-textPrimary flex-1 mr-4">
-                            {match.home_team.name} {match.home_score !== null ? match.home_score : ''} vs {match.away_team.name} {match.away_score !== null ? match.away_score : ''}
-                          </Text>
+                          <View className="flex-1 mr-4 gap-0.5">
+                            <View className="flex-row items-center gap-2">
+                              <View className="w-1.5 h-1.5 rounded-full bg-accent" />
+                              <Text className="text-sm font-bold text-textPrimary" numberOfLines={1}>
+                                {match.home_team.name}
+                              </Text>
+                              {match.home_score !== null && (
+                                <Text className="text-base font-extrabold text-accent">{match.home_score}</Text>
+                              )}
+                            </View>
+                            <View className="flex-row items-center gap-2">
+                              <View className="w-1.5 h-1.5 rounded-full bg-live" />
+                              <Text className="text-sm font-bold text-textPrimary" numberOfLines={1}>
+                                {match.away_team.name}
+                              </Text>
+                              {match.away_score !== null && (
+                                <Text className="text-base font-extrabold text-accent">{match.away_score}</Text>
+                              )}
+                            </View>
+                          </View>
                           {isMutating ? (
                             <ActivityIndicator size="small" color={Theme.colors.accent} />
                           ) : (
@@ -801,7 +863,7 @@ export default function AdminDashboard(): React.JSX.Element {
                             {editStatus === 'FINISHED' && (
                               <View className="bg-liveDim/20 border border-live/30 p-2 rounded-lg">
                                 <Text className="text-[10px] font-semibold text-live leading-relaxed">
-                                  ⚠️ Warning: Setting status to FINISHED will calculate user prediction points. Make sure scores are correct.
+                                  <Icon name="warning" size={11} color={Theme.colors.live} /> Warning: Setting status to FINISHED will calculate user prediction points. Make sure scores are correct.
                                 </Text>
                               </View>
                             )}
@@ -836,7 +898,7 @@ export default function AdminDashboard(): React.JSX.Element {
                             }}
                             className="mt-2 border-t border-bgBorder/50 pt-2 flex-row items-center justify-between"
                           >
-                            <Text className="text-xs text-accent font-bold">🛠️ Edit Score & Status</Text>
+                            <Text className="text-xs text-accent font-bold"><Icon name="tools" size={12} color={Theme.colors.accent} /> Edit Score & Status</Text>
                           </Pressable>
                         )}
                       </Card>
@@ -851,7 +913,7 @@ export default function AdminDashboard(): React.JSX.Element {
                             onPress={() => goToMatchesPage(page - 1)}
                             accessibilityRole="button"
                             accessibilityLabel="Previous page"
-                            className={`w-10 h-10 rounded-full bg-accent items-center justify-center ${
+                            className={`min-h-11 min-w-11 rounded-full bg-accent items-center justify-center ${
                               page <= 0 ? 'opacity-30' : 'active:opacity-80'
                             }`}
                           >
@@ -868,7 +930,7 @@ export default function AdminDashboard(): React.JSX.Element {
                             onPress={() => goToMatchesPage(page + 1)}
                             accessibilityRole="button"
                             accessibilityLabel="Next page"
-                            className={`w-10 h-10 rounded-full bg-accent items-center justify-center ${
+                            className={`min-h-11 min-w-11 rounded-full bg-accent items-center justify-center ${
                               page >= totalPages - 1 ? 'opacity-30' : 'active:opacity-80'
                             }`}
                           >
@@ -985,7 +1047,7 @@ export default function AdminDashboard(): React.JSX.Element {
                   <Text className={`text-sm ${kickoffDate ? 'text-textPrimary font-bold' : 'text-textTertiary'}`}>
                     {kickoffDate ? formatKickoff(kickoffDate.toISOString()) : 'Select kickoff date & time…'}
                   </Text>
-                  <Text className="text-textTertiary text-xs">🗓️</Text>
+                  <Icon name="calendar" size={12} color={Theme.colors.textTertiary} />
                 </Pressable>
               </View>
 
@@ -1037,7 +1099,7 @@ export default function AdminDashboard(): React.JSX.Element {
                   <Text className={`text-sm ${qLockAt ? 'text-textPrimary font-bold' : 'text-textTertiary'}`}>
                     {qLockAt ? formatKickoff(qLockAt.toISOString()) : 'Select deadline date & time…'}
                   </Text>
-                  <Text className="text-textTertiary text-xs">🗓️</Text>
+                  <Icon name="calendar" size={12} color={Theme.colors.textTertiary} />
                 </Pressable>
               </View>
 
@@ -1069,12 +1131,12 @@ export default function AdminDashboard(): React.JSX.Element {
                       <Card key={q.id} className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
                         <View className="flex-row items-center justify-between">
                           <Text className="text-xs text-textSecondary font-semibold uppercase">
-                            🏆 {q.points} Points
+                            <Icon name="trophy" size={12} color={Theme.colors.textSecondary} /> {q.points} Points
                           </Text>
                           <View className="flex-row items-center gap-2">
                             {needsResolution && (
                               <View className="rounded bg-liveDim px-1.5 py-0.5 border border-live/30">
-                                <Text className="text-[9px] text-live font-bold uppercase">⚠️ Expired</Text>
+                                <Text className="text-[9px] text-live font-bold uppercase"><Icon name="warning" size={9} color={Theme.colors.live} /> Expired</Text>
                               </View>
                             )}
                             {q.status !== 'resolved' && (
@@ -1090,7 +1152,11 @@ export default function AdminDashboard(): React.JSX.Element {
                                 <Text className={`text-[10px] font-bold ${
                                   q.status === 'closed' || isTimeUp ? 'text-live' : 'text-textSecondary'
                                 }`}>
-                                  {q.status === 'closed' || isTimeUp ? '🔓 Unlock' : '🔒 Lock'}
+                                  {q.status === 'closed' || isTimeUp ? (
+                                    <><Icon name="unlock" size={10} color={Theme.colors.live} /> Unlock</>
+                                  ) : (
+                                    <><Icon name="lock" size={10} color={Theme.colors.textSecondary} /> Lock</>
+                                  )}
                                 </Text>
                               </Pressable>
                             )}
@@ -1135,7 +1201,11 @@ export default function AdminDashboard(): React.JSX.Element {
                             className="flex-1 items-center justify-center rounded-lg border border-bgBorder bg-bgSurface1 py-2 active:opacity-80"
                           >
                             <Text className="text-xs font-bold text-accent">
-                              {editingQuestionId === q.id ? '✕ Close Edit' : '✏️ Edit'}
+                              {editingQuestionId === q.id ? (
+                                '✕ Close Edit'
+                              ) : (
+                                <><Icon name="edit" size={12} color={Theme.colors.accent} /> Edit</>
+                              )}
                             </Text>
                           </Pressable>
                           <Pressable
@@ -1146,7 +1216,7 @@ export default function AdminDashboard(): React.JSX.Element {
                             disabled={deleteQuestionMutation.isPending}
                             className="flex-1 items-center justify-center rounded-lg border border-live/30 bg-liveDim py-2 active:opacity-80"
                           >
-                            <Text className="text-xs font-bold text-live">🗑️ Delete</Text>
+                            <Text className="text-xs font-bold text-live"><Icon name="trash" size={12} color={Theme.colors.live} /> Delete</Text>
                           </Pressable>
                         </View>
 
@@ -1196,7 +1266,7 @@ export default function AdminDashboard(): React.JSX.Element {
                                 <Text className={`text-sm ${editQLockAt ? 'text-textPrimary font-bold' : 'text-textTertiary'}`}>
                                   {editQLockAt ? formatKickoff(editQLockAt.toISOString()) : 'Select deadline…'}
                                 </Text>
-                                <Text className="text-textTertiary text-xs">🗓️</Text>
+                                <Icon name="calendar" size={12} color={Theme.colors.textTertiary} />
                               </Pressable>
                             </View>
 
@@ -1292,6 +1362,17 @@ export default function AdminDashboard(): React.JSX.Element {
             </View>
           </View>
         )}
+
+        {/* Hero Banner Tab */}
+        {activeTab === 'hero_banner' && (
+          <View className="gap-4">
+            <View className="gap-1.5">
+              <Text className="text-xs font-semibold text-textSecondary uppercase">Live Preview</Text>
+              <HeroCarousel />
+            </View>
+            <HeroBannerManager />
+          </View>
+        )}
       </ScrollView>
 
       {/* Team Picker Modals */}
@@ -1348,7 +1429,7 @@ export default function AdminDashboard(): React.JSX.Element {
           <Pressable className="w-full max-w-sm rounded-2xl border border-bgBorder bg-bgSurface2 p-6 gap-5">
             <View className="items-center gap-3">
               <View className="h-12 w-12 items-center justify-center rounded-full bg-liveDim border border-live/30">
-                <Text className="text-xl">🗑️</Text>
+                <Icon name="trash" size={20} color={Theme.colors.live} />
               </View>
               <Text className="text-lg font-bold text-textPrimary text-center">Delete Question</Text>
               <Text className="text-sm text-textSecondary text-center">

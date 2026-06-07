@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Rect, Circle, Line, Path } from 'react-native-svg';
 
 import Theme from '@/constants/theme/design-system';
+import { useResponsive } from '@/lib/responsive';
 import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -33,6 +34,8 @@ const QUOTES = [
 
 export default function RegisterScreen(): React.JSX.Element {
   const router = useRouter();
+  const { scale: rs } = useResponsive();
+  const logoSize = rs(230);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -79,7 +82,7 @@ export default function RegisterScreen(): React.JSX.Element {
         style={{ flex: 1 }}
       >
         {/* Tactical Pitch Grid Background (Glow splashes removed as requested) */}
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {/* Tactical Pitch Grid Overlay */}
           <Svg
             width="100%"
@@ -117,13 +120,23 @@ export default function RegisterScreen(): React.JSX.Element {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
-          <View className="flex-1 justify-between px-6 py-4">
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: 'space-between',
+              paddingHorizontal: 24,
+              paddingVertical: 16,
+            }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Top Section: Logo & Titles */}
             <View className="items-center relative w-full">
               {/* Back Button - absolute positioning so it doesn't push logo down */}
               <Pressable
                 onPress={() => router.back()}
-                className="absolute left-0 top-1.5 flex-row items-center gap-1 active:opacity-75 z-10"
+                className="absolute left-0 top-0 min-h-11 justify-center flex-row items-center gap-1 active:opacity-75 z-10"
               >
                 <Text className="text-accent text-lg">←</Text>
                 <Text className="text-accent text-xs font-semibold uppercase tracking-wider">Back</Text>
@@ -132,7 +145,7 @@ export default function RegisterScreen(): React.JSX.Element {
               <View className="items-center justify-center pt-1">
                 <Image
                   source={require('../../assets/worldcup.webp')}
-                  style={{ width: 230, height: 230 }}
+                  style={{ width: logoSize, height: logoSize }}
                   resizeMode="contain"
                 />
                 <Text 
@@ -231,7 +244,7 @@ export default function RegisterScreen(): React.JSX.Element {
               {quote && (
                 <Pressable
                   onPress={handleNextQuote}
-                  className="px-5 h-16 justify-center rounded-xl border border-bgBorder bg-bgSurface1 w-full max-w-sm active:opacity-75"
+                  className="px-5 min-h-16 py-3 justify-center rounded-xl border border-bgBorder bg-bgSurface1 w-full max-w-sm active:opacity-75"
                 >
                   <Text className="text-center italic text-xs text-textSecondary font-light leading-relaxed">
                     " {quote.text} "
@@ -248,7 +261,7 @@ export default function RegisterScreen(): React.JSX.Element {
                 </Text>
               </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
     </SafeAreaView>

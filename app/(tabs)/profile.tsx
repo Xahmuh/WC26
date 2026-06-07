@@ -7,6 +7,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Theme from '@/constants/theme/design-system';
+import { Container } from '@/components/ui/Container';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
@@ -193,9 +194,12 @@ export default function ProfileScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <ScrollView
-        contentContainerClassName="px-6 pt-6 gap-6"
-        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 16 }}
+        showsVerticalScrollIndicator={false}
       >
+        <Container nested className="px-6 pt-6 gap-6">
+        <View className="gap-6">
         <View className="flex-row items-center gap-2.5">
           <View style={{ width: 5, height: 24, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
           <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
@@ -237,29 +241,50 @@ export default function ProfileScreen(): React.JSX.Element {
 
             {/* Name + inline edit */}
             {editingName ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', marginTop: 14 }}>
+              <View style={{ width: '100%', alignItems: 'center', marginTop: 14 }}>
                 <TextInput
                   value={editNameValue}
                   onChangeText={setEditNameValue}
-                  className="text-[20px] font-bold text-white tracking-tight pb-0.5"
-                  style={{ flexShrink: 1, minWidth: 80, maxWidth: 220, textAlign: 'center', borderBottomWidth: 1.5, borderBottomColor: Theme.colors.accent }}
+                  className="text-[20px] font-bold text-white tracking-tight pb-1"
+                  style={{
+                    width: '100%',
+                    maxWidth: 280,
+                    minWidth: 160,
+                    textAlign: 'center',
+                    borderBottomWidth: 1.5,
+                    borderBottomColor: Theme.colors.accent,
+                  }}
                   placeholder="Your name"
                   placeholderTextColor="#666"
                   autoFocus
                 />
-                <Pressable onPress={handleSaveName} disabled={savingName || !editNameValue.trim()} className="p-1.5 active:opacity-75 shrink-0">
-                  {savingName ? <ActivityIndicator size="small" color={Theme.colors.accent} /> : <Icon name="check" size={18} color={Theme.colors.accent} />}
-                </Pressable>
-                <Pressable onPress={() => setEditingName(false)} className="p-1.5 active:opacity-75 shrink-0">
-                  <Icon name="close" size={18} color="#888" />
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+                  <Pressable
+                    onPress={() => setEditingName(false)}
+                    disabled={savingName}
+                    className="w-10 h-10 rounded-full bg-accent items-center justify-center active:opacity-75"
+                  >
+                    <Icon name="close" size={18} color="#111111" />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleSaveName}
+                    disabled={savingName || !editNameValue.trim()}
+                    className="w-10 h-10 rounded-full bg-accent items-center justify-center active:opacity-75"
+                  >
+                    {savingName ? (
+                      <ActivityIndicator size="small" color="#111111" />
+                    ) : (
+                      <Icon name="check" size={18} color="#111111" />
+                    )}
+                  </Pressable>
+                </View>
               </View>
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, maxWidth: '100%', marginTop: 14, paddingHorizontal: 8 }}>
                 <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: rs(21), fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.5 }}>
                   {(profile?.username || profile?.display_name) ?? 'Player'}
                 </Text>
-                <Pressable onPress={() => { setEditNameValue(profile?.username || profile?.display_name || ''); setEditingName(true); }} className="p-1 active:opacity-75 shrink-0">
+                <Pressable onPress={() => { setEditNameValue(profile?.username || profile?.display_name || ''); setEditingName(true); }} className="min-h-11 min-w-11 items-center justify-center active:opacity-75 shrink-0">
                   <Icon name="edit" size={15} color="#888" />
                 </Pressable>
               </View>
@@ -318,6 +343,12 @@ export default function ProfileScreen(): React.JSX.Element {
           </View>
         </LinearGradient>
 
+        <Button
+          label="View My Performance"
+          variant="secondary"
+          onPress={() => router.push('/user-performance' as never)}
+        />
+
         {/* Action Buttons */}
         <View className="gap-3">
           <ProfileOption
@@ -340,7 +371,7 @@ export default function ProfileScreen(): React.JSX.Element {
         </View>
 
         {/* KPIs */}
-        <View className="gap-3 mt-2">
+        <View className="gap-3">
           <View className="flex-row gap-3">
             <View className="flex-1">
               <StatTile 
@@ -386,9 +417,11 @@ export default function ProfileScreen(): React.JSX.Element {
           </View>
         </View>
 
-        <View className="mt-6 mb-2">
+        <View>
           <Button label="Sign out" variant="lime" onPress={() => setShowSignOutConfirm(true)} />
         </View>
+        </View>
+        </Container>
       </ScrollView>
 
       {showPicker && (

@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Dimensions, RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Theme from '@/constants/theme/design-system';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { MatchCard } from '@/components/match/MatchCard';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -15,6 +14,8 @@ import { EmptyState, ErrorState } from '@/components/ui/States';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
 import { PlayerProfileModal } from '@/components/ui/PlayerProfileModal';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { BrandingVideoModal } from '@/components/video/BrandingVideoModal';
+import { useVideoPopup } from '@/hooks/useVideoPopup';
 import { supabase } from '@/lib/supabase';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { useMatches } from '@/hooks/useMatches';
@@ -27,23 +28,28 @@ import {
 } from '@/hooks/usePredictionQuestions';
 import { useCountdown } from '@/hooks/useCountdown';
 import { isToday } from '@/lib/dates';
+import { useResponsive } from '@/lib/responsive';
 import { useAuthStore } from '@/stores/auth.store';
 import type { PredictionQuestion } from '@/types';
+import { Container } from '@/components/ui/Container';
 
 // Horizontal slider sizing — cards are fixed-width so the next one peeks in.
 const SLIDER_GAP = 12;
-const SLIDER_CARD_WIDTH = Math.min(320, Dimensions.get('window').width - 80);
+const SLIDER_SIDE_INSET = 24; // px-6 from outer ScrollView
 
 export default function HomeScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useResponsive();
+  const sliderVisibleWidth = windowWidth - SLIDER_SIDE_INSET * 2;
+  const sliderCardWidth = Math.min(320, sliderVisibleWidth - 32);
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
 
   const [savingTeams, setSavingTeams] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; rank?: number } | null>(null);
-const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
+  const { isVisible: isVideoPopupVisible, dismiss: dismissVideoPopup } = useVideoPopup();
 
   const handleSaveTeams = async (teams: string[]) => {
     if (!userId) return;
@@ -85,7 +91,14 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
   const userPreds = userPredsQuery.data ?? new Map<string, { prediction: string; status: 'pending' | 'approved' | 'rejected' }>();
 
   const todaysMatches = useMemo(
-    () => matches.filter((m) => isToday(m.kickoff_time)),
+    // Issue 5 — Today's matches shows only still-relevant fixtures; finished /
+    // postponed / cancelled drop off. (Status is IN_PLAY here, never "LIVE".)
+    () =>
+      matches.filter(
+        (m) =>
+          isToday(m.kickoff_time) &&
+          (m.status === 'SCHEDULED' || m.status === 'IN_PLAY')
+      ),
     [matches]
   );
 
@@ -111,18 +124,37 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
 
   const predictionsMade = predictions?.size ?? 0;
 
+  // Issue 1 — keep total points & rank fresh on every focus. Uses stable
+  // refetch refs (react-query / zustand memoize these) so the focus callback
+  // identity never changes on render → no re-fetch loop.
+  const refetchLeaderboard = leaderboardQuery.refetch;
+  const refetchPoints = pointsQuery.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProfile();
+      void refetchLeaderboard();
+      void refetchPoints();
+    }, [refreshProfile, refetchLeaderboard, refetchPoints])
+  );
+
+  // Issue 1 — realtime: reflect total_points the instant the user's row changes
+  // (e.g. right after the admin finalizes a match and scoring runs).
   useEffect(() => {
-    if (myRank === null) return;
-    AsyncStorage.getItem('wc_last_rank').then((stored) => {
-      if (stored !== null) {
-        const prev = parseInt(stored, 10);
-        if (myRank < prev) setRankTrend('up');
-        else if (myRank > prev) setRankTrend('down');
-        else setRankTrend('same');
-      }
-      AsyncStorage.setItem('wc_last_rank', String(myRank));
-    });
-  }, [myRank]);
+    if (!userId) return;
+    const channel = supabase
+      .channel(`home-user-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` },
+        () => {
+          void refreshProfile();
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, refreshProfile]);
 
   const refreshing =
     matchesQuery.isRefetching ||
@@ -132,6 +164,7 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
     userPredsQuery.isRefetching;
 
   const onRefresh = (): void => {
+    void refreshProfile();
     void matchesQuery.refetch();
     void predictionsQuery.refetch();
     void pointsQuery.refetch();
@@ -157,46 +190,30 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
           />
         }
       >
-        <View className="flex-row items-center justify-between border-b border-bgBorder pb-4 gap-3">
-          <View className="flex-row items-center gap-2.5 shrink-0">
-            <View
-              style={{
-                width: 5,
-                height: 28,
-                borderRadius: 2.5,
-                backgroundColor: Theme.colors.accent
-              }}
+        <Container nested>
+        <View className="gap-6">
+        <View className="flex-row items-center justify-between pb-4">
+
+          {/* Profile Avatar */}
+          <Pressable onPress={() => router.push('/profile')} className="w-10 h-10 rounded-full border border-bgBorder overflow-hidden active:opacity-80">
+            <Image
+              source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
+              style={{ width: '100%', height: '100%' }}
             />
-            <View className="flex-row items-center">
-              <Text className="text-[24px] font-black uppercase tracking-tighter text-textPrimary">
-                World Cup
-              </Text>
-              <Text className="text-[24px] font-black uppercase tracking-tighter text-accent ml-1.5" style={{ color: Theme.colors.accent }}>
-                2026
-              </Text>
-            </View>
+          </Pressable>
+
+          {/* Center logo */}
+          <Image
+            source={require('@/assets/icona.png')}
+            style={{ width: '60%', height: 50 }}
+            resizeMode="contain"
+          />
+
+          {/* Right icon */}
+          <View className="w-10 items-end">
+            <NotificationBell />
           </View>
 
-          {/* Right cluster: bell + profile pill. shrink + min-w-0 so a long
-              display name truncates instead of pushing the avatar off-screen. */}
-          <View className="flex-row items-center gap-2 shrink min-w-0">
-            <NotificationBell />
-            <Pressable
-              onPress={() => router.push('/profile')}
-              style={{ maxWidth: '60%' }}
-              className="flex-row items-center gap-2 bg-bgSurface2 border border-bgBorder rounded-full py-1.5 pl-1.5 pr-3 active:opacity-80 shrink min-w-0"
-            >
-              <View className="h-7 w-7 items-center justify-center rounded-full bg-bgSurface1 border border-bgBorder/50 overflow-hidden shrink-0">
-                <Image
-                  source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
-                  style={{ width: '100%', height: '100%' }}
-                />
-              </View>
-              <Text className="text-xs font-bold text-textPrimary shrink" numberOfLines={1}>
-                {(profile?.username || profile?.display_name) ?? 'Profile'}
-              </Text>
-            </Pressable>
-          </View>
         </View>
 
         {/* Hero Banner Slides */}
@@ -204,15 +221,14 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
 
         {/* Quick stats */}
         <View className="flex-row gap-3">
-          <StatTile 
-            label="Total points" 
-            value={profile?.total_points ?? 0} 
+          <StatTile
+            label="Total points"
+            value={profile ? (profile.total_points ?? 0) : '—'}
             onPress={() => userId && setSelectedPlayer({ id: userId, rank: myRank ?? undefined })}
           />
-          <StatTile 
-            label="Rank" 
-            value={myRank ?? '—'} 
-            trend={rankTrend}
+          <StatTile
+            label="Rank"
+            value={myRank ?? '—'}
             onPress={() => router.push('/leaderboard')}
           />
           <StatTile 
@@ -231,13 +247,14 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
             </View>
             <ScrollView
               horizontal
+              nestedScrollEnabled
               showsHorizontalScrollIndicator={false}
-              snapToInterval={SLIDER_CARD_WIDTH + SLIDER_GAP}
+              snapToInterval={sliderCardWidth + SLIDER_GAP}
               decelerationRate="fast"
               contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
             >
               {questions.map((q) => (
-                <View key={q.id} style={{ width: SLIDER_CARD_WIDTH }}>
+                <View key={q.id} style={{ width: sliderCardWidth }}>
                   <PredictionQuestionCard
                     question={q}
                     predictionRecord={userPreds.get(q.id)}
@@ -273,13 +290,14 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
           ) : (
             <ScrollView
               horizontal
+              nestedScrollEnabled
               showsHorizontalScrollIndicator={false}
-              snapToInterval={SLIDER_CARD_WIDTH + SLIDER_GAP}
+              snapToInterval={sliderCardWidth + SLIDER_GAP}
               decelerationRate="fast"
               contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
             >
               {todaysMatches.map((match) => (
-                <View key={match.id} style={{ width: SLIDER_CARD_WIDTH }}>
+                <View key={match.id} style={{ width: sliderCardWidth }}>
                   <MatchCard
                     match={match}
                     prediction={predictions?.get(match.id)}
@@ -322,13 +340,14 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
           ) : (
             <ScrollView
               horizontal
+              nestedScrollEnabled
               showsHorizontalScrollIndicator={false}
-              snapToInterval={SLIDER_CARD_WIDTH + SLIDER_GAP}
+              snapToInterval={sliderCardWidth + SLIDER_GAP}
               decelerationRate="fast"
               contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
             >
               {myRecentPredictions.map(({ prediction, match }) => (
-                <View key={prediction.id} style={{ width: SLIDER_CARD_WIDTH }}>
+                <View key={prediction.id} style={{ width: sliderCardWidth }}>
                   <MatchCard
                     match={match}
                     prediction={prediction}
@@ -340,6 +359,8 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
             </ScrollView>
           )}
         </View>
+        </View>
+        </Container>
       </ScrollView>
 
       {showPicker && (
@@ -359,6 +380,8 @@ const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'same' | null>(null);
         playerId={selectedPlayer?.id}
         rank={selectedPlayer?.rank}
       />
+
+      <BrandingVideoModal visible={isVideoPopupVisible} onClose={dismissVideoPopup} />
     </SafeAreaView>
   );
 }
@@ -367,22 +390,16 @@ interface StatTileProps {
   label: string;
   value: string | number;
   onPress?: () => void;
-  trend?: 'up' | 'down' | 'same' | null;
 }
 
-function StatTile({ label, value, onPress, trend }: StatTileProps): React.JSX.Element {
+function StatTile({ label, value, onPress }: StatTileProps): React.JSX.Element {
   return (
     <Pressable onPress={onPress} className="flex-1 active:opacity-80">
-      <Card 
+      <Card
         className="items-center justify-center gap-1 p-3 min-h-[88px]"
         style={{ backgroundColor: Theme.colors.accent, borderColor: Theme.colors.accent }}
       >
-        <View className="flex-row items-center gap-1">
-          <Text className="text-3xl font-black text-center" style={{ color: Theme.colors.accentDark }}>{value}</Text>
-          {trend === 'up' && <Icon name="trendingUp" size={18} color="#22c55e" />}
-          {trend === 'down' && <Icon name="trendingDown" size={18} color="#ef4444" />}
-          {trend === 'same' && <Icon name="minus" size={18} color="#a1a1aa" />}
-        </View>
+        <Text className="text-3xl font-black text-center" style={{ color: Theme.colors.accentDark }}>{value}</Text>
         <Text className="text-center text-[11px] font-bold" style={{ color: Theme.colors.accentDark }}>{label}</Text>
       </Card>
     </Pressable>
@@ -432,11 +449,14 @@ function PredictionQuestionCard({
 
   return (
     <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
-      <View className="flex-row items-center justify-between">
-        <Text className="text-xs text-textSecondary uppercase tracking-wider font-semibold">
-          🏆 {question.points} PTS Question
+      <View className="flex-row items-start justify-between gap-2">
+        <Text
+          numberOfLines={1}
+          className="flex-1 text-xs text-textSecondary uppercase tracking-wider font-semibold"
+        >
+          <Icon name="trophy" size={12} color={Theme.colors.textSecondary} /> {question.points} PTS Question
         </Text>
-        <View className="flex-row items-center gap-1.5">
+        <View className="flex-row items-center justify-end gap-1.5 flex-wrap shrink-0" style={{ maxWidth: '58%' }}>
           {predictionRecord && (
             <View
               className={`rounded px-1.5 py-0.5 ${
@@ -525,9 +545,9 @@ function PredictionQuestionCard({
                 {mutatingThis ? (
                   <ActivityIndicator size="small" color={Theme.colors.accent} />
                 ) : isResolved && isCorrect ? (
-                  <Text className="text-success text-xs font-bold">✓ Correct</Text>
+                  <Text className="text-success text-xs font-bold"><Icon name="checkCircle" size={12} color={Theme.colors.success} /> Correct</Text>
                 ) : isSelected && isResolved && !isCorrect ? (
-                  <Text className="text-live text-xs font-bold">✗ Incorrect</Text>
+                  <Text className="text-live text-xs font-bold"><Icon name="closeCircle" size={12} color={Theme.colors.live} /> Incorrect</Text>
                 ) : isSelected ? (
                   <Text className="text-accent text-xs">● Selected</Text>
                 ) : null}
@@ -576,7 +596,7 @@ function PredictionQuestionCard({
             Correct Answer: <Text className="font-bold text-textPrimary">{question.correct_answer || 'Audited'}</Text>
           </Text>
           {auditStatus === 'approved' ? (
-            <Text className="text-xs font-bold text-success">🏆 +{question.points} PTS Earned</Text>
+            <Text className="text-xs font-bold text-success"><Icon name="trophy" size={12} color={Theme.colors.success} /> +{question.points} PTS Earned</Text>
           ) : (
             <Text className="text-xs text-textTertiary">No points earned</Text>
           )}

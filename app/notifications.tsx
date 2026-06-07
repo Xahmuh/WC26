@@ -1,7 +1,9 @@
 import { FlatList, Pressable, Text, View, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import Theme from '@/constants/theme/design-system';
+import { Container } from '@/components/ui/Container';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { EmptyState, ErrorState } from '@/components/ui/States';
 import {
@@ -32,6 +34,7 @@ function relativeTime(iso: string): string {
 
 export default function NotificationsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { data, isLoading, isError, error, unreadCount, refetch, isRefetching } =
     useNotifications();
   const markRead = useMarkNotificationRead();
@@ -39,7 +42,14 @@ export default function NotificationsScreen(): React.JSX.Element {
 
   const renderItem = ({ item }: { item: AppNotification }) => (
     <Pressable
-      onPress={() => !item.is_read && markRead.mutate(item.id)}
+      onPress={() => {
+        // Issue 8 — mark read, then deep-link to the match if the payload has
+        // a match_id. A deleted match shows the screen's own "not found" state.
+        if (!item.is_read) markRead.mutate(item.id);
+        const matchId =
+          typeof item.data?.match_id === 'string' ? item.data.match_id : null;
+        if (matchId) router.push(`/match/${matchId}`);
+      }}
       className={`flex-row items-start gap-3 px-5 py-4 border-b border-bgBorder/60 ${
         item.is_read ? '' : 'bg-bgSurface1'
       } active:opacity-80`}
@@ -67,19 +77,19 @@ export default function NotificationsScreen(): React.JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['bottom']}>
       {unreadCount > 0 && (
-        <View className="flex-row items-center justify-between px-5 py-3 border-b border-bgBorder">
+        <Container nested className="flex-row items-center justify-between px-5 py-3 border-b border-bgBorder">
           <Text className="text-xs font-semibold text-textSecondary">
             {unreadCount} unread
           </Text>
           <Pressable
             onPress={() => markAll.mutate()}
             disabled={markAll.isPending}
-            className="flex-row items-center gap-1.5 active:opacity-70"
+            className="min-h-11 flex-row items-center gap-1.5 px-2 active:opacity-70"
           >
             <Icon name="check" size={14} color={Theme.colors.accent} />
             <Text className="text-xs font-bold text-accent">Mark all read</Text>
           </Pressable>
-        </View>
+        </Container>
       )}
 
       {isLoading ? (

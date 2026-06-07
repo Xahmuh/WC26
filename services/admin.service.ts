@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { PredictionQuestion, MatchStage, MatchStatus } from '@/types';
+import type { PredictionQuestion, MatchStage, MatchStatus, HeroSlide, Database } from '@/types';
 
 /**
  * Updates a match's points multiplier (e.g. 1 for Normal, 2 for Double, 3 for Triple).
@@ -206,7 +206,6 @@ export interface QuestionSubmission {
   user: {
     display_name: string;
     username: string | null;
-    email: string | null;
     avatar_url: string | null;
   };
 }
@@ -225,7 +224,6 @@ export async function getQuestionSubmissions(questionId: string): Promise<Questi
         user:user_id (
           display_name,
           username,
-          email,
           avatar_url
         )
     `)
@@ -351,4 +349,178 @@ export async function restoreUser(userId: string): Promise<void> {
     p_user_id: userId,
   });
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Permanently deletes a match. Predictions and points cascade-delete via
+ * the table's foreign keys.
+ */
+export async function deleteMatch(matchId: string): Promise<void> {
+  const { error } = await supabase
+    .from('matches')
+    .delete()
+    .eq('id', matchId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+// ============================================================================
+// Hero banner (home screen carousel) management
+// ============================================================================
+
+const HERO_BANNERS_BUCKET = 'hero-banners';
+
+/**
+ * Resolves a storage path inside the `hero-banners` bucket to a public URL.
+ */
+export function getHeroSlideImageUrl(imagePath: string): string {
+  const { data } = supabase.storage.from(HERO_BANNERS_BUCKET).getPublicUrl(imagePath);
+  return data.publicUrl;
+}
+
+/**
+ * Fetches all hero slides ordered for display in the admin dashboard.
+ */
+export async function getHeroSlides(): Promise<HeroSlide[]> {
+  const { data, error } = await supabase
+    .from('hero_slides')
+    .select('*')
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []) as HeroSlide[];
+}
+
+/**
+ * Uploads a banner image (picked from the device) to the `hero-banners`
+ * storage bucket and returns the storage path to persist on the slide row.
+ */
+export async function uploadHeroSlideImage(localUri: string): Promise<string> {
+  const fileExt = localUri.split('.').pop()?.toLowerCase() || 'jpg';
+  const contentType = `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+  const fileName = `slide-${Date.now()}.${fileExt}`;
+  const filePath = `slides/${fileName}`;
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri: localUri,
+    name: fileName,
+    type: contentType,
+  } as any);
+
+  const { error } = await supabase.storage
+    .from(HERO_BANNERS_BUCKET)
+    .upload(filePath, formData, { contentType, upsert: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return filePath;
+}
+
+/**
+ * Creates a new hero slide.
+ */
+export async function createHeroSlide(input: {
+  imagePath: string;
+  backgroundColor: string;
+  title: string | null;
+  subtitle: string | null;
+  linkUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}): Promise<HeroSlide> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('hero_slides')
+    .insert({
+      image_path: input.imagePath,
+      background_color: input.backgroundColor,
+      title: input.title,
+      subtitle: input.subtitle,
+      link_url: input.linkUrl,
+      sort_order: input.sortOrder,
+      is_active: input.isActive,
+      created_by: user?.id || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as HeroSlide;
+}
+
+/**
+ * Updates an existing hero slide's content and visibility.
+ */
+export async function updateHeroSlide(
+  slideId: string,
+  updates: {
+    imagePath?: string;
+    backgroundColor?: string;
+    title?: string | null;
+    subtitle?: string | null;
+    linkUrl?: string | null;
+    sortOrder?: number;
+    isActive?: boolean;
+  }
+): Promise<void> {
+  const payload: Database['public']['Tables']['hero_slides']['Update'] = {};
+  if (updates.imagePath !== undefined) payload.image_path = updates.imagePath;
+  if (updates.backgroundColor !== undefined) payload.background_color = updates.backgroundColor;
+  if (updates.title !== undefined) payload.title = updates.title;
+  if (updates.subtitle !== undefined) payload.subtitle = updates.subtitle;
+  if (updates.linkUrl !== undefined) payload.link_url = updates.linkUrl;
+  if (updates.sortOrder !== undefined) payload.sort_order = updates.sortOrder;
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+
+  const { error } = await supabase
+    .from('hero_slides')
+    .update(payload)
+    .eq('id', slideId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Permanently deletes a hero slide.
+ */
+export async function deleteHeroSlide(slideId: string): Promise<void> {
+  const { error } = await supabase
+    .from('hero_slides')
+    .delete()
+    .eq('id', slideId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Persists a new slide order after a drag-and-drop reorder in the dashboard.
+ * Each entry's `sort_order` is set to its index in the provided array.
+ */
+export async function reorderHeroSlides(orderedSlideIds: string[]): Promise<void> {
+  await Promise.all(
+    orderedSlideIds.map((id, index) =>
+      supabase.from('hero_slides').update({ sort_order: index }).eq('id', id)
+    )
+  ).then((results) => {
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      throw new Error(failed.error.message);
+    }
+  });
 }

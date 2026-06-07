@@ -20,7 +20,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { queryClient } from '@/lib/queryClient';
 import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/services/auth.service';
-import { configureNotifications } from '@/lib/sound';
+import { addNotificationResponseListener, configureNotifications } from '@/lib/sound';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -67,6 +67,23 @@ function useProtectedRoute(): void {
   }, [session, initializing, segments, router]);
 }
 
+/**
+ * Routes a tapped points/result notification straight to its Match Details
+ * screen (foreground, background, or cold start). No-op in Expo Go / web.
+ */
+function useNotificationDeepLink(): void {
+  const router = useRouter();
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    void addNotificationResponseListener((matchId) => {
+      router.push(`/match/${matchId}`);
+    }).then((fn) => {
+      cleanup = fn;
+    });
+    return () => cleanup?.();
+  }, [router]);
+}
+
 function RootNavigator(): React.JSX.Element {
   const { width } = useWindowDimensions();
   const initialize = useAuthStore((s) => s.initialize);
@@ -78,6 +95,7 @@ function RootNavigator(): React.JSX.Element {
   }, [initialize]);
 
   useOAuthDeepLink();
+  useNotificationDeepLink();
   useProtectedRoute();
 
   if (initializing) {
@@ -121,6 +139,16 @@ function RootNavigator(): React.JSX.Element {
         }}
       />
       <Stack.Screen
+        name="user-performance"
+        options={{
+          headerShown: true,
+          title: 'My Performance',
+          headerStyle: { backgroundColor: Theme.colors.bgSurface2 },
+          headerTintColor: Theme.colors.textPrimary,
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen
         name="notifications"
         options={{
           headerShown: true,
@@ -138,7 +166,8 @@ function RootNavigator(): React.JSX.Element {
       <View style={{ flex: 1, backgroundColor: '#0A0C16', justifyContent: 'center', alignItems: 'center' }}>
         <View 
           style={{ 
-            width: 480, 
+            width: Math.min(480, width),
+            maxWidth: '100%',
             height: '100%', 
             backgroundColor: Theme.colors.bgDeep,
             // Standard shadow styling

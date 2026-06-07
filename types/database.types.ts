@@ -14,6 +14,153 @@ export type Database = {
   }
   public: {
     Tables: {
+      hero_slides: {
+        Row: {
+          background_color: string
+          created_at: string
+          created_by: string | null
+          id: string
+          image_path: string
+          is_active: boolean
+          link_url: string | null
+          sort_order: number
+          subtitle: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          background_color?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_path: string
+          is_active?: boolean
+          link_url?: string | null
+          sort_order?: number
+          subtitle?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          background_color?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_path?: string
+          is_active?: boolean
+          link_url?: string | null
+          sort_order?: number
+          subtitle?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hero_slides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "hero_slides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leaderboard_state: {
+        Row: {
+          id: boolean
+          refreshed_at: string | null
+          refreshed_for_day: string | null
+          version: number
+        }
+        Insert: {
+          id?: boolean
+          refreshed_at?: string | null
+          refreshed_for_day?: string | null
+          version?: number
+        }
+        Update: {
+          id?: boolean
+          refreshed_at?: string | null
+          refreshed_for_day?: string | null
+          version?: number
+        }
+        Relationships: []
+      }
+      matches: {
+        Row: {
+          away_score: number | null
+          away_team_id: string | null
+          created_at: string
+          external_id: number
+          group_name: string | null
+          home_score: number | null
+          home_team_id: string | null
+          id: string
+          is_placeholder: boolean
+          kickoff_time: string
+          last_synced_at: string | null
+          points_multiplier: number
+          stage: Database["public"]["Enums"]["match_stage"]
+          status: Database["public"]["Enums"]["match_status"]
+          venue: string | null
+        }
+        Insert: {
+          away_score?: number | null
+          away_team_id?: string | null
+          created_at?: string
+          external_id: number
+          group_name?: string | null
+          home_score?: number | null
+          home_team_id?: string | null
+          id?: string
+          is_placeholder?: boolean
+          kickoff_time: string
+          last_synced_at?: string | null
+          points_multiplier?: number
+          stage?: Database["public"]["Enums"]["match_stage"]
+          status?: Database["public"]["Enums"]["match_status"]
+          venue?: string | null
+        }
+        Update: {
+          away_score?: number | null
+          away_team_id?: string | null
+          created_at?: string
+          external_id?: number
+          group_name?: string | null
+          home_score?: number | null
+          home_team_id?: string | null
+          id?: string
+          is_placeholder?: boolean
+          kickoff_time?: string
+          last_synced_at?: string | null
+          points_multiplier?: number
+          stage?: Database["public"]["Enums"]["match_stage"]
+          status?: Database["public"]["Enums"]["match_status"]
+          venue?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_away_team_id_fkey"
+            columns: ["away_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_home_team_id_fkey"
+            columns: ["home_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -45,91 +192,19 @@ export type Database = {
           type?: string
           user_id?: string
         }
-        Relationships: []
-      }
-      leaderboard_state: {
-        Row: {
-          id: boolean
-          refreshed_at: string | null
-          refreshed_for_day: string | null
-          version: number
-        }
-        Insert: {
-          id?: boolean
-          refreshed_at?: string | null
-          refreshed_for_day?: string | null
-          version?: number
-        }
-        Update: {
-          id?: boolean
-          refreshed_at?: string | null
-          refreshed_for_day?: string | null
-          version?: number
-        }
-        Relationships: []
-      }
-      matches: {
-        Row: {
-          away_score: number | null
-          away_team_id: string
-          created_at: string
-          external_id: number
-          group_name: string | null
-          home_score: number | null
-          home_team_id: string
-          id: string
-          kickoff_time: string
-          last_synced_at: string | null
-          points_multiplier: number
-          stage: Database["public"]["Enums"]["match_stage"]
-          status: Database["public"]["Enums"]["match_status"]
-          venue: string | null
-        }
-        Insert: {
-          away_score?: number | null
-          away_team_id: string
-          created_at?: string
-          external_id: number
-          group_name?: string | null
-          home_score?: number | null
-          home_team_id: string
-          id?: string
-          kickoff_time: string
-          last_synced_at?: string | null
-          points_multiplier?: number
-          stage?: Database["public"]["Enums"]["match_stage"]
-          status?: Database["public"]["Enums"]["match_status"]
-          venue?: string | null
-        }
-        Update: {
-          away_score?: number | null
-          away_team_id?: string
-          created_at?: string
-          external_id?: number
-          group_name?: string | null
-          home_score?: number | null
-          home_team_id?: string
-          id?: string
-          kickoff_time?: string
-          last_synced_at?: string | null
-          points_multiplier?: number
-          stage?: Database["public"]["Enums"]["match_stage"]
-          status?: Database["public"]["Enums"]["match_status"]
-          venue?: string | null
-        }
         Relationships: [
           {
-            foreignKeyName: "matches_away_team_id_fkey"
-            columns: ["away_team_id"]
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
           },
           {
-            foreignKeyName: "matches_home_team_id_fkey"
-            columns: ["home_team_id"]
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "teams"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -396,6 +471,42 @@ export type Database = {
           },
         ]
       }
+      user_rank_snapshot: {
+        Row: {
+          rank: number | null
+          total_points: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          rank?: number | null
+          total_points?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          rank?: number | null
+          total_points?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_rank_snapshot_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "user_rank_snapshot_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           avatar_url: string | null
@@ -451,24 +562,82 @@ export type Database = {
           predictions_made: number | null
           predictions_scored: number | null
           rank: number | null
-          supported_teams: string[] | null
           total_points: number | null
           user_id: string | null
+          username: string | null
         }
         Relationships: []
       }
+      user_performance: {
+        Row: {
+          correct_predictions: number | null
+          exact_predictions: number | null
+          matches_participated: number | null
+          total_points: number | null
+          total_predictions: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      admin_broadcast: {
+        Args: { p_body: string; p_title: string; p_type: string }
+        Returns: number
+      }
       admin_delete_user: { Args: { p_user_id: string }; Returns: undefined }
+      admin_get_question_submissions: {
+        Args: { p_question_id: string }
+        Returns: {
+          avatar_url: string
+          created_at: string
+          display_name: string
+          email: string
+          id: string
+          prediction: string
+          status: string
+          user_id: string
+        }[]
+      }
       admin_restore_user: { Args: { p_user_id: string }; Returns: undefined }
-      admin_soft_delete_user: { Args: { p_user_id: string }; Returns: undefined }
+      admin_set_user_role: {
+        Args: { p_role: string; p_user_id: string }
+        Returns: undefined
+      }
+      admin_soft_delete_user: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      finalize_leaderboard: { Args: { p_day?: string }; Returns: undefined }
+      get_user_streak: { Args: { p_user_id: string }; Returns: Json }
+      is_active_user: { Args: { p_user_id: string }; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
       lock_predictions_at_kickoff: { Args: never; Returns: undefined }
+      match_day: { Args: { p_kickoff: string }; Returns: string }
+      maybe_finalize_day: { Args: { p_day: string }; Returns: undefined }
       refresh_leaderboard: { Args: never; Returns: undefined }
       resolve_prediction_question: {
         Args: { p_correct_answer: string; p_question_id: string }
         Returns: undefined
       }
+      score_match: { Args: { p_match_id: string }; Returns: number }
+      sync_matches: { Args: { p_matches: Json }; Returns: number }
+      tournament_tz: { Args: never; Returns: string }
       update_username: { Args: { p_username: string }; Returns: undefined }
     }
     Enums: {

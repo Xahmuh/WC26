@@ -14,6 +14,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Image, Platform, Pressable, Text, View } from 'react-native';
 
 import Theme from '@/constants/theme/design-system';
+import { Icon } from '@/components/ui/Icon';
 import { useResponsive } from '@/lib/responsive';
 import type { LeaderboardEntry } from '@/types';
 
@@ -124,12 +125,21 @@ export function PodiumCard({
           </View>
         </View>
 
-        {/* Rank label "#n" */}
+        {/* Rank label "#n" + trend */}
         <View
           style={{ backgroundColor: tier.color }}
-          className="-mt-2.5 rounded-full border-2 border-bgDeep px-2 py-0.5"
+          className="-mt-2.5 flex-row items-center gap-0.5 rounded-full border-2 border-bgDeep px-2 py-0.5"
         >
           <Text className="text-[11px] font-black text-bgDeep">#{place}</Text>
+          {entry.previous_rank !== undefined && (
+            entry.previous_rank > entry.rank ? (
+              <Icon name="trendingUp" size={10} color={Theme.colors.accentDark} />
+            ) : entry.previous_rank < entry.rank ? (
+              <Icon name="trendingDown" size={10} color={Theme.colors.accentDark} />
+            ) : (
+              <Icon name="minus" size={10} color={Theme.colors.accentDark} />
+            )
+          )}
         </View>
 
         {/* Display name */}

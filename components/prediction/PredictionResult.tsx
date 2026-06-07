@@ -93,7 +93,7 @@ export function PredictionResult({
       {topScorer && (
         <View className="mt-4 pt-4 border-t border-bgBorder">
           <Text className="text-xs font-semibold text-textSecondary uppercase tracking-wide mb-3">
-            Match MVP 🏆
+            Match MVP <Icon name="trophy" size={12} color={Theme.colors.textSecondary} />
           </Text>
           <View className="flex-row items-center justify-between rounded-xl bg-bgSurface p-3">
             <View className="flex-row items-center gap-3">

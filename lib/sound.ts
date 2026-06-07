@@ -52,16 +52,57 @@ export async function configureNotifications(): Promise<void> {
   }
 }
 
-export async function playNotificationSound(title: string, body?: string): Promise<void> {
+export async function playNotificationSound(
+  title: string,
+  body?: string,
+  data?: Record<string, unknown>
+): Promise<void> {
   if (Platform.OS === 'web') return;
   const Notifications = await getNotifications();
   if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
-      content: { title, body: body ?? undefined, sound: 'default' },
+      // `data` rides along so a tapped notification can deep-link (e.g. match_id).
+      content: { title, body: body ?? undefined, sound: 'default', data: data ?? {} },
       trigger: null,
     });
   } catch {
     // no-op
   }
+}
+
+/**
+ * Registers a handler for when the user TAPS a notification (foreground,
+ * background, or cold-start launch). Calls `onMatch(matchId)` when the payload
+ * carries a `match_id`. No-op on web / in Expo Go. Returns an unsubscribe fn.
+ */
+export async function addNotificationResponseListener(
+  onMatch: (matchId: string) => void
+): Promise<() => void> {
+  if (Platform.OS === 'web') return () => {};
+  const Notifications = await getNotifications();
+  if (!Notifications) return () => {};
+
+  const extractMatchId = (data: unknown): string | null => {
+    if (data && typeof data === 'object' && 'match_id' in data) {
+      const v = (data as Record<string, unknown>).match_id;
+      return typeof v === 'string' ? v : null;
+    }
+    return null;
+  };
+
+  try {
+    // Cold start: the app was launched by tapping a notification.
+    const last = await Notifications.getLastNotificationResponseAsync();
+    const coldId = extractMatchId(last?.notification.request.content.data);
+    if (coldId) onMatch(coldId);
+  } catch {
+    // no-op
+  }
+
+  const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+    const mid = extractMatchId(resp.notification.request.content.data);
+    if (mid) onMatch(mid);
+  });
+  return () => sub.remove();
 }

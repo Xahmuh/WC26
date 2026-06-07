@@ -1,10 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { View, Image, Animated, Platform, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 export default function CustomSplashScreen(): React.JSX.Element {
   const router = useRouter();
+
+  const handleGo = useCallback(() => {
+    router.replace('/(auth)/login');
+  }, [router]);
   
   // Animated values for button pulse and concentric ripples
   const scale = useRef(new Animated.Value(1)).current;
@@ -162,7 +166,7 @@ export default function CustomSplashScreen(): React.JSX.Element {
             }}
           >
             <Pressable
-              onPress={() => router.push('/(auth)/login')}
+              onPress={handleGo}
               className="w-20 h-20 rounded-full items-center justify-center shadow-lg active:opacity-80"
               style={{ elevation: 5, backgroundColor: '#C9DF6A' }}
             >

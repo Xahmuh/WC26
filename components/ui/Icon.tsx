@@ -65,9 +65,53 @@ const GLYPHS = {
   minus: 'remove',
   info: 'information-circle-outline',
   warning: 'alert-circle-outline',
+  // result / status markers (inline ✓ / ✗ replacements)
+  checkCircle: 'checkmark-circle',
+  closeCircle: 'close-circle',
+  // actions
+  trash: 'trash-outline',
+  unlock: 'lock-open',
+  tools: 'construct-outline',
+  // domain extras (emoji replacements)
+  football: 'football',
+  snowflake: 'snow',
+  barChart: 'bar-chart',
+  zap: 'flash',
+  // password visibility toggle
+  eye: 'eye-outline',
+  eyeOff: 'eye-off-outline',
 } as const satisfies Record<string, IoniconName>;
 
 export type IconName = keyof typeof GLYPHS;
+
+/**
+ * Canonical emoji → semantic icon map. SINGLE SOURCE OF TRUTH for the
+ * emoji-replacement pass: screens reference these keys (e.g. EMOJI_ICON['🏆'])
+ * instead of hardcoding glyphs, so every replaced emoji stays consistent and
+ * any future change is made here only. Adding/replacing an emoji = edit here.
+ */
+export const EMOJI_ICON = {
+  '🏆': 'trophy',
+  '📈': 'trendingUp',
+  '🎯': 'target',
+  '⚽': 'football',
+  '🔔': 'bell',
+  '⭐': 'star',
+  '🔥': 'flame',
+  '❄️': 'snowflake',
+  '📊': 'barChart',
+  '⚡': 'zap',
+  '🚫': 'ban',
+  '⚠️': 'warning',
+  '🛠️': 'tools',
+  '🗓️': 'calendar',
+  '🔒': 'lock',
+  '🔓': 'unlock',
+  '✏️': 'edit',
+  '🗑️': 'trash',
+  '✓': 'checkCircle',
+  '✗': 'closeCircle',
+} as const satisfies Record<string, IconName>;
 
 export interface IconProps {
   name: IconName;

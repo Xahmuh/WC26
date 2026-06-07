@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 
 import Theme from '@/constants/theme/design-system';
+import { Container } from '@/components/ui/Container';
 import { MatchCard } from '@/components/match/MatchCard';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState, ErrorState } from '@/components/ui/States';
@@ -69,7 +70,8 @@ export default function MyPredictionsScreen(): React.JSX.Element {
           headerTintColor: Theme.colors.textPrimary,
         }}
       />
-      <ScrollView contentContainerClassName="px-6 pb-10 pt-4 gap-4">
+      <ScrollView contentContainerClassName="pb-10 pt-4">
+        <Container nested className="px-6 gap-4">
         {/* Custom Tabs */}
         <View className="flex-row rounded-lg bg-bgSurface3 p-1">
           <Pressable
@@ -102,7 +104,7 @@ export default function MyPredictionsScreen(): React.JSX.Element {
           </Pressable>
         </View>
 
-        <Text className="text-xs text-textSecondary text-center mb-2">
+        <Text className="text-xs text-textSecondary text-center mt-4 mb-2">
           {activeTab === 'UPCOMING'
             ? 'These are your upcoming predictions.'
             : 'Your past predictions and points scored.'}
@@ -136,6 +138,7 @@ export default function MyPredictionsScreen(): React.JSX.Element {
             );
           })
         )}
+        </Container>
       </ScrollView>
     </SafeAreaView>
   );

@@ -4,18 +4,14 @@
     "name": "WC26",
     "slug": "wc26",
     "version": "1.0.0",
-
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-
     "icon": "./assets/icon.png",
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.wc26.app",
       "icon": "./assets/icon.png"
     },
-
     "android": {
       "package": "org.wc26.app",
       "adaptiveIcon": {
@@ -23,13 +19,11 @@
         "backgroundColor": "#0D0F0E"
       }
     },
-
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       "expo-asset",
@@ -47,13 +41,12 @@
       ],
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-video"
     ],
-
     "experiments": {
       "typedRoutes": true
     },
-
     "extra": {
       "supabaseUrl": "https://sjqhsmyqlgjbimwkruqd.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcWhzbXlxbGdqYmltd2tydXFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MDYwNTIsImV4cCI6MjA5NjE4MjA1Mn0.PltPN4xYQR3vu1H6XaXw4FsmNIvLEFRmYu-WuhZ7I2o",
@@ -62,7 +55,6 @@
         "projectId": "0b68543a-48e5-42fd-a63f-94845ef351c4"
       }
     },
-
     "owner": "xahmuh"
   }
 }
