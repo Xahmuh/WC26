@@ -13,6 +13,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
+import { useResponsive } from '@/lib/responsive';
 import { useTeams } from '@/hooks/useTeams';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { useMyPoints } from '@/hooks/usePoints';
@@ -23,6 +24,7 @@ import { supabase } from '@/lib/supabase';
 export default function ProfileScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { scale: rs, isSmall } = useResponsive();
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
   const email = useAuthStore((s) => s.session?.user.email);
@@ -199,130 +201,120 @@ export default function ProfileScreen(): React.JSX.Element {
           <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
         </View>
 
-        {/* Avatar Card */}
+        {/* Avatar Card — centered, full-width bands so nothing can overflow */}
         <LinearGradient
           colors={['#1C1C1E', '#151516', '#0D0D0D']}
-          style={{ borderRadius: 20, borderWidth: 1, borderColor: '#2A2A2A' }}
+          style={{ borderRadius: 20, borderWidth: 1, borderColor: Theme.colors.bgBorder, overflow: 'hidden' }}
           className="shadow-lg shadow-black/80"
         >
-          <View style={{ padding: 24 }}>
-            <View className="flex-row items-center gap-5">
-              {/* Avatar */}
-              <Pressable onPress={handleChangeAvatar} disabled={uploadingAvatar} className="relative active:opacity-90">
-                <View style={{ borderRadius: 48, padding: 2, backgroundColor: 'rgba(200,255,0,0.15)' }}>
-                  <View style={{ borderRadius: 46, backgroundColor: '#111111' }}>
-                    <Image
-                      source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
-                      style={{ width: 88, height: 88, borderRadius: 44 }}
-                    />
-                  </View>
-                </View>
-                {uploadingAvatar ? (
-                  <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
-                    <ActivityIndicator size="small" color={Theme.colors.accent} />
-                  </View>
-                ) : (
-                  <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: Theme.colors.accent, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#151516' }}>
-                    <Icon name="edit" size={12} color={Theme.colors.accentDark} />
-                  </View>
-                )}
-              </Pressable>
-
-              {/* Info */}
-              <View className="flex-1 min-w-0">
-                <View className="flex-row items-center gap-2">
-                  {editingName ? (
-                    <TextInput
-                      value={editNameValue}
-                      onChangeText={setEditNameValue}
-                      className="flex-1 text-[22px] font-bold text-white tracking-tight pb-0.5"
-                      style={{ borderBottomWidth: 1.5, borderBottomColor: Theme.colors.accent }}
-                      placeholder="Your name"
-                      placeholderTextColor="#666"
-                      autoFocus
-                    />
-                  ) : (
-                    <Text
-                      numberOfLines={1}
-                      className="flex-1 text-[22px] font-bold text-white tracking-tight"
-                    >
-                      {(profile?.username || profile?.display_name) ?? 'Player'}
-                    </Text>
-                  )}
-                  {editingName ? (
-                    <View className="flex-row gap-1 shrink-0">
-                      <Pressable onPress={handleSaveName} disabled={savingName || !editNameValue.trim()} className="p-1.5 active:opacity-75">
-                        {savingName ? <ActivityIndicator size="small" color={Theme.colors.accent} /> : <Icon name="check" size={18} color={Theme.colors.accent} />}
-                      </Pressable>
-                      <Pressable onPress={() => setEditingName(false)} className="p-1.5 active:opacity-75">
-                        <Icon name="close" size={18} color="#888" />
-                      </Pressable>
+          <View style={{ padding: rs(isSmall ? 18 : 22), alignItems: 'center' }}>
+            {/* Avatar */}
+            <Pressable onPress={handleChangeAvatar} disabled={uploadingAvatar} className="active:opacity-90">
+              {(() => {
+                const a = rs(isSmall ? 84 : 92);
+                const badge = rs(28);
+                return (
+                  <View style={{ borderRadius: a / 2 + 5, padding: 2.5, backgroundColor: Theme.colors.accentDim }}>
+                    <View style={{ borderRadius: a / 2 + 2, padding: 2, backgroundColor: '#111111' }}>
+                      <Image
+                        source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
+                        style={{ width: a, height: a, borderRadius: a / 2 }}
+                      />
                     </View>
-                  ) : (
-                    <View className="flex-row items-center gap-2 shrink-0">
-                      <View
-                        style={
-                          isAdmin
-                            ? { backgroundColor: 'rgba(224,48,48,0.12)', borderColor: '#E03030', borderWidth: 1 }
-                            : { backgroundColor: 'rgba(200,255,0,0.12)', borderColor: Theme.colors.accent, borderWidth: 1 }
-                        }
-                        className="rounded-full px-2.5 py-0.5"
-                      >
-                        <Text
-                          className="text-[9px] font-extrabold uppercase tracking-wider"
-                          style={{ color: isAdmin ? '#E03030' : Theme.colors.accent }}
-                        >
-                          {isAdmin ? 'Admin' : 'User'}
-                        </Text>
+                    {uploadingAvatar ? (
+                      <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.75)', width: badge, height: badge, borderRadius: badge / 2, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#151516' }}>
+                        <ActivityIndicator size="small" color={Theme.colors.accent} />
                       </View>
-                      <Pressable onPress={() => { setEditNameValue(profile?.username || profile?.display_name || ''); setEditingName(true); }} className="p-1 active:opacity-75">
-                        <Icon name="edit" size={14} color="#888" />
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
-                {email && <Text numberOfLines={1} className="text-[12px] font-medium text-[#888888] mt-1 tracking-wide">{email}</Text>}
+                    ) : (
+                      <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: Theme.colors.accent, width: badge, height: badge, borderRadius: badge / 2, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#151516' }}>
+                        <Icon name="edit" size={rs(13)} color={Theme.colors.accentDark} />
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+            </Pressable>
 
-                {/* Mini Stats Row */}
-                <View className="flex-row items-center gap-5 mt-4">
-                  <View className="items-center">
-                    <Text className="text-[16px] font-bold text-white">{profile?.total_points ?? 0}</Text>
-                    <Text className="text-[9px] font-semibold text-[#888888] uppercase tracking-wider mt-0.5">Points</Text>
-                  </View>
-                  <View style={{ width: 1, height: 28, backgroundColor: '#2A2A2A' }} />
-                  <View className="items-center">
-                    <Text className="text-[16px] font-bold text-white">{rank ?? '—'}</Text>
-                    <Text className="text-[9px] font-semibold text-[#888888] uppercase tracking-wider mt-0.5">Rank</Text>
-                  </View>
-                  <View style={{ width: 1, height: 28, backgroundColor: '#2A2A2A' }} />
-                  <View className="items-center">
-                    <Text className="text-[16px] font-bold text-white">{predictionsMade}</Text>
-                    <Text className="text-[9px] font-semibold text-[#888888] uppercase tracking-wider mt-0.5">Preds</Text>
-                  </View>
-                </View>
-
-                {/* Supported Teams */}
-                {profile?.supported_teams && profile.supported_teams.length > 0 && (
-                  <View className="flex-row gap-2 mt-4 flex-wrap">
-                    {profile.supported_teams.map((teamId) => {
-                      const team = teams.find((t) => t.id === teamId);
-                      if (!team) return null;
-                      return (
-                        <View
-                          key={teamId}
-                          style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                        >
-                          <TeamFlag team={team} size={14} fixed />
-                          <Text className="text-[10px] font-bold text-[#BBBBBB] uppercase tracking-wider">
-                            {team.code ?? team.short_name ?? team.name}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
+            {/* Name + inline edit */}
+            {editingName ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', marginTop: 14 }}>
+                <TextInput
+                  value={editNameValue}
+                  onChangeText={setEditNameValue}
+                  className="text-[20px] font-bold text-white tracking-tight pb-0.5"
+                  style={{ flexShrink: 1, minWidth: 80, maxWidth: 220, textAlign: 'center', borderBottomWidth: 1.5, borderBottomColor: Theme.colors.accent }}
+                  placeholder="Your name"
+                  placeholderTextColor="#666"
+                  autoFocus
+                />
+                <Pressable onPress={handleSaveName} disabled={savingName || !editNameValue.trim()} className="p-1.5 active:opacity-75 shrink-0">
+                  {savingName ? <ActivityIndicator size="small" color={Theme.colors.accent} /> : <Icon name="check" size={18} color={Theme.colors.accent} />}
+                </Pressable>
+                <Pressable onPress={() => setEditingName(false)} className="p-1.5 active:opacity-75 shrink-0">
+                  <Icon name="close" size={18} color="#888" />
+                </Pressable>
               </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, maxWidth: '100%', marginTop: 14, paddingHorizontal: 8 }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: rs(21), fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.5 }}>
+                  {(profile?.username || profile?.display_name) ?? 'Player'}
+                </Text>
+                <Pressable onPress={() => { setEditNameValue(profile?.username || profile?.display_name || ''); setEditingName(true); }} className="p-1 active:opacity-75 shrink-0">
+                  <Icon name="edit" size={15} color="#888" />
+                </Pressable>
+              </View>
+            )}
+
+            {/* Role badge */}
+            <View
+              style={
+                isAdmin
+                  ? { backgroundColor: 'rgba(224,48,48,0.12)', borderColor: '#E03030', borderWidth: 1, marginTop: 8 }
+                  : { backgroundColor: Theme.colors.accentDim, borderColor: Theme.colors.accent, borderWidth: 1, marginTop: 8 }
+              }
+              className="rounded-full px-3 py-0.5"
+            >
+              <Text className="text-[9px] font-extrabold uppercase tracking-widest" style={{ color: isAdmin ? '#E03030' : Theme.colors.accent }}>
+                {isAdmin ? 'Admin' : 'User'}
+              </Text>
             </View>
+
+            {/* Email */}
+            {email && (
+              <Text numberOfLines={1} className="text-[12px] font-medium text-[#888888] mt-2 tracking-wide" style={{ maxWidth: '100%', paddingHorizontal: 8 }}>
+                {email}
+              </Text>
+            )}
+
+            {/* Stats — full-width, equal flex columns (cannot overflow) */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: Theme.colors.bgBorder }}>
+              <MiniStat value={profile?.total_points ?? 0} label="Points" />
+              <View style={{ width: 1, height: 30, backgroundColor: Theme.colors.bgBorder }} />
+              <MiniStat value={rank ?? '—'} label="Rank" />
+              <View style={{ width: 1, height: 30, backgroundColor: Theme.colors.bgBorder }} />
+              <MiniStat value={predictionsMade} label="Preds" />
+            </View>
+
+            {/* Supported Teams */}
+            {profile?.supported_teams && profile.supported_teams.length > 0 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 16, alignSelf: 'stretch' }}>
+                {profile.supported_teams.map((teamId) => {
+                  const team = teams.find((t) => t.id === teamId);
+                  if (!team) return null;
+                  return (
+                    <View
+                      key={teamId}
+                      style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' }}
+                    >
+                      <TeamFlag team={team} size={14} fixed />
+                      <Text numberOfLines={1} style={{ flexShrink: 1 }} className="text-[10px] font-bold text-[#BBBBBB] uppercase tracking-wider">
+                        {team.code ?? team.short_name ?? team.name}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </LinearGradient>
 
@@ -332,11 +324,6 @@ export default function ProfileScreen(): React.JSX.Element {
             label="Edit Supported Teams"
             icon="shield"
             onPress={() => setShowPicker(true)}
-          />
-          <ProfileOption
-            label="Mini-Leagues / Groups"
-            icon="trophy"
-            onPress={() => router.push('/groups' as any)}
           />
           <ProfileOption
             label="Notifications"
@@ -459,6 +446,17 @@ export default function ProfileScreen(): React.JSX.Element {
         </Pressable>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function MiniStat({ value, label }: { value: string | number; label: string }): React.JSX.Element {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4 }}>
+      <Text numberOfLines={1} adjustsFontSizeToFit className="text-[17px] font-bold text-white">
+        {value}
+      </Text>
+      <Text className="text-[9px] font-semibold text-[#888888] uppercase tracking-wider mt-1">{label}</Text>
+    </View>
   );
 }
 

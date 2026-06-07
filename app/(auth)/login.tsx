@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -71,11 +72,11 @@ export default function LoginScreen(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-bgDeep">
+    <SafeAreaView style={{ flex: 1, backgroundColor: Theme.colors.bgDeep }}>
       <LinearGradient
         colors={['#1F1F1F', '#141414', '#0D0D0D']}
         locations={[0, 0.4, 1]}
-        className="flex-1"
+        style={{ flex: 1 }}
       >
         {/* Tactical Pitch Grid Background (Glow splashes removed as requested) */}
         <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -114,9 +115,22 @@ export default function LoginScreen(): React.JSX.Element {
 
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1"
+          style={{ flex: 1 }}
         >
-          <View className="flex-1 justify-between px-6 py-4">
+          {/* Scrollable so the tall content (logo + form + Google + quote +
+              footer) never overlaps on short screens. flexGrow:1 keeps the
+              space-between layout on tall screens, scrolls on short ones. */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: 'space-between',
+              paddingHorizontal: 24,
+              paddingVertical: 16,
+            }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Top Section: Logo & Titles */}
             <View className="items-center relative w-full">
               {/* Back Button */}
@@ -250,7 +264,7 @@ export default function LoginScreen(): React.JSX.Element {
                 </Text>
               </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
     </SafeAreaView>

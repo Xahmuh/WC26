@@ -72,11 +72,11 @@ export default function RegisterScreen(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-bgDeep">
+    <SafeAreaView style={{ flex: 1, backgroundColor: Theme.colors.bgDeep }}>
       <LinearGradient
         colors={['#1F1F1F', '#141414', '#0D0D0D']}
         locations={[0, 0.4, 1]}
-        className="flex-1"
+        style={{ flex: 1 }}
       >
         {/* Tactical Pitch Grid Background (Glow splashes removed as requested) */}
         <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -115,7 +115,7 @@ export default function RegisterScreen(): React.JSX.Element {
 
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1"
+          style={{ flex: 1 }}
         >
           <View className="flex-1 justify-between px-6 py-4">
             {/* Top Section: Logo & Titles */}

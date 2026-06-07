@@ -1,10 +1,17 @@
 import { Platform } from 'react-native';
+import { isRunningInExpoGo } from 'expo';
 
 let configured = false;
 type NotificationsModule = typeof import('expo-notifications');
 
 let _Notifications: NotificationsModule | null = null;
 async function getNotifications(): Promise<NotificationsModule | null> {
+  // Push notifications were removed from Expo Go in SDK 53 — on Android, merely
+  // importing expo-notifications runs an auto-registration side effect that
+  // THROWS in Expo Go, which would crash the app on boot. Skip the import
+  // entirely there (notifications become a no-op); a dev/production build still
+  // loads the module normally.
+  if (isRunningInExpoGo()) return null;
   if (!_Notifications) {
     try {
       _Notifications = await import('expo-notifications');

@@ -128,26 +128,6 @@ export interface UserQuestionPrediction {
   status?: 'pending' | 'approved' | 'rejected';
 }
 
-// Competition Groups (Mini-Leagues)
-export interface CompetitionGroup {
-  id: string;
-  name: string;
-  code: string;
-  created_by: string | null;
-  created_at: string;
-}
-
-export interface GroupMember {
-  group_id: string;
-  user_id: string;
-  joined_at: string;
-  display_name: string | null;
-  username: string | null;
-  avatar_url: string | null;
-  total_points: number;
-  rank?: number;
-}
-
 // ============================================================================
 // Supabase row shapes + Database generic for a typed client.
 // Only the columns the mobile app touches are modelled here.

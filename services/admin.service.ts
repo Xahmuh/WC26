@@ -170,7 +170,11 @@ export async function submitQuestionPrediction(
  * Fetches the user's answers to all custom questions, including audit status.
  */
 export async function getUserQuestionPredictions(): Promise<Map<string, { prediction: string; status: 'pending' | 'approved' | 'rejected' }>> {
-  const { data: { user } } = await supabase.auth.getUser();
+  // Use the locally-stored session (no network round-trip). getUser() hits
+  // /auth/v1/user and logs a scary 403 in the console when the stored token is
+  // stale; getSession() reads from storage and RLS still scopes the rows below.
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return new Map();
 
   const { data, error } = await supabase

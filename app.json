@@ -1,11 +1,11 @@
 {
   "expo": {
+    "scheme": "wc26",
     "name": "WC26",
     "slug": "wc26",
     "version": "1.0.0",
 
     "orientation": "portrait",
-    "scheme": "wc26",
     "userInterfaceStyle": "automatic",
 
     "icon": "./assets/icon.png",
