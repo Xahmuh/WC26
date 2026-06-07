@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
+import { RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput, Image, Modal, StyleSheet } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,6 +27,7 @@ import {
   useSubmitQuestionPrediction,
 } from '@/hooks/usePredictionQuestions';
 import { useCountdown } from '@/hooks/useCountdown';
+import { PredictionCarousel } from '@/components/predictions/PredictionCarousel';
 import { isToday } from '@/lib/dates';
 import { useResponsive } from '@/lib/responsive';
 import { useAuthStore } from '@/stores/auth.store';
@@ -48,6 +49,7 @@ export default function HomeScreen(): React.JSX.Element {
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
 
   const [savingTeams, setSavingTeams] = useState(false);
+  const [openQuestion, setOpenQuestion] = useState<PredictionQuestion | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; rank?: number } | null>(null);
   const { isVisible: isVideoPopupVisible, dismiss: dismissVideoPopup } = useVideoPopup();
 
@@ -179,8 +181,33 @@ export default function HomeScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
+      {/* Frozen Header */}
+      <View className="px-6 pt-6 pb-2 flex-row items-center justify-between bg-bgDeep z-10">
+        {/* Profile Avatar */}
+        <Pressable onPress={() => router.push('/profile')} className="w-10 h-10 rounded-full border border-bgBorder overflow-hidden active:opacity-80">
+          <Image
+            source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
+            style={{ width: '100%', height: '100%' }}
+          />
+        </Pressable>
+
+        {/* Center logo */}
+        <View className="flex-1 items-center px-4">
+          <Image
+            source={require('@/assets/icona.png')}
+            style={{ width: '100%', height: 85, maxWidth: 220 }}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Right icon */}
+        <View className="w-10 items-end">
+          <NotificationBell />
+        </View>
+      </View>
+
       <ScrollView
-        contentContainerClassName="px-6 pt-6 gap-6"
+        contentContainerClassName="px-6 pt-2 gap-6"
         contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
         refreshControl={
           <RefreshControl
@@ -192,29 +219,6 @@ export default function HomeScreen(): React.JSX.Element {
       >
         <Container nested>
         <View className="gap-6">
-        <View className="flex-row items-center justify-between pb-4">
-
-          {/* Profile Avatar */}
-          <Pressable onPress={() => router.push('/profile')} className="w-10 h-10 rounded-full border border-bgBorder overflow-hidden active:opacity-80">
-            <Image
-              source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
-              style={{ width: '100%', height: '100%' }}
-            />
-          </Pressable>
-
-          {/* Center logo */}
-          <Image
-            source={require('@/assets/icona.png')}
-            style={{ width: '60%', height: 50 }}
-            resizeMode="contain"
-          />
-
-          {/* Right icon */}
-          <View className="w-10 items-end">
-            <NotificationBell />
-          </View>
-
-        </View>
 
         {/* Hero Banner Slides */}
         <HeroCarousel />
@@ -237,6 +241,55 @@ export default function HomeScreen(): React.JSX.Element {
             onPress={() => router.push('/profile/predictions' as any)}
           />
         </View>
+
+        {/* Special Tournament Predictions (Admin Questions) */}
+        {questions.length > 0 && (
+          <View className="gap-3">
+            <View className="flex-row items-center gap-2.5">
+              <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
+              <Text className="text-lg font-semibold text-textPrimary">Tournament Predictions</Text>
+            </View>
+            <PredictionCarousel
+              questions={questions}
+              predictionRecords={userPreds}
+              onCardPress={(question) => setOpenQuestion(question)}
+            />
+          </View>
+        )}
+
+        <Modal
+          visible={openQuestion !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOpenQuestion(null)}
+        >
+          <Pressable
+            style={[StyleSheet.absoluteFill, { backgroundColor: Theme.colors.overlay }]}
+            onPress={() => setOpenQuestion(null)}
+          />
+          <View style={styles.modalCenter} pointerEvents="box-none">
+            <View style={{ width: '100%', maxWidth: 420 }}>
+              {openQuestion && (
+                <PredictionQuestionCard
+                  question={openQuestion}
+                  predictionRecord={userPreds.get(openQuestion.id)}
+                  onOptionSelect={(questionId, option) => {
+                    handleOptionSelect(questionId, option);
+                  }}
+                  isSubmitting={submitPredMutation.isPending && submitPredMutation.variables?.questionId === openQuestion.id}
+                  submittingOption={submitPredMutation.isPending && submitPredMutation.variables?.questionId === openQuestion.id ? submitPredMutation.variables?.prediction : undefined}
+                />
+              )}
+              <Pressable
+                onPress={() => setOpenQuestion(null)}
+                className="mt-3 self-center px-4 py-2 rounded-xl"
+                style={{ backgroundColor: Theme.colors.bgSurface3 }}
+              >
+                <Text className="text-textSecondary text-xs font-bold uppercase">Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
 
         {/* Today's matches */}
         <View className="gap-3">
@@ -329,36 +382,6 @@ export default function HomeScreen(): React.JSX.Element {
             </ScrollView>
           )}
         </View>
-
-          {/* Special Tournament Predictions (Admin Questions) */}
-          {questions.length > 0 && (
-            <View className="gap-3">
-              <View className="flex-row items-center gap-2.5">
-                <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
-                <Text className="text-lg font-semibold text-textPrimary">Tournament Predictions</Text>
-              </View>
-              <ScrollView
-                horizontal
-                nestedScrollEnabled
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={sliderCardWidth + SLIDER_GAP}
-                decelerationRate="fast"
-                contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
-              >
-                {questions.map((q) => (
-                  <View key={q.id} style={{ width: sliderCardWidth }}>
-                    <PredictionQuestionCard
-                      question={q}
-                      predictionRecord={userPreds.get(q.id)}
-                      onOptionSelect={handleOptionSelect}
-                      isSubmitting={submitPredMutation.isPending && submitPredMutation.variables?.questionId === q.id}
-                      submittingOption={submitPredMutation.isPending && submitPredMutation.variables?.questionId === q.id ? submitPredMutation.variables?.prediction : undefined}
-                    />
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          )}
         </View>
         </Container>
       </ScrollView>
@@ -385,6 +408,15 @@ export default function HomeScreen(): React.JSX.Element {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  modalCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+});
 
 interface StatTileProps {
   label: string;
@@ -449,88 +481,60 @@ function PredictionQuestionCard({
 
   return (
     <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
-      {/* Top row: points pill + a SINGLE status badge. Each side is one compact
-          chip, so the row can never overflow no matter how states evolve. */}
-      <View className="flex-row items-center justify-between gap-2">
-        <View className="flex-row items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 shrink-0">
-          <Icon name="trophy" size={12} color={Theme.colors.accentDark} />
-          <Text
-            className="text-[11px] font-extrabold uppercase tracking-wide"
-            style={{ color: Theme.colors.accentDark }}
-          >
-            {question.points} pts
-          </Text>
-        </View>
-
-        {isResolved ? (
-          <View className="flex-row items-center gap-1 rounded-full bg-successDim px-2.5 py-1 shrink-0">
-            <Icon name="checkCircle" size={11} color={Theme.colors.success} />
-            <Text className="text-[10px] text-success font-bold uppercase">Resolved</Text>
-          </View>
-        ) : isLocked ? (
-          <View className="flex-row items-center gap-1 rounded-full bg-bgSurface3 px-2.5 py-1 shrink-0">
-            <Icon name="lock" size={10} color={Theme.colors.textSecondary} />
-            <Text className="text-[10px] text-textSecondary font-bold uppercase">Locked</Text>
-          </View>
-        ) : (
-          <View className="flex-row items-center gap-1 rounded-full bg-accentDim px-2.5 py-1 border border-accentBorder shrink-0">
-            <Icon name="time" size={10} color={Theme.colors.accent} />
-            <Text className="text-[10px] text-accent font-bold uppercase">{countdownText}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Question */}
-      <Text className="text-base font-bold text-textPrimary leading-snug">{question.question_text}</Text>
-
-      {/* Your-answer audit status — on its OWN row so extra badges never crowd
-          the header. Shown only after the user has answered. */}
-      {predictionRecord && (
-        <View className="flex-row items-center gap-1.5 flex-wrap">
-          <View
-            className={`flex-row items-center gap-1 rounded-full px-2 py-0.5 ${
-              auditStatus === 'approved'
-                ? 'bg-successDim'
-                : auditStatus === 'rejected'
-                ? 'bg-liveDim'
-                : 'bg-bgSurface3'
-            }`}
-          >
-            <Icon
-              name={
+      <View className="flex-row items-start justify-between gap-2">
+        <Text
+          numberOfLines={1}
+          className="flex-1 text-xs text-textSecondary uppercase tracking-wider font-semibold"
+        >
+          <Icon name="trophy" size={12} color={Theme.colors.textSecondary} /> {question.points} PTS Question
+        </Text>
+        <View className="flex-row items-center justify-end gap-1.5 flex-wrap shrink-0" style={{ maxWidth: '58%' }}>
+          {predictionRecord && (
+            <View
+              className={`rounded px-1.5 py-0.5 ${
                 auditStatus === 'approved'
-                  ? 'checkCircle'
+                  ? 'bg-successDim'
                   : auditStatus === 'rejected'
-                  ? 'closeCircle'
-                  : 'time'
-              }
-              size={11}
-              color={
-                auditStatus === 'approved'
-                  ? Theme.colors.success
-                  : auditStatus === 'rejected'
-                  ? Theme.colors.live
-                  : Theme.colors.textSecondary
-              }
-            />
-            <Text
-              className={`text-[10px] font-bold uppercase ${
-                auditStatus === 'approved'
-                  ? 'text-success'
-                  : auditStatus === 'rejected'
-                  ? 'text-live'
-                  : 'text-textSecondary'
+                  ? 'bg-liveDim'
+                  : 'bg-accentDim/40'
               }`}
             >
-              {auditStatus === 'approved'
-                ? 'Approved'
-                : auditStatus === 'rejected'
-                ? 'Rejected'
-                : 'Pending audit'}
-            </Text>
-          </View>
+              <Text
+                className={`text-[9px] font-bold uppercase ${
+                  auditStatus === 'approved'
+                    ? 'text-success'
+                    : auditStatus === 'rejected'
+                    ? 'text-live'
+                    : 'text-textSecondary'
+                }`}
+              >
+                {auditStatus === 'approved'
+                  ? 'Approved'
+                  : auditStatus === 'rejected'
+                  ? 'Rejected'
+                  : 'Pending Audit'}
+              </Text>
+            </View>
+          )}
+          {isResolved ? (
+            <View className="rounded bg-successDim px-1.5 py-0.5">
+              <Text className="text-[10px] text-success font-bold uppercase">Resolved</Text>
+            </View>
+          ) : isLocked ? (
+            <View className="rounded bg-bgBorder px-1.5 py-0.5">
+              <Text className="text-[10px] text-textSecondary font-bold uppercase">Locked</Text>
+            </View>
+          ) : (
+            <View className="rounded bg-accentDim px-1.5 py-0.5 border border-accentBorder">
+              <Text className="text-[10px] text-accent font-bold uppercase">
+                Ends in {countdownText}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
+      </View>
+
+      <Text className="text-base font-bold text-textPrimary">{question.question_text}</Text>
 
       {/* Options list or Free text input */}
       {question.options && question.options.length > 0 ? (

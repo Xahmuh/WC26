@@ -40,39 +40,54 @@ export default function NotificationsScreen(): React.JSX.Element {
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
 
-  const renderItem = ({ item }: { item: AppNotification }) => (
-    <Pressable
-      onPress={() => {
-        // Issue 8 — mark read, then deep-link to the match if the payload has
-        // a match_id. A deleted match shows the screen's own "not found" state.
-        if (!item.is_read) markRead.mutate(item.id);
-        const matchId =
-          typeof item.data?.match_id === 'string' ? item.data.match_id : null;
-        if (matchId) router.push(`/match/${matchId}`);
-      }}
-      className={`flex-row items-start gap-3 px-5 py-4 border-b border-bgBorder/60 ${
-        item.is_read ? '' : 'bg-bgSurface1'
-      } active:opacity-80`}
-    >
-      <View className="h-9 w-9 items-center justify-center rounded-full bg-accentDim border border-accentBorder/50 mt-0.5">
-        <Icon name={ICON_FOR[item.type] ?? 'info'} size={18} color={Theme.colors.accent} />
-      </View>
-      <View className="flex-1">
-        <View className="flex-row items-center gap-2">
-          <Text className="flex-1 text-sm font-bold text-textPrimary" numberOfLines={1}>
-            {item.title}
-          </Text>
-          {!item.is_read && (
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Theme.colors.accent }} />
-          )}
+  const renderItem = ({ item }: { item: AppNotification }) => {
+    const isPoints = item.type === 'points';
+    const pointsNum = item.data?.total_points ?? item.data?.points ?? 0;
+    const homeTeam = item.data?.home_team as string | undefined;
+    const awayTeam = item.data?.away_team as string | undefined;
+    const matchParties = isPoints && homeTeam && awayTeam ? `${homeTeam} vs ${awayTeam}` : null;
+
+    return (
+      <Pressable
+        onPress={() => {
+          if (!item.is_read) markRead.mutate(item.id);
+          const matchId = typeof item.data?.match_id === 'string' ? item.data.match_id : null;
+          if (matchId) router.push(`/match/${matchId}`);
+        }}
+        className={`flex-row items-center gap-4 px-5 py-4 border-b border-bgBorder/60 ${
+          item.is_read ? '' : 'bg-bgSurface1'
+        } active:opacity-80`}
+      >
+        <View className="h-10 w-10 items-center justify-center rounded-full bg-accentDim border border-accentBorder/50 self-start mt-0.5">
+          <Icon name={ICON_FOR[item.type] ?? 'info'} size={20} color={Theme.colors.accent} />
         </View>
-        {item.body ? (
-          <Text className="text-xs text-textSecondary mt-0.5">{item.body}</Text>
-        ) : null}
-        <Text className="text-[10px] text-textTertiary mt-1">{relativeTime(item.created_at)}</Text>
-      </View>
-    </Pressable>
-  );
+
+        <View className="flex-1">
+          <View className="flex-row items-center gap-2">
+            <Text className="flex-1 text-sm font-bold text-textPrimary" numberOfLines={1}>
+              {matchParties || item.title}
+            </Text>
+            {!item.is_read && (
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Theme.colors.accent }} />
+            )}
+          </View>
+          {item.body ? (
+            <Text className="text-xs text-textSecondary mt-1 leading-relaxed" numberOfLines={isPoints ? 2 : 3}>
+              {isPoints ? item.body.replace(/\n/g, ' • ') : item.body}
+            </Text>
+          ) : null}
+          <Text className="text-[10px] font-medium text-textTertiary mt-1.5 uppercase tracking-wider">{relativeTime(item.created_at)}</Text>
+        </View>
+
+        {isPoints && (
+          <View className="h-12 w-12 items-center justify-center rounded-xl bg-black border border-white/5 shadow-sm ml-1">
+            <Text className="text-[10px] font-bold text-textTertiary uppercase tracking-widest">PTS</Text>
+            <Text className="text-xl font-black" style={{ color: '#A3E635' }}>{pointsNum > 0 ? `+${pointsNum}` : '0'}</Text>
+          </View>
+        )}
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['bottom']}>

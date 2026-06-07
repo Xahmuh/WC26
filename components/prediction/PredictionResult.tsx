@@ -26,94 +26,95 @@ export function PredictionResult({
   const topScorer = topScorerQuery.data;
 
   return (
-    <View className="gap-4 rounded-2xl border border-bgBorder bg-bgSurface2 p-4">
-      <View className="items-center gap-1">
-        <Text className="text-xs font-medium uppercase tracking-wide text-textTertiary">
-          Final score
-        </Text>
-        <Text className="text-3xl font-bold text-textPrimary">
-          {hasScore ? `${match.home_score} – ${match.away_score}` : 'Awaiting result'}
-        </Text>
-      </View>
+    <View className="gap-5">
+        {!prediction ? (
+          <Text className="text-center text-sm font-medium text-textSecondary">
+            You did not submit a prediction for this match.
+          </Text>
+        ) : (
+          <>
+            {/* Your Prediction */}
+            <View className="flex-row items-center justify-between rounded-2xl border border-bgBorder bg-bgSurface2 px-5 py-4">
+              <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest">Your pick</Text>
+              <Text className="text-xl font-black text-textPrimary tracking-widest">
+                {prediction.pred_home_score} - {prediction.pred_away_score}
+              </Text>
+            </View>
 
-      {!prediction ? (
-        <Text className="text-center text-sm text-textSecondary">
-          You did not submit a prediction for this match.
-        </Text>
-      ) : (
-        <>
-          <View className="flex-row items-center justify-between border-t border-bgBorder pt-3">
-            <Text className="text-sm text-textSecondary">Your prediction</Text>
-            <Text className="text-sm font-semibold text-textPrimary">
-              {prediction.pred_home_score} – {prediction.pred_away_score}
-            </Text>
-          </View>
-
-          {points ? (
-            <View className="gap-2">
-              <BreakdownRow
-                label="Correct result"
-                value={points.winner_points}
-                max={POINTS.WINNER}
-              />
-              <BreakdownRow
-                label="Home goals"
-                value={points.home_goal_points}
-                max={POINTS.HOME_GOAL}
-              />
-              <BreakdownRow
-                label="Away goals"
-                value={points.away_goal_points}
-                max={POINTS.AWAY_GOAL}
-              />
-              <BreakdownRow
-                label="Exact-score bonus"
-                value={points.exact_bonus}
-                max={POINTS.EXACT_BONUS}
-              />
-              <View className="mt-1 flex-row items-center justify-between border-t border-bgBorder pt-3">
-                <Text className="text-base font-bold text-textPrimary">Total</Text>
-                <View className="flex-row items-center gap-1">
-                  <Text className="text-base font-bold text-success">{points.total_points} pts</Text>
-                  {points.total_points > 0 ? (
-                    <Icon name="target" size={15} color={Theme.colors.success} />
-                  ) : null}
+            {/* Points Breakdown */}
+            {points ? (
+              <View className="gap-3 rounded-2xl border border-bgBorder bg-bgSurface2 p-5">
+                <Text className="text-[10px] font-black text-textTertiary uppercase tracking-widest mb-1">
+                  Points Breakdown
+                </Text>
+                <BreakdownRow
+                  label="Correct winner"
+                  value={points.winner_points}
+                  max={POINTS.WINNER}
+                />
+                <BreakdownRow
+                  label="Home goals"
+                  value={points.home_goal_points}
+                  max={POINTS.HOME_GOAL}
+                />
+                <BreakdownRow
+                  label="Away goals"
+                  value={points.away_goal_points}
+                  max={POINTS.AWAY_GOAL}
+                />
+                <BreakdownRow
+                  label="Exact-score bonus"
+                  value={points.exact_bonus}
+                  max={POINTS.EXACT_BONUS}
+                />
+                <View className="mt-2 flex-row items-center justify-between border-t border-bgBorder pt-4">
+                  <Text className="text-sm font-black text-textPrimary uppercase tracking-widest">Total Earned</Text>
+                  <View className="flex-row items-center gap-1.5 bg-successDim px-3 py-1.5 rounded-xl border border-success/20">
+                    <Text className="text-sm font-black text-success">{points.total_points} PTS</Text>
+                    {points.total_points > 0 && (
+                      <Icon name="target" size={14} color={Theme.colors.success} />
+                    )}
+                  </View>
                 </View>
               </View>
-            </View>
-          ) : (
-            <Text className="text-center text-xs text-textTertiary">
-              Points are being calculated…
-            </Text>
-          )}
-        </>
-      )}
-
-      {/* Match MVP Section */}
-      {topScorer && (
-        <View className="mt-4 pt-4 border-t border-bgBorder">
-          <Text className="text-xs font-semibold text-textSecondary uppercase tracking-wide mb-3">
-            Match MVP <Icon name="trophy" size={12} color={Theme.colors.textSecondary} />
-          </Text>
-          <View className="flex-row items-center justify-between rounded-xl bg-bgSurface p-3">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-accentDim border border-bgBorder">
-                <Icon name="profile" size={18} color={Theme.colors.accent} />
-              </View>
-              <View>
-                <Text className="text-xs text-textTertiary">Highest Scorer</Text>
-                <Text className="text-sm font-bold text-textPrimary">
-                  {topScorer.username || topScorer.display_name}
+            ) : (
+              <View className="rounded-2xl border border-bgBorder bg-bgSurface2 p-5 items-center">
+                <Text className="text-center text-xs font-medium text-textTertiary">
+                  Points are being calculated…
                 </Text>
               </View>
+            )}
+          </>
+        )}
+
+        {/* Match MVP Section */}
+        {topScorer && (
+          <View className="mt-2 rounded-2xl border border-accentBorder/30 bg-bgSurface2 p-5">
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-[10px] font-black text-textSecondary uppercase tracking-widest">
+                Match MVP
+              </Text>
+              <Icon name="trophy" size={16} color={Theme.colors.accent} />
             </View>
-            <View className="items-end">
-              <Text className="text-lg font-bold text-accent">{topScorer.total_points}</Text>
-              <Text className="text-[10px] text-textSecondary uppercase tracking-wider font-medium">Points</Text>
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-3">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-accentDim border border-accentBorder/50">
+                  <Icon name="profile" size={20} color={Theme.colors.accent} />
+                </View>
+                <View>
+                  <Text className="text-[9px] font-bold text-textTertiary uppercase tracking-wider mb-0.5">Highest Scorer</Text>
+                  <Text className="text-sm font-bold text-textPrimary">
+                    {topScorer.username || topScorer.display_name}
+                  </Text>
+                </View>
+              </View>
+              <View className="items-end bg-bgSurface1 px-3 py-2 rounded-xl border border-bgBorder">
+                <Text className="text-lg font-black text-accent">{topScorer.total_points}</Text>
+                <Text className="text-[9px] text-textSecondary uppercase tracking-widest font-bold">PTS</Text>
+              </View>
             </View>
           </View>
-        </View>
-      )}
+        )}
     </View>
   );
 }
@@ -127,10 +128,10 @@ interface BreakdownRowProps {
 function BreakdownRow({ label, value, max }: BreakdownRowProps): React.JSX.Element {
   const earned = value > 0;
   return (
-    <View className="flex-row items-center justify-between">
-      <Text className="text-sm text-textSecondary">{label}</Text>
-      <Text className={`text-sm font-semibold ${earned ? 'text-success' : 'text-textTertiary'}`}>
-        {earned ? `+${value}` : '0'} / {max}
+    <View className="flex-row items-center justify-between mb-1.5">
+      <Text className="text-xs font-medium text-textSecondary">{label}</Text>
+      <Text className={`text-xs font-bold ${earned ? 'text-success' : 'text-textTertiary'}`}>
+        {earned ? `+${value}` : '0'} <Text className="text-[10px] font-medium opacity-50">/ {max}</Text>
       </Text>
     </View>
   );

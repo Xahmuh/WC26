@@ -162,11 +162,13 @@ export default function LeaderboardScreen(): React.JSX.Element {
           </Pressable>
 
           {/* Center logo */}
-          <Image
-            source={require('@/assets/icona.png')}
-            style={{ width: '60%', height: 50 }}
-            resizeMode="contain"
-          />
+          <View className="flex-1 items-center px-4">
+            <Image
+              source={require('@/assets/icona.png')}
+              style={{ width: '100%', height: 85, maxWidth: 220 }}
+              resizeMode="contain"
+            />
+          </View>
 
           {/* Right icon */}
           <View className="w-10 items-end">

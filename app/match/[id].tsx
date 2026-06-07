@@ -61,70 +61,72 @@ export default function MatchDetailScreen(): React.JSX.Element {
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['bottom']}>
       <Stack.Screen options={{ title: STAGE_LABELS[match.stage] }} />
       <ScrollView contentContainerClassName="pb-10 pt-4">
-        <Container nested className="px-6 gap-5">
-        {/* Header */}
-        <View className="items-center gap-3 rounded-2xl border border-bgBorder bg-bgSurface2 p-5">
-          <View className="flex-row items-center justify-between gap-4">
-            <View className="flex-1 items-center gap-2">
-              <TeamFlag team={match.home_team} size={48} />
-              <Text className="text-center text-sm font-semibold text-textPrimary">
-                {match.home_team.name}
-              </Text>
-            </View>
+        <Container nested className="px-6">
+          <View className="gap-5">
+            {/* Header */}
+            <View className="items-center gap-3 rounded-2xl border border-bgBorder bg-bgSurface2 p-5">
+              <View className="flex-row items-center justify-between gap-4">
+                <View className="flex-1 items-center gap-2">
+                  <TeamFlag team={match.home_team} size={48} />
+                  <Text className="text-center text-sm font-semibold text-textPrimary">
+                    {match.home_team.name}
+                  </Text>
+                </View>
 
-            <View className="items-center gap-1 px-2">
-              {isFinished &&
-              match.home_score !== null &&
-              match.away_score !== null ? (
-                <Text className="text-2xl font-bold text-textPrimary">
-                  {match.home_score} – {match.away_score}
-                </Text>
-              ) : (
-                <Text className="text-lg font-semibold text-textTertiary">vs</Text>
-              )}
-            </View>
+                <View className="items-center gap-1 px-2">
+                  {isFinished &&
+                  match.home_score !== null &&
+                  match.away_score !== null ? (
+                    <Text className="text-2xl font-bold text-textPrimary">
+                      {match.home_score} – {match.away_score}
+                    </Text>
+                  ) : (
+                    <Text className="text-lg font-semibold text-textTertiary">vs</Text>
+                  )}
+                </View>
 
-            <View className="flex-1 items-center gap-2">
-              <TeamFlag team={match.away_team} size={48} />
-              <Text className="text-center text-sm font-semibold text-textPrimary">
-                {match.away_team.name}
-              </Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-center gap-2">
-            <Badge label={STAGE_LABELS[match.stage]} tone="info" />
-            {match.is_placeholder && (
-              <View className="rounded bg-accentDim px-2 py-0.5 border border-accentBorder/50">
-                <Text className="text-[10px] font-bold text-accent uppercase">TBD</Text>
+                <View className="flex-1 items-center gap-2">
+                  <TeamFlag team={match.away_team} size={48} />
+                  <Text className="text-center text-sm font-semibold text-textPrimary">
+                    {match.away_team.name}
+                  </Text>
+                </View>
               </View>
+
+              <View className="flex-row items-center gap-2">
+                <Badge label={STAGE_LABELS[match.stage]} tone="info" />
+                {match.is_placeholder && (
+                  <View className="rounded bg-accentDim px-2 py-0.5 border border-accentBorder/50">
+                    <Text className="text-[10px] font-bold text-accent uppercase">TBD</Text>
+                  </View>
+                )}
+              </View>
+              <Text className="text-xs text-textSecondary">
+                {formatKickoff(match.kickoff_time)}
+              </Text>
+              {match.venue ? (
+                <View className="flex-row items-center gap-1">
+                  <Icon name="stadium" size={12} color={Theme.colors.textTertiary} />
+                  <Text className="text-xs text-textTertiary">{match.venue}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Prediction or result */}
+            {match.is_placeholder ? (
+              <View className="items-center gap-2 rounded-2xl border border-bgBorder bg-bgSurface2 p-5">
+                <Text className="text-sm font-semibold text-textPrimary">Knockout match — TBD</Text>
+                <Text className="text-xs text-textSecondary text-center">
+                  Teams for this knockout stage match have not been decided yet.
+                  Predictions will open once both teams are confirmed.
+                </Text>
+              </View>
+            ) : isFinished ? (
+              <PredictionResult match={match} prediction={prediction} points={points} />
+            ) : (
+              <PredictionForm match={match} existing={prediction} />
             )}
           </View>
-          <Text className="text-xs text-textSecondary">
-            {formatKickoff(match.kickoff_time)}
-          </Text>
-          {match.venue ? (
-            <View className="flex-row items-center gap-1">
-              <Icon name="stadium" size={12} color={Theme.colors.textTertiary} />
-              <Text className="text-xs text-textTertiary">{match.venue}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Prediction or result */}
-        {match.is_placeholder ? (
-          <View className="items-center gap-2 rounded-2xl border border-bgBorder bg-bgSurface2 p-5">
-            <Text className="text-sm font-semibold text-textPrimary">Knockout match — TBD</Text>
-            <Text className="text-xs text-textSecondary text-center">
-              Teams for this knockout stage match have not been decided yet.
-              Predictions will open once both teams are confirmed.
-            </Text>
-          </View>
-        ) : isFinished ? (
-          <PredictionResult match={match} prediction={prediction} points={points} />
-        ) : (
-          <PredictionForm match={match} existing={prediction} />
-        )}
         </Container>
       </ScrollView>
     </SafeAreaView>
