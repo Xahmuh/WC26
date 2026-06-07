@@ -553,34 +553,34 @@ export default function AdminDashboard(): React.JSX.Element {
     );
   };
 
-  // Delete match confirmation
+  // Delete match confirmation. Uses an in-app Modal (below) instead of
+  // Alert.alert because Alert button callbacks DON'T fire on react-native-web,
+  // so the old confirm dialog's "Delete" did nothing on web.
   const [deletingMatchId, setDeletingMatchId] = useState<string | null>(null);
+  const [matchPendingDelete, setMatchPendingDelete] = useState<string | null>(null);
+  const [deleteMatchError, setDeleteMatchError] = useState<string | null>(null);
 
   const handleDeleteMatch = useCallback((matchId: string) => {
-    Alert.alert(
-      'Delete Match',
-      'Are you sure you want to permanently delete this match? All predictions and points for this match will also be deleted. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setDeletingMatchId(matchId);
-            deleteMatchMutation.mutate(matchId, {
-              onSuccess: () => {
-                setDeletingMatchId(null);
-              },
-              onError: (err: any) => {
-                setDeletingMatchId(null);
-                Alert.alert('Delete Failed', err?.message || 'Failed to delete match. Check that no predictions reference this match.');
-              },
-            });
-          },
-        },
-      ]
-    );
-  }, [deleteMatchMutation]);
+    setDeleteMatchError(null);
+    setMatchPendingDelete(matchId);
+  }, []);
+
+  const confirmDeleteMatch = useCallback(() => {
+    const matchId = matchPendingDelete;
+    if (!matchId) return;
+    setDeleteMatchError(null);
+    setDeletingMatchId(matchId);
+    deleteMatchMutation.mutate(matchId, {
+      onSuccess: () => {
+        setDeletingMatchId(null);
+        setMatchPendingDelete(null);
+      },
+      onError: (err: any) => {
+        setDeletingMatchId(null);
+        setDeleteMatchError(err?.message || 'Failed to delete match.');
+      },
+    });
+  }, [matchPendingDelete, deleteMatchMutation]);
 
   return (
     <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
@@ -1451,6 +1451,49 @@ export default function AdminDashboard(): React.JSX.Element {
                   variant="danger"
                   loading={deleteQuestionMutation.isPending}
                   onPress={confirmDelete}
+                />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete Match confirmation (works on web + native, unlike Alert) */}
+      <Modal
+        visible={matchPendingDelete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMatchPendingDelete(null)}
+      >
+        <Pressable
+          onPress={() => setMatchPendingDelete(null)}
+          className="flex-1 items-center justify-center bg-black/70 px-8"
+        >
+          <Pressable className="w-full max-w-sm rounded-2xl border border-bgBorder bg-bgSurface2 p-6 gap-5">
+            <View className="items-center gap-3">
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-liveDim border border-live/30">
+                <Icon name="trash" size={20} color={Theme.colors.live} />
+              </View>
+              <Text className="text-lg font-bold text-textPrimary text-center">Delete Match</Text>
+              <Text className="text-sm text-textSecondary text-center">
+                Are you sure you want to permanently delete this match? All predictions and
+                points for it will also be removed. This cannot be undone.
+              </Text>
+              {deleteMatchError && (
+                <Text className="text-xs text-live font-semibold text-center">{deleteMatchError}</Text>
+              )}
+            </View>
+
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <Button label="Cancel" variant="secondary" onPress={() => setMatchPendingDelete(null)} />
+              </View>
+              <View className="flex-1">
+                <Button
+                  label="Delete"
+                  variant="danger"
+                  loading={deleteMatchMutation.isPending}
+                  onPress={confirmDeleteMatch}
                 />
               </View>
             </View>

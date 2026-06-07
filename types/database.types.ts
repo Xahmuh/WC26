@@ -600,6 +600,7 @@ export type Database = {
         Args: { p_body: string; p_title: string; p_type: string }
         Returns: number
       }
+      admin_delete_match: { Args: { p_match_id: string }; Returns: undefined }
       admin_delete_user: { Args: { p_user_id: string }; Returns: undefined }
       admin_get_question_submissions: {
         Args: { p_question_id: string }

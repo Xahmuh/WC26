@@ -356,11 +356,10 @@ export async function restoreUser(userId: string): Promise<void> {
  * the table's foreign keys.
  */
 export async function deleteMatch(matchId: string): Promise<void> {
-  const { error } = await supabase
-    .from('matches')
-    .delete()
-    .eq('id', matchId);
-
+  // SECURITY DEFINER RPC: deletes reliably for admins and raises a clear error
+  // for non-admins. A direct .delete() is silently filtered to 0 rows by RLS
+  // when the caller isn't an admin, so the UI looked like it "did nothing".
+  const { error } = await supabase.rpc('admin_delete_match', { p_match_id: matchId });
   if (error) {
     throw new Error(error.message);
   }
