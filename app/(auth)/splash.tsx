@@ -87,7 +87,7 @@ export default function CustomSplashScreen(): React.JSX.Element {
   const rippleRadius = rippleSize / 2;
   const buttonStageHeight = Math.max(150, buttonSize * 2.1);
   const safeButtonCenterFromBottom = insets.bottom + buttonSize / 2 + 12;
-  const targetButtonCenterFromBottom = Math.max(92, Math.min(112, height * 0.115));
+  const targetButtonCenterFromBottom = Math.max(112, Math.min(132, height * 0.14));
   const buttonBottom = Math.max(0, Math.max(safeButtonCenterFromBottom, targetButtonCenterFromBottom) - buttonStageHeight / 2);
 
   return (
