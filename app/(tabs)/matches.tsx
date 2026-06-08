@@ -9,7 +9,6 @@ import {
   ScrollView,
   TextInput,
   StyleSheet,
-  useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +32,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import type { Match, MatchStage, Team } from '@/types';
 
 const FILTERS: MatchFilter[] = ['ALL', 'TODAY', 'UPCOMING', 'FINISHED'];
+const HERO_ASPECT_RATIO = 9 / 4;
 const STAGE_FILTERS: ('ALL' | MatchStage)[] = [
   'ALL',
   'GROUP',
@@ -79,7 +79,6 @@ export default function MatchesScreen(): React.JSX.Element {
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string }>();
   const insets = useSafeAreaInsets();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const filter = useAppStore((s) => s.matchFilter);
   const setFilter = useAppStore((s) => s.setMatchFilter);
   const profile = useAuthStore((s) => s.profile);
@@ -176,8 +175,6 @@ export default function MatchesScreen(): React.JSX.Element {
     void pointsQuery.refetch();
   };
 
-  const heroWidth = Math.max(screenWidth - 48, 0);
-  const heroHeight = heroWidth > 0 ? Math.min(heroWidth / (9 / 4), 240) : Math.min(screenHeight * 0.25, 240);
   const heroImageSource = matchesHeroQuery.data?.image_url
     ? { uri: matchesHeroQuery.data.image_url }
     : require('@/assets/Hero-banner.png');
@@ -190,7 +187,7 @@ export default function MatchesScreen(): React.JSX.Element {
         <View
           style={{
             width: '100%',
-            height: heroHeight,
+            aspectRatio: HERO_ASPECT_RATIO,
             borderRadius: 16,
             marginBottom: 16,
             overflow: 'hidden',

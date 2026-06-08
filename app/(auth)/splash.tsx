@@ -82,11 +82,13 @@ export default function CustomSplashScreen(): React.JSX.Element {
 
   const { width, height } = useWindowDimensions();
 
-  const buttonSize = Math.max(68, Math.min(80, width * 0.21, height * 0.12));
+  const buttonSize = Math.max(64, Math.min(76, width * 0.19, height * 0.1));
   const rippleSize = buttonSize;
   const rippleRadius = rippleSize / 2;
-  const buttonBottom = Math.max(insets.bottom + 34, Math.min(84, height * 0.085));
-  const buttonStageHeight = Math.max(170, buttonSize * 2.35);
+  const buttonStageHeight = Math.max(150, buttonSize * 2.1);
+  const safeButtonCenterFromBottom = insets.bottom + buttonSize / 2 + 12;
+  const targetButtonCenterFromBottom = Math.max(92, Math.min(112, height * 0.115));
+  const buttonBottom = Math.max(0, Math.max(safeButtonCenterFromBottom, targetButtonCenterFromBottom) - buttonStageHeight / 2);
 
   return (
     <View className="flex-1 bg-[#01102e] relative">
@@ -94,7 +96,7 @@ export default function CustomSplashScreen(): React.JSX.Element {
       
       {/* Full-bleed Background Image */}
       <Image
-        source={require('../../assets/splashscreen.png')}
+        source={require('../../assets/splashscreen-compatible.png')}
         style={{
           position: 'absolute',
           top: 0,

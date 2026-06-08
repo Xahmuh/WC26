@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
   View,
   type ImageSourcePropType,
 } from 'react-native';
@@ -33,15 +32,11 @@ const HERO_ASPECT_RATIO = 9 / 4;
 
 export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean }): React.JSX.Element {
   const router = useRouter();
-  const { height: screenHeight } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
   const slidesQuery = useHeroSlides();
   const refetchSlides = slidesQuery.refetch;
-
-  const fallbackHeight = Math.min(screenHeight * 0.25, 240);
-  const height = containerWidth > 0 ? Math.min(containerWidth / HERO_ASPECT_RATIO, 240) : fallbackHeight;
 
   useFocusEffect(
     useCallback(() => {
@@ -101,13 +96,17 @@ export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean 
   };
 
   if (isLoading || slidesQuery.isLoading) {
-    return <SkeletonBox height={height} borderRadius={16} />;
+    return (
+      <View style={styles.container}>
+        <SkeletonBox height={1} borderRadius={16} style={styles.skeletonFill} />
+      </View>
+    );
   }
 
   return (
     <View
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
-      style={[styles.container, { height }]}
+      style={styles.container}
     >
       <ScrollView
         ref={scrollRef}
@@ -127,8 +126,7 @@ export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean 
             style={[
               styles.slide,
               {
-                width: containerWidth,
-                height,
+                width: containerWidth || 1,
                 backgroundColor: slide.backgroundColor ?? Colors.background.card,
               },
             ]}
@@ -156,6 +154,7 @@ export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean 
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+    aspectRatio: HERO_ASPECT_RATIO,
     borderRadius: Layout.borderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.accent.limeBorder,
@@ -166,7 +165,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  skeletonFill: {
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
+  },
   slide: {
+    height: '100%',
     overflow: 'hidden',
   },
   image: {

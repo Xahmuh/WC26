@@ -8,7 +8,7 @@
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splashscreen.png",
+      "image": "./assets/splashscreen-compatible.png",
       "resizeMode": "contain",
       "backgroundColor": "#01102E"
     },
