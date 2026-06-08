@@ -19,9 +19,9 @@ export const Colors = {
   textDisabled:  '#555555',  // Inactive tabs, placeholders
 
   // ── Accent ───────────────────────────────────────────────
-  accentLime:      '#C8FF00',              // Primary accent — active states
-  accentLimeDark:  '#A0CC00',              // Pressed lime
-  accentLimeAlpha: 'rgba(200,255,0,0.12)', // Lime tinted bg
+  accentLime:      '#d7d95e',              // Primary accent — active states
+  accentLimeDark:  '#b3b54f',              // Pressed lime
+  accentLimeAlpha: 'rgba(215,217,94,0.12)', // Lime tinted bg
   liveRed:         '#E03030',              // Live indicator
   liveRedBg:       'rgba(224,48,48,0.1)',  // Live card tinted bg
   liveRedGlow:     'rgba(224,48,48,0.3)',  // Live card shadow glow

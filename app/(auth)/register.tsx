@@ -7,13 +7,10 @@ import {
   TextInput,
   View,
   Image,
-  StyleSheet,
   Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Rect, Circle, Line, Path } from 'react-native-svg';
 
 import Theme from '@/constants/theme/design-system';
 import { useResponsive } from '@/lib/responsive';
@@ -35,7 +32,7 @@ const QUOTES = [
 export default function RegisterScreen(): React.JSX.Element {
   const router = useRouter();
   const { scale: rs } = useResponsive();
-  const logoSize = rs(230);
+  const logoSize = rs(185);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -76,66 +73,26 @@ export default function RegisterScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Theme.colors.bgDeep }}>
-      <LinearGradient
-        colors={['#1F1F1F', '#141414', '#0D0D0D']}
-        locations={[0, 0.4, 1]}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        {/* Tactical Pitch Grid Background (Glow splashes removed as requested) */}
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {/* Tactical Pitch Grid Overlay */}
-          <Svg
-            width="100%"
-            height="100%"
-            viewBox="0 0 400 800"
-            style={{ position: 'absolute', top: 0, left: 0 }}
-          >
-            {/* Outer Boundary */}
-            <Rect x="20" y="20" width="360" height="760" rx="4" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            
-            {/* Center Line & Center Circle */}
-            <Line x1="20" y1="400" x2="380" y2="400" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="400" r="55" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="400" r="2.5" fill="#C8FF00" opacity={0.06} />
-
-            {/* Top Penalty Area */}
-            <Rect x="100" y="20" width="200" height="110" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Rect x="145" y="20" width="110" height="35" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="95" r="2" fill="#C8FF00" opacity={0.06} />
-            
-            {/* Bottom Penalty Area */}
-            <Rect x="100" y="670" width="200" height="110" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Rect x="145" y="745" width="110" height="35" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Circle cx="200" cy="705" r="2" fill="#C8FF00" opacity={0.06} />
-
-            {/* Corner Arcs */}
-            <Path d="M 20 28 A 8 8 0 0 0 28 20" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Path d="M 372 20 A 8 8 0 0 0 380 28" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Path d="M 20 772 A 8 8 0 0 0 28 780" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-            <Path d="M 372 780 A 8 8 0 0 0 380 772" fill="none" stroke="#C8FF00" strokeWidth="1.2" opacity={0.06} />
-          </Svg>
-        </View>
-
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        <ScrollView
           style={{ flex: 1 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: 'space-between',
+            paddingHorizontal: 24,
+            paddingVertical: 16,
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{
-              flexGrow: 1,
-              justifyContent: 'space-between',
-              paddingHorizontal: 24,
-              paddingVertical: 16,
-            }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
             {/* Top Section: Logo & Titles */}
             <View className="items-center relative w-full">
               {/* Back Button - absolute positioning so it doesn't push logo down */}
               <Pressable
-                onPress={() => router.back()}
+                onPress={() => router.replace('/(auth)/login')}
                 className="absolute left-0 top-0 min-h-11 justify-center flex-row items-center gap-1 active:opacity-75 z-10"
               >
                 <Text className="text-accent text-lg">←</Text>
@@ -149,14 +106,8 @@ export default function RegisterScreen(): React.JSX.Element {
                   resizeMode="contain"
                 />
                 <Text 
-                  className="text-center text-base uppercase tracking-[0.2em] text-textPrimary font-extrabold"
-                  style={{ marginTop: -5 }}
-                >
-                  
-                </Text>
-                <Text 
                   className="text-center text-xs uppercase tracking-[0.25em] text-textSecondary font-semibold"
-                  style={{ marginTop: 18 }}
+                  style={{ marginTop: -4 }}
                 >
                   Compete. Climb. Lead
                 </Text>
@@ -164,7 +115,10 @@ export default function RegisterScreen(): React.JSX.Element {
             </View>
 
             {/* Middle Section: Create Account Box */}
-            <View className="rounded-2xl border border-accent/20 bg-bgSurface2/80 p-5 gap-3 shadow-lg shadow-accent/5 max-w-md w-full align-self-center mx-auto">
+            <View
+              className="rounded-2xl bg-black p-5 gap-3 shadow-xl shadow-black/40 max-w-md w-full align-self-center mx-auto"
+              style={{ marginTop: -10, minHeight: 360 }}
+            >
               <Text className="text-xs font-bold uppercase tracking-wider text-textPrimary text-center">
                 Create Account
               </Text>
@@ -180,7 +134,7 @@ export default function RegisterScreen(): React.JSX.Element {
                     autoCapitalize="words"
                     placeholder="Your name"
                     placeholderTextColor={Theme.colors.textTertiary}
-                    className="h-11 rounded-xl border border-bgBorder bg-bgDeep/40 px-4 text-sm text-textPrimary focus:border-accent"
+                    className="h-11 rounded-xl border border-bgSurface3 bg-bgSurface1 px-4 text-sm text-textPrimary focus:border-accent"
                   />
                 </View>
 
@@ -196,7 +150,7 @@ export default function RegisterScreen(): React.JSX.Element {
                     keyboardType="email-address"
                     placeholder="you@example.com"
                     placeholderTextColor={Theme.colors.textTertiary}
-                    className="h-11 rounded-xl border border-bgBorder bg-bgDeep/40 px-4 text-sm text-textPrimary focus:border-accent"
+                    className="h-11 rounded-xl border border-bgSurface3 bg-bgSurface1 px-4 text-sm text-textPrimary focus:border-accent"
                   />
                 </View>
 
@@ -211,7 +165,7 @@ export default function RegisterScreen(): React.JSX.Element {
                     autoComplete="password-new"
                     placeholder="At least 6 characters"
                     placeholderTextColor={Theme.colors.textTertiary}
-                    className="h-11 rounded-xl border border-bgBorder bg-bgDeep/40 px-4 text-sm text-textPrimary focus:border-accent"
+                    className="h-11 rounded-xl border border-bgSurface3 bg-bgSurface1 px-4 text-sm text-textPrimary focus:border-accent"
                   />
                   {passwordTooShort ? (
                     <Text className="text-[10px] text-warning">
@@ -233,37 +187,47 @@ export default function RegisterScreen(): React.JSX.Element {
                 <Button
                   label="Sign in"
                   variant="secondary"
-                  onPress={() => router.push('/(auth)/login')}
+                  onPress={() => router.replace('/(auth)/login')}
                 />
               </View>
             </View>
 
             {/* Bottom Section: Quote Ticker & Footer Credit */}
-            <View className="gap-3 mt-2 w-full max-w-md mx-auto items-center">
+            <View
+              className="gap-3 w-full max-w-md mx-auto items-center"
+              style={{ transform: [{ translateY: -28 }] }}
+            >
               {/* Soccer Quote Card (Press to swap - fixed height for stable layout) */}
               {quote && (
                 <Pressable
                   onPress={handleNextQuote}
-                  className="px-5 min-h-16 py-3 justify-center rounded-xl border border-bgBorder bg-bgSurface1 w-full max-w-sm active:opacity-75"
+                  className="h-24 px-5 py-2 justify-center overflow-hidden rounded-xl border border-bgBorder bg-bgSurface1 w-full max-w-sm active:opacity-75"
                 >
-                  <Text className="text-center italic text-xs text-textSecondary font-light leading-relaxed">
+                  <Text
+                    numberOfLines={3}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.88}
+                    className="text-center italic text-sm text-textSecondary font-light leading-relaxed"
+                  >
                     " {quote.text} "
                   </Text>
-                  <Text className="text-center text-[9px] font-bold uppercase tracking-widest text-accent mt-1">
+                  <Text
+                    numberOfLines={1}
+                    className="text-center text-[10px] font-bold uppercase tracking-widest text-accent mt-1"
+                  >
                     — {quote.author}
                   </Text>
                 </Pressable>
               )}
 
-              <View className="w-full items-center justify-center pt-2.5 border-t border-bgBorder/35">
-                <Text className="text-[10px] tracking-widest uppercase text-textTertiary font-semibold opacity-70">
+              <View className="w-full items-center justify-center -mt-1 pt-1.5 border-t border-bgBorder/35">
+                <Text className="text-xs tracking-wide text-white font-normal">
                   Developed by Ahmed Elsherbini
                 </Text>
               </View>
             </View>
           </ScrollView>
-        </KeyboardAvoidingView>
-      </LinearGradient>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

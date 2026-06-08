@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import Theme from '@/constants/theme/design-system';
+import { useResponsive } from '@/lib/responsive';
 
 interface DateTimePickerModalProps {
   visible: boolean;
@@ -38,6 +40,13 @@ export function DateTimePickerModal({
   minDate,
 }: DateTimePickerModalProps): React.JSX.Element {
   const initial = value ?? new Date();
+  const insets = useSafeAreaInsets();
+  const { height } = useResponsive();
+
+  const overlayTopPadding = Math.max(16, insets.top + 16);
+  const overlayBottomPadding = Math.max(16, insets.bottom + 16);
+  const cardMaxHeight = Math.max(260, height - insets.top - insets.bottom - 48);
+  const scrollBottomPadding = Math.max(16, insets.bottom + 12);
 
   // The selected day (year/month/day) and time (hour/minute) kept separately.
   const [selected, setSelected] = useState<Date>(initial);
@@ -92,9 +101,27 @@ export function DateTimePickerModal({
   }) + ` · ${pad(hour)}:${pad(minute)}`;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} className="flex-1 justify-center items-center bg-black/60 px-6">
-        <Pressable className="bg-bgSurface2 border border-bgBorder rounded-2xl w-full max-w-sm p-5 gap-4 shadow-lg">
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={[
+          styles.overlay,
+          { paddingTop: overlayTopPadding, paddingBottom: overlayBottomPadding },
+        ]}
+      >
+        <Pressable
+          className="bg-bgSurface2 border border-bgBorder rounded-2xl w-full max-w-sm p-5 shadow-lg"
+          style={{ maxHeight: cardMaxHeight }}
+        >
+          <ScrollView
+            style={styles.modalScroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={[
+              styles.modalScrollContent,
+              { paddingBottom: scrollBottomPadding },
+            ]}
+          >
           {/* Header */}
           <View className="flex-row items-center justify-between border-b border-bgBorder pb-2">
             <Text className="text-base font-bold text-textPrimary">{title}</Text>
@@ -234,8 +261,25 @@ export function DateTimePickerModal({
               <Button label="Confirm" onPress={handleConfirm} disabled={isBeforeMin} />
             </View>
           </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 24,
+  },
+  modalScrollContent: {
+    gap: 16,
+  },
+  modalScroll: {
+    flexShrink: 1,
+  },
+});

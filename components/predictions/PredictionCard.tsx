@@ -1,15 +1,13 @@
 import React, { useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Theme from '@/constants/theme/design-system';
-import { Icon } from '@/components/ui/Icon';
 import { ms, useResponsive } from '@/lib/responsive';
 import type { PredictionQuestion } from '@/types';
 
 import { PredictionCardBadge } from './PredictionCardBadge';
 import { PredictionStatusChip, type PredictionCardStatus } from './PredictionStatusChip';
-import { PredictionWatermark } from './PredictionWatermark';
 
 export const CARD_GAP = ms(10);
 export const CARD_RADIUS = ms(12);
@@ -49,14 +47,14 @@ export function PredictionCard({ question, predictionRecord, onPress }: Props): 
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 0.96,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         speed: 40,
         bounciness: 3,
       }),
       Animated.timing(opacityAnim, {
         toValue: 0.92,
         duration: 150,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
   };
@@ -65,14 +63,14 @@ export function PredictionCard({ question, predictionRecord, onPress }: Props): 
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         speed: 40,
         bounciness: 3,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
         duration: 150,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
   };
@@ -107,10 +105,21 @@ export function PredictionCard({ question, predictionRecord, onPress }: Props): 
           end={{ x: 0, y: 1 }}
         />
 
-
-
-        <PredictionWatermark questionText={question.question_text} />
-
+        {question.card_image_url ? (
+          <>
+            <Image
+              source={{ uri: question.card_image_url }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
+            <LinearGradient
+              colors={['rgba(5,10,20,0.08)', 'rgba(5,10,20,0.20)', 'rgba(5,10,20,0.72)']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+            />
+          </>
+        ) : null}
         {/* Top row */}
         <View style={styles.topRow}>
           <PredictionStatusChip status={status} closesAt={lockAt} />
@@ -136,7 +145,6 @@ export function PredictionCard({ question, predictionRecord, onPress }: Props): 
 
           {isSubmitted && (
             <View style={styles.submittedRow}>
-              <Icon name="check" size={8} color={Theme.colors.accent} fixed />
               <Text
                 style={[styles.submittedText, { color: Theme.colors.accent }]}
                 accessibilityLiveRegion="polite"
@@ -170,6 +178,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: ms(12),
     zIndex: 1,
   },
   bottomContent: {

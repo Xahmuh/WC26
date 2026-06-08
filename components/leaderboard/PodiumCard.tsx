@@ -99,11 +99,15 @@ export function PodiumCard({
             tier.glow
               ? {
                   borderRadius: avatarSize / 2,
-                  shadowColor: tier.color,
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.55,
-                  shadowRadius: 14,
-                  elevation: 10,
+                  ...(Platform.OS === 'web'
+                    ? { boxShadow: `0 0 14px ${tier.color}88` }
+                    : {
+                        shadowColor: tier.color,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.55,
+                        shadowRadius: 14,
+                        elevation: 10,
+                      }),
                 }
               : undefined
           }

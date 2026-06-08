@@ -15,11 +15,14 @@ export type MatchStatus =
 
 export type MatchStage =
   | 'GROUP'
+  | 'ROUND_OF_32'
   | 'ROUND_OF_16'
   | 'QUARTER_FINAL'
   | 'SEMI_FINAL'
   | 'THIRD_PLACE'
   | 'FINAL';
+
+export type MatchDecisionMethod = 'FT' | 'ET' | 'PEN';
 
 export interface Team {
   id: string;
@@ -38,8 +41,11 @@ export interface Match {
   home_team: Team;
   away_team: Team;
   is_placeholder: boolean;
+  is_knockout: boolean;
   home_score: number | null;
   away_score: number | null;
+  winner_team_id: string | null;
+  decision_method: MatchDecisionMethod | null;
   status: MatchStatus;
   stage: MatchStage;
   group_name: string | null;
@@ -54,6 +60,8 @@ export interface Prediction {
   match_id: string;
   pred_home_score: number;
   pred_away_score: number;
+  pred_winner_team_id: string | null;
+  applied_user_card_id: string | null;
   is_locked: boolean;
   created_at: string;
   updated_at: string;
@@ -79,6 +87,51 @@ export interface LeaderboardEntry {
   predictions_scored: number;
   exact_predictions: number;
   supported_teams: string[] | null;
+  previous_rank?: number;
+}
+
+// ── Mini Leagues ────────────────────────────────────────────────────────────
+
+export interface League {
+  id: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  owner_id: string;
+  invite_code: string;
+  max_members: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeagueMember {
+  league_id: string;
+  user_id: string;
+  role: 'owner' | 'member';
+  joined_at: string;
+}
+
+/** A league in "My Leagues" — the league plus the caller's membership context. */
+export interface MyLeague extends League {
+  member_count: number;
+  my_role: 'owner' | 'member';
+  my_rank: number | null;
+}
+
+/** Row from the `league_leaderboard` view — same shape as LeaderboardEntry, scoped to a league. */
+export interface LeagueLeaderboardEntry {
+  league_id: string;
+  user_id: string;
+  display_name: string;
+  username: string | null;
+  avatar_url: string | null;
+  total_points: number;
+  predictions_made: number;
+  predictions_scored: number;
+  exact_predictions: number;
+  supported_teams: string[] | null;
+  league_rank: number;
+  league_member_count: number;
   previous_rank?: number;
 }
 
@@ -111,6 +164,8 @@ export interface PredictionQuestion {
   question_text: string;
   options: string[]; // JSON array of options
   correct_answer: string | null;
+  card_image_path: string | null;
+  card_image_url?: string | null;
   points: number;
   status: 'open' | 'closed' | 'resolved';
   created_at: string;
@@ -131,6 +186,58 @@ export interface HeroSlide {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface HomeCardsTileSettings {
+  id: number;
+  image_path: string | null;
+  image_url?: string | null;
+  background_color: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface MatchesHeroSettings {
+  id: number;
+  image_path: string | null;
+  image_url?: string | null;
+  background_color: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface CardDefinition {
+  id: string;
+  name: string;
+  description: string | null;
+  image_path: string | null;
+  image_url?: string | null;
+  award_stage: MatchStage;
+  threshold_percent: number;
+  usable_from_stage: MatchStage;
+  usable_until_stage: MatchStage;
+  max_uses: number;
+  multiplier_bonus: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserCard {
+  id: string;
+  user_id: string;
+  card_definition_id: string;
+  earned_stage: MatchStage;
+  usable_from_stage: MatchStage;
+  usable_until_stage: MatchStage;
+  multiplier_bonus: number;
+  max_uses: number;
+  uses_remaining: number;
+  status: 'active' | 'used' | 'revoked';
+  unlocked_at: string;
+  updated_at: string;
+  definition?: CardDefinition | null;
 }
 
 export interface UserQuestionPrediction {
@@ -179,6 +286,8 @@ export interface MatchRow {
   away_team_id: string | null;
   home_score: number | null;
   away_score: number | null;
+  winner_team_id: string | null;
+  decision_method: MatchDecisionMethod | null;
   status: MatchStatus;
   stage: MatchStage;
   group_name: string | null;
@@ -188,6 +297,7 @@ export interface MatchRow {
   created_at: string;
   points_multiplier: number;
   is_placeholder: boolean;
+  is_knockout: boolean;
 }
 
 export interface PredictionRow {
@@ -196,6 +306,8 @@ export interface PredictionRow {
   match_id: string;
   pred_home_score: number;
   pred_away_score: number;
+  pred_winner_team_id: string | null;
+  applied_user_card_id: string | null;
   is_locked: boolean;
   created_at: string;
   updated_at: string;

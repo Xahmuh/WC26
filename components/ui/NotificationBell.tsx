@@ -3,10 +3,10 @@
 // useNotifications() (realtime). Tapping opens the notifications screen.
 // ============================================================================
 
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import Theme from '@/constants/theme/design-system';
+import { Colors } from '@/constants';
 import { Icon } from '@/components/ui/Icon';
 import { useNotifications } from '@/hooks/useNotifications';
 
@@ -19,29 +19,34 @@ export function NotificationBell(): React.JSX.Element {
       onPress={() => router.push('/notifications' as any)}
       accessibilityRole="button"
       accessibilityLabel={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
-      className="h-9 w-9 items-center justify-center rounded-full bg-bgSurface2 border border-bgBorder active:opacity-80"
+      className="items-center justify-center active:opacity-80"
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: 10,
+        backgroundColor: 'rgba(18, 18, 18, 0.78)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.16)',
+      }}
     >
-      <Icon name="bell" size={18} color={Theme.colors.textPrimary} />
+      <Icon name="bell" size={18} color={Colors.text.primary} />
       {unreadCount > 0 && (
         <View
           style={{
             position: 'absolute',
-            top: -3,
-            right: -3,
-            minWidth: 18,
-            height: 18,
+            top: 7,
+            right: 7,
+            minWidth: 8,
+            height: 8,
             paddingHorizontal: 4,
-            borderRadius: 9,
-            backgroundColor: Theme.colors.accent,
+            borderRadius: 4,
+            backgroundColor: Colors.accent.lime,
             alignItems: 'center',
             justifyContent: 'center',
-            borderWidth: 1.5,
-            borderColor: Theme.colors.bgDeep,
+            borderWidth: 1,
+            borderColor: Colors.background.primary,
           }}
         >
-          <Text style={{ color: Theme.colors.accentDark, fontSize: 10, fontWeight: '800' }}>
-            {unreadCount > 9 ? '9+' : String(unreadCount)}
-          </Text>
         </View>
       )}
     </Pressable>

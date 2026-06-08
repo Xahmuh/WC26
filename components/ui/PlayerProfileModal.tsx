@@ -1,6 +1,8 @@
 import { Modal, Text, View, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Theme from '@/constants/theme/design-system';
+import { useResponsive } from '@/lib/responsive';
 import { usePlayerProfile } from '@/hooks/usePlayerProfile';
 import { useTeams } from '@/hooks/useTeams';
 import { Icon, type IconName } from './Icon';
@@ -28,6 +30,13 @@ export function PlayerProfileModal({
 }: PlayerProfileModalProps): React.JSX.Element {
   const { data: profile, isLoading, isError, error } = usePlayerProfile(playerId);
   const { data: teams = [] } = useTeams();
+  const insets = useSafeAreaInsets();
+  const { height } = useResponsive();
+
+  const overlayTopPadding = Math.max(16, insets.top + 16);
+  const overlayBottomPadding = Math.max(16, insets.bottom + 16);
+  const cardMaxHeight = Math.max(260, height - insets.top - insets.bottom - 48);
+  const scrollBottomPadding = Math.max(16, insets.bottom + 12);
 
   const displayHandle = profile?.username || profile?.display_name || '?';
   const initials = displayHandle.slice(0, 2).toUpperCase();
@@ -35,8 +44,16 @@ export function PlayerProfileModal({
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Card className="w-full max-w-sm border border-bgBorder bg-bgSurface2 p-5 gap-5 rounded-2xl shadow-xl">
+      <View
+        style={[
+          styles.overlay,
+          { paddingTop: overlayTopPadding, paddingBottom: overlayBottomPadding },
+        ]}
+      >
+        <Card
+          className="w-full max-w-sm border border-bgBorder bg-bgSurface2 p-5 gap-5 rounded-2xl shadow-xl"
+          style={{ maxHeight: cardMaxHeight }}
+        >
           {/* Header */}
           <View className="flex-row justify-between items-center border-b border-bgBorder/50 pb-3">
             <Text className="text-base font-bold text-textPrimary">Player Profile</Text>
@@ -65,7 +82,14 @@ export function PlayerProfileModal({
               </Text>
             </View>
           ) : (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="gap-5">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.profileScroll}
+              contentContainerStyle={[
+                styles.profileScrollContent,
+                { paddingBottom: scrollBottomPadding },
+              ]}
+            >
               {/* Identity */}
               <View className="items-center gap-3">
                 <View>
@@ -240,5 +264,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     paddingHorizontal: 16,
+  },
+  profileScroll: {
+    flexShrink: 1,
+  },
+  profileScrollContent: {
+    gap: 20,
   },
 });

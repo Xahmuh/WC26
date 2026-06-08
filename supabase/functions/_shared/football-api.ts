@@ -22,7 +22,9 @@ export interface ApiMatch {
   status: ApiMatchStatus;
   utcDate: string;
   score: {
+    duration: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | string | null;
     fullTime: { home: number | null; away: number | null };
+    regularTime?: { home: number | null; away: number | null } | null;
     winner: 'HOME_TEAM' | 'AWAY_TEAM' | 'DRAW' | null;
   };
 }

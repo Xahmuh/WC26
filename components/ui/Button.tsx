@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, Text, type PressableProps } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, type PressableProps } from 'react-native';
 
 import Theme from '@/constants/theme/design-system';
 
@@ -18,11 +18,11 @@ const CONTAINER: Record<Variant, string> = {
   secondary: 'bg-transparent border-[1.5px] border-accent active:opacity-80',
   ghost: 'bg-accentDim border border-accentBorder active:opacity-80',
   danger: 'bg-liveDim border border-live/30 active:opacity-80',
-  lime: 'bg-[#C8FF00] active:opacity-80 shadow-md shadow-lime-500/20',
+  lime: 'bg-[#d7d95e] active:opacity-80 shadow-md',
 };
 
 const LABEL: Record<Variant, string> = {
-  primary: 'text-accentDark',
+  primary: 'text-black',
   secondary: 'text-accent',
   ghost: 'text-accent',
   danger: 'text-live',
@@ -43,9 +43,16 @@ export function Button({
   loading = false,
   fullWidth = true,
   disabled,
+  style,
   ...rest
 }: ButtonProps): React.JSX.Element {
   const isDisabled = disabled || loading;
+  const variantStyle =
+    variant === 'lime'
+      ? Platform.OS === 'web'
+        ? { boxShadow: '0 8px 20px rgba(215, 217, 94, 0.25)' }
+        : { shadowColor: '#d7d95e' }
+      : undefined;
 
   return (
     <Pressable
@@ -58,12 +65,16 @@ export function Button({
         fullWidth ? 'w-full' : 'self-start',
         isDisabled ? 'opacity-50' : '',
       ].join(' ')}
+      style={(state) => [variantStyle, typeof style === 'function' ? style(state) : style]}
       {...rest}
     >
       {loading ? (
         <ActivityIndicator color={SPINNER[variant]} />
       ) : (
-        <Text className={`text-base font-semibold uppercase tracking-wide ${LABEL[variant]}`}>
+        <Text
+          className={`text-base font-semibold uppercase tracking-wide ${LABEL[variant]}`}
+          style={variant === 'primary' ? { color: '#000000' } : undefined}
+        >
           {label}
         </Text>
       )}

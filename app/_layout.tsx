@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { View, Platform, useWindowDimensions } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -22,6 +23,8 @@ import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/services/auth.service';
 import { addNotificationResponseListener, configureNotifications } from '@/lib/sound';
 import { useAuthStore } from '@/stores/auth.store';
+
+const APP_BACKGROUND_COLOR = Theme.gradients.carbonApp[0] ?? '#000000';
 
 /**
  * Catches OAuth redirects that arrive as a deep link into the app (cold start or
@@ -48,23 +51,26 @@ function useOAuthDeepLink(): void {
   }, []);
 }
 
-function useProtectedRoute(): void {
+function useProtectedRoute(): boolean {
   const session = useAuthStore((s) => s.session);
   const initializing = useAuthStore((s) => s.initializing);
   const segments = useSegments();
   const router = useRouter();
+  const inAuthGroup = segments[0] === '(auth)';
+  const shouldGoToAuth = !session && !inAuthGroup;
+  const shouldGoToHome = Boolean(session && inAuthGroup);
 
   useEffect(() => {
     if (initializing) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-
-    if (!session && !inAuthGroup) {
+    if (shouldGoToAuth) {
       router.replace('/(auth)/splash');
-    } else if (session && inAuthGroup) {
+    } else if (shouldGoToHome) {
       router.replace('/(tabs)/home');
     }
-  }, [session, initializing, segments, router]);
+  }, [initializing, router, shouldGoToAuth, shouldGoToHome]);
+
+  return !initializing && !shouldGoToAuth && !shouldGoToHome;
 }
 
 /**
@@ -96,13 +102,19 @@ function RootNavigator(): React.JSX.Element {
 
   useOAuthDeepLink();
   useNotificationDeepLink();
-  useProtectedRoute();
+  const routeReady = useProtectedRoute();
 
-  if (initializing) {
+  if (!routeReady && !initializing) {
     return (
-      <View className="flex-1 bg-bgDeep">
+      <LinearGradient colors={Theme.gradients.carbonApp as [string, string, string, string]} style={{ flex: 1 }} />
+    );
+  }
+
+  if (initializing || !routeReady) {
+    return (
+      <LinearGradient colors={Theme.gradients.carbonApp as [string, string, string, string]} style={{ flex: 1 }}>
         <LoadingSpinner fullScreen label="Loading…" />
-      </View>
+      </LinearGradient>
     );
   }
 
@@ -113,7 +125,7 @@ function RootNavigator(): React.JSX.Element {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: Theme.colors.bgDeep },
+        contentStyle: { backgroundColor: APP_BACKGROUND_COLOR },
       }}
     >
       <Stack.Screen name="(auth)" />
@@ -121,40 +133,28 @@ function RootNavigator(): React.JSX.Element {
       <Stack.Screen
         name="match/[id]"
         options={{
-          headerShown: true,
-          title: 'Match',
-          headerStyle: { backgroundColor: Theme.colors.bgSurface2 },
-          headerTintColor: Theme.colors.textPrimary,
+          headerShown: false,
           presentation: 'card',
         }}
       />
       <Stack.Screen
-        name="profile/predictions"
+        name="cards"
         options={{
-          headerShown: true,
-          title: 'My Predictions',
-          headerStyle: { backgroundColor: Theme.colors.bgSurface2 },
-          headerTintColor: Theme.colors.textPrimary,
+          headerShown: false,
           presentation: 'card',
         }}
       />
       <Stack.Screen
         name="user-performance"
         options={{
-          headerShown: true,
-          title: 'My Performance',
-          headerStyle: { backgroundColor: Theme.colors.bgSurface2 },
-          headerTintColor: Theme.colors.textPrimary,
+          headerShown: false,
           presentation: 'card',
         }}
       />
       <Stack.Screen
         name="notifications"
         options={{
-          headerShown: true,
-          title: 'Notifications',
-          headerStyle: { backgroundColor: Theme.colors.bgSurface2 },
-          headerTintColor: Theme.colors.textPrimary,
+          headerShown: false,
           presentation: 'card',
         }}
       />
@@ -163,35 +163,44 @@ function RootNavigator(): React.JSX.Element {
 
   if (useMaxContainer) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#0A0C16', justifyContent: 'center', alignItems: 'center' }}>
+      <LinearGradient
+        colors={Theme.gradients.carbonApp as [string, string, string, string]}
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+      >
         <View 
           style={{ 
             width: Math.min(480, width),
             maxWidth: '100%',
             height: '100%', 
-            backgroundColor: Theme.colors.bgDeep,
-            // Standard shadow styling
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.5,
-            shadowRadius: 15,
-            // Native-compatible elevation property
-            elevation: 10,
+            backgroundColor: APP_BACKGROUND_COLOR,
+            ...(Platform.OS === 'web'
+              ? { boxShadow: '0 0 15px rgba(0, 0, 0, 0.5)' }
+              : {
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.5,
+                  shadowRadius: 15,
+                  elevation: 10,
+                }),
           }}
         >
           {content}
         </View>
-      </View>
+      </LinearGradient>
     );
   }
 
-  return content;
+  return (
+    <LinearGradient colors={Theme.gradients.carbonApp as [string, string, string, string]} style={{ flex: 1 }}>
+      {content}
+    </LinearGradient>
+  );
 }
 
 export default function RootLayout(): React.JSX.Element {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: APP_BACKGROUND_COLOR }}>
+      <SafeAreaProvider style={{ flex: 1, backgroundColor: APP_BACKGROUND_COLOR }}>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" />
           <ErrorBoundary>

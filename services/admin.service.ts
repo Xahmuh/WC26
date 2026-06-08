@@ -1,5 +1,29 @@
 import { supabase } from '@/lib/supabase';
-import type { PredictionQuestion, MatchStage, MatchStatus, HeroSlide, Database } from '@/types';
+import { compressLocalImageResult } from '@/lib/imageUpload';
+import { Platform } from 'react-native';
+import type {
+  PredictionQuestion,
+  MatchStage,
+  MatchStatus,
+  MatchDecisionMethod,
+  HeroSlide,
+  HomeCardsTileSettings,
+  MatchesHeroSettings,
+  CardDefinition,
+  Database,
+} from '@/types';
+
+function normalizeAdminError(message: string): string {
+  if (message.includes('matches_finished_knockout_has_outcome')) {
+    return 'Some finished knockout matches are missing a qualifier. Set the qualified team first, then try again.';
+  }
+
+  if (message.includes('permission denied for table users')) {
+    return 'Match deletion needs the latest database migration so total points can be recalculated safely.';
+  }
+
+  return message;
+}
 
 /**
  * Updates a match's points multiplier (e.g. 1 for Normal, 2 for Double, 3 for Triple).
@@ -11,8 +35,315 @@ export async function setMatchMultiplier(matchId: string, multiplier: number): P
     .eq('id', matchId);
 
   if (error) {
+    throw new Error(normalizeAdminError(error.message));
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Scoring rules (admin-configurable points per prediction "aspect")
+// ----------------------------------------------------------------------------
+
+export interface ScoringRules {
+  winnerPoints: number;
+  exactBonusPoints: number;
+}
+
+type ImageUploadInput = {
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  webFile?: Blob | null;
+};
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const clean = base64.replace(/^data:[^,]+,/, '').replace(/[\r\n\s]/g, '');
+  const padding = clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0;
+  const outputLength = Math.floor((clean.length * 3) / 4) - padding;
+  const bytes = new Uint8Array(outputLength);
+  let buffer = 0;
+  let bits = 0;
+  let index = 0;
+
+  for (let i = 0; i < clean.length; i += 1) {
+    const char = clean[i];
+    if (!char) continue;
+    if (char === '=') break;
+    const value = alphabet.indexOf(char);
+    if (value === -1) continue;
+
+    buffer = (buffer << 6) | value;
+    bits += 6;
+
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[index] = (buffer >> bits) & 0xff;
+      index += 1;
+    }
+  }
+
+  return bytes.buffer;
+}
+
+async function uploadCompressedImage(input: ImageUploadInput, options: {
+  bucket: string;
+  folder: string;
+  prefix: string;
+  maxWidth: number;
+  quality?: number;
+}): Promise<string> {
+  const fileName = `${options.prefix}-${Date.now()}.jpg`;
+  const filePath = `${options.folder}/${fileName}`;
+  const contentType = 'image/jpeg';
+
+  let fileBody: Blob | ArrayBuffer;
+
+  const compressed = await compressLocalImageResult(input.localUri, {
+    maxWidth: options.maxWidth,
+    quality: options.quality,
+  });
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(compressed.uri);
+    const blob = await response.blob();
+    fileBody = blob.size > 0 ? blob : input.webFile ?? blob;
+  } else {
+    if (!compressed.base64) {
+      throw new Error('Could not prepare the image data for upload.');
+    }
+    fileBody = base64ToArrayBuffer(compressed.base64);
+  }
+
+  const { error } = await supabase.storage
+    .from(options.bucket)
+    .upload(filePath, fileBody, { contentType, upsert: false });
+
+  if (error) {
     throw new Error(error.message);
   }
+
+  return filePath;
+}
+
+/**
+ * Fetches the singleton scoring-rules row. Scoring is intentionally simple:
+ * a prediction only earns points for (a) picking the correct winner/draw and
+ * (b) nailing the exact score — no partial credit for matching just one side's
+ * goal count.
+ */
+export async function getScoringRules(): Promise<ScoringRules> {
+  const { data, error } = await supabase
+    .from('scoring_rules')
+    .select('winner_points, exact_bonus_points')
+    .eq('id', 1)
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    winnerPoints: data.winner_points,
+    exactBonusPoints: data.exact_bonus_points,
+  };
+}
+
+/** Updates the points awarded per prediction aspect (admin only — enforced by RLS). */
+export async function updateScoringRules(rules: ScoringRules): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { error } = await supabase
+    .from('scoring_rules')
+    .update({
+      winner_points: rules.winnerPoints,
+      exact_bonus_points: rules.exactBonusPoints,
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id ?? null,
+    })
+    .eq('id', 1);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Stage multipliers (admin chooses a default 1x-6x multiplier per match stage)
+// ----------------------------------------------------------------------------
+
+export interface StageMultiplier {
+  stage: MatchStage;
+  multiplier: number;
+}
+
+/** Fetches the per-stage default multiplier presets. */
+export async function getStageMultipliers(): Promise<StageMultiplier[]> {
+  const { data, error } = await supabase
+    .from('stage_multipliers')
+    .select('stage, multiplier')
+    .order('stage', { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({ stage: row.stage as MatchStage, multiplier: row.multiplier }));
+}
+
+/**
+ * Sets a stage's default multiplier and bulk-applies it to eligible matches
+ * currently in that stage (admin only — enforced inside the RPC).
+ * Finished knockout matches missing their final outcome are skipped until fixed.
+ * Returns the number of matches updated.
+ */
+export async function setStageMultiplier(stage: MatchStage, multiplier: number): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_set_stage_multiplier', {
+    p_stage: stage,
+    p_multiplier: multiplier,
+  });
+
+  if (error) {
+    throw new Error(normalizeAdminError(error.message));
+  }
+
+  return data ?? 0;
+}
+
+// ----------------------------------------------------------------------------
+// Stage reward cards
+// ----------------------------------------------------------------------------
+
+export interface CardDefinitionInput {
+  name: string;
+  description: string | null;
+  imagePath: string | null;
+  awardStage: MatchStage;
+  thresholdPercent: number;
+  usableFromStage: MatchStage;
+  usableUntilStage: MatchStage;
+  maxUses: number;
+  multiplierBonus: number;
+  isActive: boolean;
+}
+
+function withCardImageUrl(row: any): CardDefinition {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? null,
+    image_path: row.image_path ?? null,
+    image_url: row.image_path ? getCardDefinitionImageUrl(row.image_path) : null,
+    award_stage: row.award_stage as MatchStage,
+    threshold_percent: Number(row.threshold_percent),
+    usable_from_stage: row.usable_from_stage as MatchStage,
+    usable_until_stage: row.usable_until_stage as MatchStage,
+    max_uses: row.max_uses,
+    multiplier_bonus: row.multiplier_bonus,
+    is_active: row.is_active,
+    created_by: row.created_by ?? null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export function getCardDefinitionImageUrl(imagePath: string): string {
+  const { data } = supabase.storage.from(CARD_IMAGES_BUCKET).getPublicUrl(imagePath);
+  return data.publicUrl;
+}
+
+export async function uploadCardDefinitionImage(input: {
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  webFile?: Blob | null;
+}): Promise<string> {
+  return uploadCompressedImage(input, {
+    bucket: CARD_IMAGES_BUCKET,
+    folder: 'definitions',
+    prefix: 'stage-card',
+    maxWidth: 1280,
+    quality: 0.72,
+  });
+}
+
+export async function getCardDefinitions(): Promise<CardDefinition[]> {
+  const { data, error } = await (supabase as any)
+    .from('card_definitions')
+    .select('*')
+    .order('award_stage', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(withCardImageUrl);
+}
+
+export async function createCardDefinition(input: CardDefinitionInput): Promise<CardDefinition> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await (supabase as any)
+    .from('card_definitions')
+    .insert({
+      name: input.name,
+      description: input.description,
+      image_path: input.imagePath,
+      award_stage: input.awardStage,
+      threshold_percent: input.thresholdPercent,
+      usable_from_stage: input.usableFromStage,
+      usable_until_stage: input.usableUntilStage,
+      max_uses: input.maxUses,
+      multiplier_bonus: input.multiplierBonus,
+      is_active: input.isActive,
+      created_by: user?.id ?? null,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw new Error(error.message);
+  return withCardImageUrl(data);
+}
+
+export async function updateCardDefinition(
+  cardId: string,
+  input: CardDefinitionInput
+): Promise<CardDefinition> {
+  const { data, error } = await (supabase as any)
+    .from('card_definitions')
+    .update({
+      name: input.name,
+      description: input.description,
+      image_path: input.imagePath,
+      award_stage: input.awardStage,
+      threshold_percent: input.thresholdPercent,
+      usable_from_stage: input.usableFromStage,
+      usable_until_stage: input.usableUntilStage,
+      max_uses: input.maxUses,
+      multiplier_bonus: input.multiplierBonus,
+      is_active: input.isActive,
+    })
+    .eq('id', cardId)
+    .select('*')
+    .single();
+
+  if (error) throw new Error(error.message);
+  return withCardImageUrl(data);
+}
+
+export async function disableCardDefinition(cardId: string): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('card_definitions')
+    .update({ is_active: false })
+    .eq('id', cardId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function recalculateStageCards(stage: MatchStage): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_recalculate_stage_cards' as any, {
+    p_stage: stage,
+  });
+
+  if (error) throw new Error(error.message);
+  return Number(data ?? 0);
 }
 
 /**
@@ -20,9 +351,9 @@ export async function setMatchMultiplier(matchId: string, multiplier: number): P
  */
 export async function createPredictionQuestion(
   questionText: string,
-  options: string[] = [],
   points: number = 10,
-  lockAtIso: string
+  lockAtIso: string,
+  cardImagePath: string | null = null
 ): Promise<PredictionQuestion> {
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -30,10 +361,11 @@ export async function createPredictionQuestion(
     .from('prediction_questions')
     .insert({
       question_text: questionText,
-      options: options, // JSON array of options (can be empty for free-text)
+      options: [],
       points: points,
       status: 'open',
       lock_at: lockAtIso,
+      card_image_path: cardImagePath,
       created_by: user?.id || null,
     })
     .select()
@@ -43,7 +375,6 @@ export async function createPredictionQuestion(
     throw new Error(error.message);
   }
 
-  // Map option JSON to options array
   return {
     ...data,
     options: data.options as string[],
@@ -55,7 +386,7 @@ export async function createPredictionQuestion(
  */
 export async function updatePredictionQuestion(
   questionId: string,
-  updates: { questionText: string; points: number; lockAtIso: string }
+  updates: { questionText: string; points: number; lockAtIso: string; cardImagePath?: string | null }
 ): Promise<void> {
   const { error } = await supabase
     .from('prediction_questions')
@@ -63,6 +394,7 @@ export async function updatePredictionQuestion(
       question_text: updates.questionText,
       points: updates.points,
       lock_at: updates.lockAtIso,
+      ...(updates.cardImagePath !== undefined ? { card_image_path: updates.cardImagePath } : {}),
     })
     .eq('id', questionId);
 
@@ -138,7 +470,34 @@ export async function getPredictionQuestions(): Promise<PredictionQuestion[]> {
   return (data || []).map((q) => ({
     ...q,
     options: q.options as string[],
+    card_image_url: q.card_image_path ? getPredictionQuestionCardImageUrl(q.card_image_path) : null,
   })) as PredictionQuestion[];
+}
+
+/**
+ * Resolves a prediction-card image path to a public URL.
+ */
+export function getPredictionQuestionCardImageUrl(imagePath: string): string {
+  const { data } = supabase.storage.from(PREDICTION_CARD_IMAGES_BUCKET).getPublicUrl(imagePath);
+  return data.publicUrl;
+}
+
+/**
+ * Uploads a tournament-prediction card image and returns the storage path.
+ */
+export async function uploadPredictionQuestionCardImage(input: {
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  webFile?: Blob | null;
+}): Promise<string> {
+  return uploadCompressedImage(input, {
+    bucket: PREDICTION_CARD_IMAGES_BUCKET,
+    folder: 'cards',
+    prefix: 'prediction-card',
+    maxWidth: 1280,
+    quality: 0.7,
+  });
 }
 
 /**
@@ -292,14 +651,16 @@ export async function createCustomMatch(input: {
 }
 
 /**
- * Updates a match result (status and score). If status is set to 'FINISHED',
- * triggers the points calculation Edge Function.
+ * Updates a match result. When a match becomes FINISHED, the database trigger
+ * recalculates points with the same card-aware scorer used by API polling.
  */
 export async function updateMatchResult(
   matchId: string,
   status: MatchStatus,
   homeScore: number | null,
-  awayScore: number | null
+  awayScore: number | null,
+  winnerTeamId: string | null,
+  decisionMethod: MatchDecisionMethod | null
 ): Promise<void> {
   const { error } = await supabase
     .from('matches')
@@ -307,16 +668,17 @@ export async function updateMatchResult(
       status,
       home_score: homeScore,
       away_score: awayScore,
+      winner_team_id: winnerTeamId,
+      decision_method: decisionMethod,
     })
     .eq('id', matchId);
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(normalizeAdminError(error.message));
   }
 
-  // If status is 'FINISHED', invoke the 'calculate-points' edge function.
-  // Points are calculated by the DB trigger (matches_after_write → score_match)
-  // in migration 013. No edge function is needed.
+  // Points are calculated by the DB trigger (matches_after_write -> score_match).
+  // No Edge Function is invoked here, so manual and API results share one scorer.
 }
 
 /**
@@ -356,13 +718,12 @@ export async function restoreUser(userId: string): Promise<void> {
  * the table's foreign keys.
  */
 export async function deleteMatch(matchId: string): Promise<void> {
-  const { error } = await supabase
-    .from('matches')
-    .delete()
-    .eq('id', matchId);
+  const { error } = await supabase.rpc('admin_delete_match', {
+    p_match_id: matchId,
+  });
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(normalizeAdminError(error.message));
   }
 }
 
@@ -371,6 +732,10 @@ export async function deleteMatch(matchId: string): Promise<void> {
 // ============================================================================
 
 const HERO_BANNERS_BUCKET = 'hero-banners';
+const PREDICTION_CARD_IMAGES_BUCKET = 'prediction-card-images';
+const CARD_IMAGES_BUCKET = 'card-images';
+const HOME_CARDS_TILE_BUCKET = HERO_BANNERS_BUCKET;
+const MATCHES_HERO_BUCKET = HERO_BANNERS_BUCKET;
 
 /**
  * Resolves a storage path inside the `hero-banners` bucket to a public URL.
@@ -400,28 +765,19 @@ export async function getHeroSlides(): Promise<HeroSlide[]> {
  * Uploads a banner image (picked from the device) to the `hero-banners`
  * storage bucket and returns the storage path to persist on the slide row.
  */
-export async function uploadHeroSlideImage(localUri: string): Promise<string> {
-  const fileExt = localUri.split('.').pop()?.toLowerCase() || 'jpg';
-  const contentType = `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
-  const fileName = `slide-${Date.now()}.${fileExt}`;
-  const filePath = `slides/${fileName}`;
-
-  const formData = new FormData();
-  formData.append('file', {
-    uri: localUri,
-    name: fileName,
-    type: contentType,
-  } as any);
-
-  const { error } = await supabase.storage
-    .from(HERO_BANNERS_BUCKET)
-    .upload(filePath, formData, { contentType, upsert: true });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return filePath;
+export async function uploadHeroSlideImage(input: {
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  webFile?: Blob | null;
+}): Promise<string> {
+  return uploadCompressedImage(input, {
+    bucket: HERO_BANNERS_BUCKET,
+    folder: 'slides',
+    prefix: 'slide',
+    maxWidth: 1600,
+    quality: 0.75,
+  });
 }
 
 /**
@@ -523,4 +879,150 @@ export async function reorderHeroSlides(orderedSlideIds: string[]): Promise<void
       throw new Error(failed.error.message);
     }
   });
+}
+
+// ============================================================================
+// Home My Cards tile artwork
+// ============================================================================
+
+export function getHomeCardsTileImageUrl(imagePath: string): string {
+  const { data } = supabase.storage.from(HOME_CARDS_TILE_BUCKET).getPublicUrl(imagePath);
+  return data.publicUrl;
+}
+
+function withHomeCardsTileImageUrl(row: HomeCardsTileSettings): HomeCardsTileSettings {
+  return {
+    ...row,
+    image_url: row.image_path ? getHomeCardsTileImageUrl(row.image_path) : null,
+  };
+}
+
+export async function getHomeCardsTileSettings(): Promise<HomeCardsTileSettings | null> {
+  const { data, error } = await supabase
+    .from('home_cards_tile_settings' as any)
+    .select('*')
+    .eq('id', 1)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '42P01') return null;
+    throw new Error(error.message);
+  }
+
+  return data ? withHomeCardsTileImageUrl(data as unknown as HomeCardsTileSettings) : null;
+}
+
+export async function uploadHomeCardsTileImage(input: {
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  webFile?: Blob | null;
+}): Promise<string> {
+  return uploadCompressedImage(input, {
+    bucket: HOME_CARDS_TILE_BUCKET,
+    folder: 'my-cards',
+    prefix: 'my-cards',
+    maxWidth: 1200,
+    quality: 0.75,
+  });
+}
+
+export async function updateHomeCardsTileSettings(input: {
+  imagePath: string | null;
+  backgroundColor: string;
+}): Promise<HomeCardsTileSettings> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('home_cards_tile_settings' as any)
+    .upsert(
+      {
+        id: 1,
+        image_path: input.imagePath,
+        background_color: input.backgroundColor,
+        updated_by: user?.id ?? null,
+      },
+      { onConflict: 'id' }
+    )
+    .select('*')
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return withHomeCardsTileImageUrl(data as unknown as HomeCardsTileSettings);
+}
+
+// ============================================================================
+// Matches hero banner artwork
+// ============================================================================
+
+export function getMatchesHeroImageUrl(imagePath: string): string {
+  const { data } = supabase.storage.from(MATCHES_HERO_BUCKET).getPublicUrl(imagePath);
+  return data.publicUrl;
+}
+
+function withMatchesHeroImageUrl(row: MatchesHeroSettings): MatchesHeroSettings {
+  return {
+    ...row,
+    image_url: row.image_path ? getMatchesHeroImageUrl(row.image_path) : null,
+  };
+}
+
+export async function getMatchesHeroSettings(): Promise<MatchesHeroSettings | null> {
+  const { data, error } = await (supabase as any)
+    .from('matches_hero_settings')
+    .select('*')
+    .eq('id', 1)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '42P01') return null;
+    throw new Error(error.message);
+  }
+
+  return data ? withMatchesHeroImageUrl(data as MatchesHeroSettings) : null;
+}
+
+export async function uploadMatchesHeroImage(input: {
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  webFile?: Blob | null;
+}): Promise<string> {
+  return uploadCompressedImage(input, {
+    bucket: MATCHES_HERO_BUCKET,
+    folder: 'matches-hero',
+    prefix: 'matches-hero',
+    maxWidth: 1600,
+    quality: 0.75,
+  });
+}
+
+export async function updateMatchesHeroSettings(input: {
+  imagePath: string | null;
+  backgroundColor: string;
+}): Promise<MatchesHeroSettings> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await (supabase as any)
+    .from('matches_hero_settings')
+    .upsert(
+      {
+        id: 1,
+        image_path: input.imagePath,
+        background_color: input.backgroundColor,
+        updated_by: user?.id ?? null,
+      },
+      { onConflict: 'id' }
+    )
+    .select('*')
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return withMatchesHeroImageUrl(data as MatchesHeroSettings);
 }

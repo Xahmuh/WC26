@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, Switch, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
 import Theme from '@/constants/theme/design-system';
@@ -38,6 +38,8 @@ const EMPTY_FORM: SlideFormState = {
   isActive: true,
 };
 
+const CURRENT_FALLBACK_HERO = require('../../assets/herob.jpg');
+
 function SlideEditorCard({
   initial,
   busy,
@@ -55,24 +57,31 @@ function SlideEditorCard({
   const uploadMutation = useUploadHeroSlideImage();
 
   const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need storage permission to pick a banner image.');
-      return;
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need storage permission to pick a banner image.');
+        return;
+      }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.7,
+      allowsEditing: false,
+      quality: 0.75,
     });
 
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    const localUri = result.assets[0].uri;
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset?.uri) return;
+    const localUri = asset.uri;
     setForm((f) => ({ ...f, localPreviewUri: localUri }));
 
-    uploadMutation.mutate(localUri, {
+    uploadMutation.mutate({
+      localUri,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      webFile: asset.file ?? null,
+    }, {
       onSuccess: (path) => setForm((f) => ({ ...f, imagePath: path })),
       onError: (err: any) => {
         Alert.alert('Upload Failed', err.message || 'Could not upload the image.');
@@ -96,17 +105,24 @@ function SlideEditorCard({
       {/* Image picker / preview */}
       <Pressable
         onPress={handlePickImage}
-        className="h-32 rounded-lg border border-dashed border-bgBorder bg-bgSurface1 items-center justify-center overflow-hidden"
-        style={{ backgroundColor: form.backgroundColor }}
+        className="rounded-lg border border-dashed border-bgBorder bg-bgSurface1 items-center justify-center overflow-hidden"
+        style={{ backgroundColor: form.backgroundColor, width: '100%', aspectRatio: 9 / 4 }}
       >
         {uploadMutation.isPending ? (
           <ActivityIndicator color="#fff" />
         ) : previewUri ? (
-          <Image source={{ uri: previewUri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+          <>
+            <Image source={{ uri: previewUri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+            <View className="absolute bottom-2 self-center rounded-full bg-black/70 px-3 py-1">
+              <Text className="text-[10px] font-bold uppercase tracking-wide text-accent">
+                Tap image to replace
+              </Text>
+            </View>
+          </>
         ) : (
           <View className="items-center gap-1">
             <Text className="text-xs text-textTertiary">Tap to pick a banner image</Text>
-            <Text className="text-[10px] text-textTertiary">16:9 recommended</Text>
+            <Text className="text-[10px] text-textTertiary">1440 x 640 recommended (9:4)</Text>
           </View>
         )}
       </Pressable>
@@ -211,7 +227,7 @@ function SlideRow({
     <Card className="p-3 border border-bgBorder bg-bgSurface2 flex-row items-center gap-3">
       <Image
         source={{ uri: getHeroSlideImageUrl(slide.image_path) }}
-        style={{ width: 64, height: 40, borderRadius: 8, backgroundColor: slide.background_color }}
+        style={{ width: 72, height: 32, borderRadius: 8, backgroundColor: slide.background_color }}
         resizeMode="contain"
       />
       <View className="flex-1 gap-0.5">
@@ -385,9 +401,26 @@ export function HeroBannerManager(): React.JSX.Element {
           )}
 
           {orderedSlides.length === 0 && !isAdding && (
-            <Text className="text-xs text-textTertiary text-center py-6 italic">
-              No hero slides yet. Add one to take over the home screen banner.
-            </Text>
+            <Card className="overflow-hidden border border-bgBorder bg-bgSurface2">
+              <Image
+                source={CURRENT_FALLBACK_HERO}
+                style={{ width: '100%', aspectRatio: 9 / 4, backgroundColor: '#13214a' }}
+                resizeMode="contain"
+              />
+              <View className="gap-3 p-4">
+                <View className="gap-1">
+                  <Text className="text-sm font-bold text-textPrimary">Current default hero image</Text>
+                  <Text className="text-xs text-textSecondary">
+                    This is the built-in fallback image. Replace it by creating the first managed hero slide.
+                  </Text>
+                </View>
+                <Button
+                  label="Replace Current Hero Image"
+                  variant="secondary"
+                  onPress={() => setIsAdding(true)}
+                />
+              </View>
+            </Card>
           )}
         </View>
       )}
@@ -401,7 +434,9 @@ export function HeroBannerManager(): React.JSX.Element {
           onSubmit={handleCreate}
         />
       ) : (
-        <Button label="+ Add Hero Slide" variant="secondary" onPress={() => setIsAdding(true)} />
+        orderedSlides.length > 0 ? (
+          <Button label="+ Add Hero Slide" variant="secondary" onPress={() => setIsAdding(true)} />
+        ) : null
       )}
     </View>
   );

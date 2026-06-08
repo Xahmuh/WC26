@@ -13,7 +13,7 @@ import {
   type User,
 } from '@supabase/supabase-js';
 
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { Database, LeaderboardRow } from '@/types';
 
 import Constants from 'expo-constants';
@@ -35,6 +35,25 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const isWeb = Platform.OS === 'web';
+const supabaseProjectRef = (() => {
+  try {
+    return new URL(supabaseUrl).hostname.split('.')[0] || 'wc26';
+  } catch {
+    return 'wc26';
+  }
+})();
+
+export const SUPABASE_AUTH_STORAGE_KEY = `wc26-${supabaseProjectRef}-auth-token-v2`;
+
+const LEGACY_AUTH_STORAGE_KEYS = [
+  `sb-${supabaseProjectRef}-auth-token`,
+  `sb-${supabaseProjectRef}-auth-token-code-verifier`,
+  'supabase.auth.token',
+];
+
+function getNativeAsyncStorage() {
+  return require('@react-native-async-storage/async-storage').default;
+}
 
 const customStorage = {
   getItem: async (key: string): Promise<string | null> => {
@@ -44,7 +63,7 @@ const customStorage = {
       }
       return window.localStorage.getItem(key);
     }
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const AsyncStorage = getNativeAsyncStorage();
     return AsyncStorage.getItem(key);
   },
   setItem: async (key: string, value: string): Promise<void> => {
@@ -54,7 +73,7 @@ const customStorage = {
       }
       return;
     }
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const AsyncStorage = getNativeAsyncStorage();
     return AsyncStorage.setItem(key, value);
   },
   removeItem: async (key: string): Promise<void> => {
@@ -64,19 +83,65 @@ const customStorage = {
       }
       return;
     }
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const AsyncStorage = getNativeAsyncStorage();
     return AsyncStorage.removeItem(key);
   },
 };
 
+export function isInvalidRefreshTokenError(err: unknown): boolean {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+      ? err
+      : typeof (err as { message?: unknown } | null)?.message === 'string'
+      ? String((err as { message: string }).message)
+      : '';
+
+  return (
+    message.includes('Invalid Refresh Token') ||
+    message.includes('Refresh Token Not Found') ||
+    message.includes('refresh_token_not_found')
+  );
+}
+
+export async function clearSupabaseAuthStorage(): Promise<void> {
+  const keys = [SUPABASE_AUTH_STORAGE_KEY, ...LEGACY_AUTH_STORAGE_KEYS];
+  await Promise.all(keys.map((key) => customStorage.removeItem(key).catch(() => undefined)));
+}
+
+void Promise.all(
+  LEGACY_AUTH_STORAGE_KEYS.map((key) => customStorage.removeItem(key).catch(() => undefined))
+);
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: customStorage,
+    storageKey: SUPABASE_AUTH_STORAGE_KEY,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: isWeb,
   },
 });
+
+if (!isWeb) {
+  const globalAuthState = globalThis as typeof globalThis & {
+    __wc26SupabaseAppStateListener?: { remove: () => void };
+  };
+
+  globalAuthState.__wc26SupabaseAppStateListener?.remove();
+  globalAuthState.__wc26SupabaseAppStateListener = AppState.addEventListener('change', (state) => {
+    if (state === 'active') {
+      supabase.auth.startAutoRefresh();
+    } else {
+      supabase.auth.stopAutoRefresh();
+    }
+  });
+
+  if (AppState.currentState === 'active') {
+    supabase.auth.startAutoRefresh();
+  }
+}
 
 /**
  * Returns the currently authenticated user, or null if signed out.

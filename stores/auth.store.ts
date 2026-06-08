@@ -7,7 +7,7 @@
 import { create } from 'zustand';
 import type { Session, Subscription } from '@supabase/supabase-js';
 
-import { supabase } from '@/lib/supabase';
+import { clearSupabaseAuthStorage, isInvalidRefreshTokenError, supabase } from '@/lib/supabase';
 import { queryClient } from '@/lib/queryClient';
 import type { UserProfile } from '@/types';
 
@@ -31,10 +31,14 @@ interface AuthState {
    * `consumeJustSignedIn()` to reset it so it doesn't repeat.
    */
   justSignedIn: boolean;
+  /** True once the branding video has been shown during the current login session. */
+  hasSeenBrandingVideo: boolean;
 
   initialize: () => Promise<void>;
   /** Resets `justSignedIn` back to false once the consumer has reacted to it. */
   consumeJustSignedIn: () => void;
+  /** Marks the branding video as already shown for the current session. */
+  markBrandingVideoSeen: () => void;
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (
     email: string,
@@ -59,34 +63,56 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   submitting: false,
   error: null,
   justSignedIn: false,
+  hasSeenBrandingVideo: false,
 
   consumeJustSignedIn: () => set({ justSignedIn: false }),
+  markBrandingVideoSeen: () => set({ hasSeenBrandingVideo: true }),
 
   initialize: async () => {
     try {
-      const { data } = await supabase.auth.getSession();
-      set({ session: data.session });
-      if (data.session) {
-        await get().refreshProfile();
-      }
-
       // Keep the store in lock-step with Supabase auth events. Subscribe once.
       if (!authListener) {
         const { data } = supabase.auth.onAuthStateChange((event, session) => {
+          const previousSession = get().session;
           set({ session });
           if (session) {
+            const isNewSession =
+              !previousSession || previousSession.user.id !== session.user.id;
             // Only a genuine fresh sign-in fires `SIGNED_IN`. Restoring a
-            // persisted session on cold start fires `INITIAL_SESSION` instead,
-            // so this won't re-trigger "just logged in" UX on every app open.
-            if (event === 'SIGNED_IN') {
-              set({ justSignedIn: true });
+            // persisted session can also emit SIGNED_IN in some clients, so
+            // guard against replaying the popup when a session already exists.
+            if (event === 'SIGNED_IN' && isNewSession && !get().initializing) {
+              set({ justSignedIn: true, hasSeenBrandingVideo: false });
             }
             void get().refreshProfile();
           } else {
-            set({ profile: null });
+            set({ profile: null, hasSeenBrandingVideo: false });
           }
         });
         authListener = data.subscription;
+      }
+
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        if (isInvalidRefreshTokenError(error)) {
+          await clearSupabaseAuthStorage();
+          queryClient.clear();
+          set({
+            session: null,
+            profile: null,
+            justSignedIn: false,
+            hasSeenBrandingVideo: false,
+            error: null,
+          });
+        } else {
+          set({ error: error.message });
+        }
+        return;
+      }
+
+      set({ session: data.session });
+      if (data.session) {
+        await get().refreshProfile();
       }
     } catch (err) {
       set({ error: toMessage(err, 'Failed to restore session.') });
@@ -143,9 +169,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await supabase.auth.signOut();
     } catch (err) {
-      set({ error: toMessage(err, 'Sign-out failed.') });
+      if (!isInvalidRefreshTokenError(err)) {
+        set({ error: toMessage(err, 'Sign-out failed.') });
+      }
     } finally {
-      set({ session: null, profile: null });
+      await clearSupabaseAuthStorage();
+      set({ session: null, profile: null, justSignedIn: false, hasSeenBrandingVideo: false });
       // Drop all cached server data so the next user never sees the previous
       // account's groups / question answers (those queries use global keys).
       queryClient.clear();

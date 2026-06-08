@@ -4,13 +4,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import Theme from '@/constants/theme/design-system';
-import { Container } from '@/components/ui/Container';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { PodiumSection } from '@/components/leaderboard/PodiumSection';
 import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState, ErrorState } from '@/components/ui/States';
-import { NotificationBell } from '@/components/ui/NotificationBell';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { PlayerProfileModal } from '@/components/ui/PlayerProfileModal';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
@@ -22,34 +20,9 @@ export default function LeaderboardScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((s) => s.session?.user.id);
-  const profile = useAuthStore((s) => s.profile);
   const query = useLeaderboard();
   const { data: teams = [] } = useTeams();
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; rank: number } | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-
-  useEffect(() => {
-    if (query.data) setLastUpdated(new Date());
-  }, [query.data]);
-
-  const spinAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const spin = Animated.loop(
-      Animated.timing(spinAnim, {
-        toValue: 1,
-        duration: 2000,
-        useNativeDriver: Platform.OS !== 'web',
-      })
-    );
-    spin.start();
-    return () => spin.stop();
-  }, [spinAnim]);
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
 
   // Issue 2 — always show fresh ranks when returning to this tab. refetch is a
   // stable react-query ref, so the focus callback never changes → no loop.
@@ -60,56 +33,27 @@ export default function LeaderboardScreen(): React.JSX.Element {
     }, [refetch])
   );
 
-  function formatLastUpdate(date: Date): string {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const h = date.getHours().toString().padStart(2, '0');
-    const m = date.getMinutes().toString().padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const dateStr = `${months[date.getMonth()]} ${date.getDate()}`;
-    if (diffMins < 1) return `Updated ${h}:${m}, ${dateStr}`;
-    if (diffMins < 60) return `Updated ${h}:${m}, ${dateStr}`;
-    return `Updated ${h}:${m}, ${dateStr}`;
-  }
-
-  const entries = query.data ?? [];
+  const entries = useMemo(() => query.data ?? [], [query.data]);
   const hasEntries = entries.length > 0;
 
   // Track previous ranks for trend indicators (up/down/stable)
   const prevRanksRef = useRef<Map<string, number>>(new Map());
 
-  // Deterministic ranking: points DESC, then user_id as a stable tie-breaker so
-  // the order never jitters even when every player shares the same score (e.g.
-  // everyone on 0 points before any match finishes).
-  const sorted = useMemo(
-    () =>
-      [...entries].sort((a, b) => {
-        if (b.total_points !== a.total_points) {
-          return b.total_points - a.total_points;
-        }
-        const aId = a.user_id || (a as any).id || '';
-        const bId = b.user_id || (b as any).id || '';
-        return aId.localeCompare(bId);
-      }),
-    [entries]
-  );
-
   const enrichedEntries = useMemo(() => {
     const prev = prevRanksRef.current;
-    return sorted.map((entry, i) => ({
+    return entries.map((entry) => ({
       ...entry,
       previous_rank: prev.get(entry.user_id),
     }));
-  }, [sorted]);
+  }, [entries]);
 
   useEffect(() => {
     const nextMap = new Map<string, number>();
-    sorted.forEach((entry, i) => {
-      nextMap.set(entry.user_id, i + 1);
+    entries.forEach((entry) => {
+      nextMap.set(entry.user_id, entry.rank);
     });
     prevRanksRef.current = nextMap;
-  }, [sorted]);
+  }, [entries]);
 
   // Podium = top 3; list = rank #4 and below. A user is never in both sections.
   const podium = useMemo(() => enrichedEntries.slice(0, 3), [enrichedEntries]);
@@ -117,24 +61,25 @@ export default function LeaderboardScreen(): React.JSX.Element {
 
   // Issue 2 — pin the current user so their position is ALWAYS visible. We only
   // pin when they're below the podium (rank ≥ 4); the podium already shows them
-  // otherwise. Rank mirrors the displayed list ranking (index in `sorted` + 1).
+  // otherwise. Rank mirrors the database materialized-view rank.
   const currentUserIndex = useMemo(
     () => enrichedEntries.findIndex((e) => e.user_id === userId),
     [enrichedEntries, userId]
   );
   const currentUserEntry = currentUserIndex >= 0 ? enrichedEntries[currentUserIndex] : null;
-  const currentUserRank = currentUserIndex >= 0 ? currentUserIndex + 1 : null;
+  const currentUserRank = currentUserEntry?.rank ?? null;
   const showPinned = Boolean(currentUserEntry && currentUserRank && currentUserRank > 3);
 
   const openPlayer = useCallback(
     (entry: LeaderboardEntry, rank: number) => setSelectedPlayer({ id: entry.user_id, rank }),
     []
   );
+  const openMiniLeagues = useCallback(() => router.push('/leagues' as never), [router]);
 
-  // List rows continue the ranking from #4 (position = sorted index + 1).
+  // List rows continue after the visual podium and display the DB rank.
   const renderItem = useCallback(
-    ({ item, index }: ListRenderItemInfo<LeaderboardEntry>) => {
-      const rank = index + 4;
+    ({ item }: ListRenderItemInfo<LeaderboardEntry>) => {
+      const rank = item.rank;
       return (
         <LeaderboardRow
           entry={item}
@@ -149,58 +94,7 @@ export default function LeaderboardScreen(): React.JSX.Element {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
-      <Container nested className="px-6 pb-2 pt-6">
-        <View className="flex-row items-center justify-between pb-4">
-
-          {/* Profile Avatar */}
-          <Pressable onPress={() => router.push('/profile')} className="w-10 h-10 rounded-full border border-bgBorder overflow-hidden active:opacity-80">
-            <Image
-              source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
-              style={{ width: '100%', height: '100%' }}
-            />
-          </Pressable>
-
-          {/* Center logo */}
-          <View className="flex-1 items-center px-4">
-            <Image
-              source={require('@/assets/icona.png')}
-              style={{ width: '100%', height: 85, maxWidth: 220 }}
-              resizeMode="contain"
-            />
-          </View>
-
-          {/* Right icon */}
-          <View className="w-10 items-end">
-            <NotificationBell />
-          </View>
-
-        </View>
-        <View className="mt-4">
-          <View className="flex-row items-center gap-2.5">
-            <View style={{ width: 5, height: 24, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
-            <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">
-              Leaderboard
-            </Text>
-          </View>
-          {entries.length > 0 && (
-            <View className="mt-2">
-              <Text className="text-[10px] font-medium text-textSecondary">
-                {entries.length} {entries.length === 1 ? 'player' : 'players'} competing
-              </Text>
-              <View className="flex-row items-center mt-3 self-start rounded-full bg-accentDim px-2.5 py-1">
-                <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                  <Icon name="refresh" size={12} color={Theme.colors.accent} />
-                </Animated.View>
-                <Text className="text-[9px] font-medium text-textSecondary ml-1.5">
-                  {formatLastUpdate(lastUpdated)}
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-      </Container>
-
+    <SafeAreaView className="flex-1" edges={['top']}>
       {query.isLoading ? (
         <LoadingSpinner fullScreen label="Loading leaderboard…" />
       ) : query.isError ? (
@@ -218,13 +112,16 @@ export default function LeaderboardScreen(): React.JSX.Element {
               paddingBottom: showPinned ? 12 : insets.bottom + TAB_BAR_CLEARANCE,
             }}
             ListHeaderComponent={
-              podium.length > 0 ? (
-                <PodiumSection
-                  entries={podium}
-                  currentUserId={userId}
-                  onSelect={(entry, place) => openPlayer(entry, place)}
-                />
-              ) : null
+              <View className="gap-3">
+                <MiniLeagueShortcut onPress={openMiniLeagues} />
+                {podium.length > 0 ? (
+                  <PodiumSection
+                    entries={podium}
+                    currentUserId={userId}
+                    onSelect={(entry) => openPlayer(entry, entry.rank)}
+                  />
+                ) : null}
+              </View>
             }
             ListEmptyComponent={
               // No rows means 0 players (show empty state) or ≤3 players (the
@@ -275,6 +172,28 @@ export default function LeaderboardScreen(): React.JSX.Element {
         rank={selectedPlayer?.rank}
       />
     </SafeAreaView>
+  );
+}
+
+function MiniLeagueShortcut({ onPress }: { onPress: () => void }): React.JSX.Element {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Open mini leagues"
+      className="min-h-14 flex-row items-center gap-3 rounded-2xl border border-bgBorder bg-bgSurface2 p-4 active:opacity-85"
+    >
+      <View className="h-11 w-11 items-center justify-center rounded-full border border-accentBorder bg-accentDim">
+        <Icon name="group" size={20} color={Theme.colors.accent} />
+      </View>
+      <View className="min-w-0 flex-1">
+        <Text className="text-sm font-black text-textPrimary">Mini Leagues</Text>
+        <Text className="mt-0.5 text-xs text-textSecondary" numberOfLines={1}>
+          Create or join private leaderboards
+        </Text>
+      </View>
+      <Icon name="forward" size={17} color={Theme.colors.textTertiary} />
+    </Pressable>
   );
 }
 

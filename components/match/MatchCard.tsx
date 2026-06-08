@@ -3,6 +3,7 @@ import { Animated, Platform, Pressable, Text, View } from 'react-native';
 
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Icon } from '@/components/ui/Icon';
+import { MultiplierBadge } from '@/components/ui/MultiplierBadge';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import Theme from '@/constants/theme/design-system';
 import { STATUS_LABELS } from '@/lib/constants';
@@ -32,8 +33,6 @@ function MatchCardComponent({
 }: MatchCardProps): React.JSX.Element {
   const isFinished = match.status === 'FINISHED';
   const isLive = match.status === 'IN_PLAY';
-  const isPlaceholder = match.is_placeholder;
-  const isPartial = !isPlaceholder && (!match.home_team.id || !match.away_team.id);
   const hasScore = match.home_score !== null && match.away_score !== null;
 
   // ClutchTime "live state": pulse the red indicator dot while in play.
@@ -55,6 +54,9 @@ function MatchCardComponent({
     ? [
         { borderColor: Theme.colors.live, borderWidth: 1.5, backgroundColor: '#1E1E1E' },
         Platform.select({
+          web: {
+            boxShadow: '0 0 14px rgba(255, 107, 107, 0.35)',
+          },
           ios: {
             shadowColor: Theme.colors.live,
             shadowOffset: { width: 0, height: 0 },
@@ -71,15 +73,15 @@ function MatchCardComponent({
       accessibilityRole="button"
       accessibilityLabel={
         match.is_placeholder
-          ? `Knockout match, teams to be decided`
-          : `${match.home_team.name} versus ${match.away_team.name}`
+          ? `Knockout match, teams to be decided. ${match.points_multiplier}x multiplier.`
+          : `${match.home_team.name} versus ${match.away_team.name}. ${match.points_multiplier}x multiplier.`
       }
       onPress={() => onPress?.(match.id)}
       className="rounded-2xl border border-bgBorder bg-bgSurface2 p-4 active:opacity-80"
       style={liveCardStyle}
     >
-      <View className="mb-3 flex-row items-center justify-between">
-        <View className="flex-row items-center gap-1.5">
+      <View className="mb-3 flex-row flex-wrap items-center justify-between gap-2">
+        <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-1.5">
           {isLive ? (
             <View className="flex-row items-center gap-1.5">
               <Animated.View
@@ -96,11 +98,14 @@ function MatchCardComponent({
             </View>
           )}
         </View>
-        {match.group_name ? (
-          <Text className="text-xs font-medium text-textTertiary">
-            Group {match.group_name}
-          </Text>
-        ) : null}
+        <View className="flex-row items-center justify-end gap-2">
+          {match.group_name ? (
+            <Text className="text-xs font-medium text-textTertiary" numberOfLines={1}>
+              Group {match.group_name}
+            </Text>
+          ) : null}
+          <MultiplierBadge value={match.points_multiplier} size="sm" />
+        </View>
       </View>
 
       {/* Teams row */}

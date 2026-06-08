@@ -8,23 +8,70 @@ import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/theme/design-system';
 
 const VIDEO_SOURCE: VideoSource = require('../assets/Videos/vid.mp4');
-const PLAYBACK_TIMEOUT_MS = 15000;
+const PLAYBACK_TIMEOUT_MS = 8000;
 const FADE_MS = 300;
+
+function IntroVideoLayer({
+  onReady,
+  onProgress,
+  onComplete,
+  onError,
+}: {
+  onReady: () => void;
+  onProgress: (progress: number) => void;
+  onComplete: () => void;
+  onError: (error: unknown) => void;
+}): React.JSX.Element {
+  const player = useVideoPlayer(VIDEO_SOURCE, (p) => {
+    p.muted = Platform.OS === 'web';
+    p.play();
+  });
+
+  useEffect(() => {
+    const subscription = player.addListener('statusChange', ({ status, error }) => {
+      if (status === 'readyToPlay') {
+        onReady();
+      } else if (status === 'error') {
+        onError(error);
+      }
+    });
+    return () => subscription.remove();
+  }, [player, onError, onReady]);
+
+  useEffect(() => {
+    const subscription = player.addListener('playToEnd', onComplete);
+    return () => subscription.remove();
+  }, [player, onComplete]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const duration = player.duration;
+      if (duration > 0) {
+        onProgress(Math.min(player.currentTime / duration, 1));
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [player, onProgress]);
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.video}
+      contentFit="contain"
+      nativeControls={false}
+    />
+  );
+}
 
 export default function OnboardingScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const [duration, setDuration] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [mountVideo, setMountVideo] = useState(false);
   const hasNavigated = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const player = useVideoPlayer(VIDEO_SOURCE, (p) => {
-    p.muted = Platform.OS === 'web';
-    p.play();
-  });
 
   const handleComplete = useCallback(async () => {
     if (hasNavigated.current) return;
@@ -37,7 +84,7 @@ export default function OnboardingScreen(): React.JSX.Element {
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: FADE_MS,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
       if (session) {
         router.replace('/(tabs)/home');
@@ -47,51 +94,45 @@ export default function OnboardingScreen(): React.JSX.Element {
     });
   }, [fadeAnim, router]);
 
+  const handleReady = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, []);
+
+  const handleProgress = useCallback(
+    (progress: number) => {
+      progressAnim.setValue(progress);
+    },
+    [progressAnim]
+  );
+
+  const handleError = useCallback(
+    (error: unknown) => {
+      console.warn('[Onboarding] video failed to load:', error);
+      void handleComplete();
+    },
+    [handleComplete]
+  );
+
   // Fade in on mount.
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: FADE_MS,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [fadeAnim]);
+
+  // Mount the heavy video after the first frame so the shell paints first.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMountVideo(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   // Fail-safe: if playback hasn't started within PLAYBACK_TIMEOUT_MS, bail.
   useEffect(() => {
     timeoutRef.current = setTimeout(handleComplete, PLAYBACK_TIMEOUT_MS);
     return () => clearTimeout(timeoutRef.current);
   }, [handleComplete]);
-
-  useEffect(() => {
-    const subscription = player.addListener('statusChange', ({ status, error }) => {
-      if (status === 'readyToPlay') {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        setIsPlaying(true);
-        if (player.duration > 0) setDuration(player.duration);
-      } else if (status === 'error') {
-        console.warn('[Onboarding] video failed to load:', error);
-        handleComplete();
-      }
-    });
-    return () => subscription.remove();
-  }, [player, handleComplete]);
-
-  useEffect(() => {
-    const subscription = player.addListener('playToEnd', handleComplete);
-    return () => subscription.remove();
-  }, [player, handleComplete]);
-
-  // Sync progress bar to actual playback position.
-  useEffect(() => {
-    if (!isPlaying || duration <= 0) return;
-
-    const interval = setInterval(() => {
-      const ratio = Math.min(player.currentTime / duration, 1);
-      progressAnim.setValue(ratio);
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isPlaying, duration, player, progressAnim]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -102,12 +143,18 @@ export default function OnboardingScreen(): React.JSX.Element {
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <StatusBar hidden />
 
-      <VideoView
-        player={player}
-        style={styles.video}
-        contentFit="contain"
-        nativeControls={false}
-      />
+      {mountVideo ? (
+        <IntroVideoLayer
+          onReady={handleReady}
+          onProgress={handleProgress}
+          onComplete={handleComplete}
+          onError={handleError}
+        />
+      ) : (
+        <View style={styles.videoPlaceholder}>
+          <Text style={styles.loadingText}>Loading intro...</Text>
+        </View>
+      )}
 
       <View style={[styles.skipButton, { top: insets.top + 16, right: 16 }]}>
         <Pressable
@@ -138,6 +185,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  videoPlaceholder: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.bgDeep,
+  },
+  loadingText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   skipButton: {
     position: 'absolute',

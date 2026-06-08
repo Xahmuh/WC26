@@ -15,13 +15,32 @@ import {
   createCustomMatch,
   updateMatchResult,
   getHeroSlides,
+  uploadPredictionQuestionCardImage,
   uploadHeroSlideImage,
   createHeroSlide,
   updateHeroSlide,
   deleteHeroSlide,
   reorderHeroSlides,
+  getHomeCardsTileSettings,
+  uploadHomeCardsTileImage,
+  updateHomeCardsTileSettings,
+  getMatchesHeroSettings,
+  uploadMatchesHeroImage,
+  updateMatchesHeroSettings,
+  getScoringRules,
+  updateScoringRules,
+  getStageMultipliers,
+  setStageMultiplier,
+  getCardDefinitions,
+  createCardDefinition,
+  updateCardDefinition,
+  disableCardDefinition,
+  uploadCardDefinitionImage,
+  recalculateStageCards,
+  type ScoringRules,
+  type CardDefinitionInput,
 } from '@/services/admin.service';
-import type { MatchStage, MatchStatus } from '@/types';
+import type { CardDefinition, MatchDecisionMethod, MatchStage, MatchStatus } from '@/types';
 
 export function useSetMatchMultiplier() {
   const queryClient = useQueryClient();
@@ -35,21 +54,136 @@ export function useSetMatchMultiplier() {
   });
 }
 
+// ----------------------------------------------------------------------------
+// Scoring rules (admin-configurable points per prediction aspect)
+// ----------------------------------------------------------------------------
+
+export function useScoringRules() {
+  return useQuery({
+    queryKey: ['admin', 'scoring-rules'],
+    queryFn: getScoringRules,
+  });
+}
+
+export function useUpdateScoringRules() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (rules: ScoringRules) => updateScoringRules(rules),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'scoring-rules'] });
+    },
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Stage multipliers (admin presets, bulk-applied per match stage)
+// ----------------------------------------------------------------------------
+
+export function useStageMultipliers() {
+  return useQuery({
+    queryKey: ['admin', 'stage-multipliers'],
+    queryFn: getStageMultipliers,
+  });
+}
+
+export function useSetStageMultiplier() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ stage, multiplier }: { stage: MatchStage; multiplier: number }) =>
+      setStageMultiplier(stage, multiplier),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'stage-multipliers'] });
+      void queryClient.invalidateQueries({ queryKey: ['matches'] });
+    },
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Stage reward cards (admin-configurable My Cards)
+// ----------------------------------------------------------------------------
+
+export function useCardDefinitions() {
+  return useQuery({
+    queryKey: ['admin', 'card-definitions'],
+    queryFn: getCardDefinitions,
+  });
+}
+
+export function useCreateCardDefinition() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: CardDefinitionInput) => createCardDefinition(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'card-definitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['cardDefinitions'] });
+    },
+  });
+}
+
+export function useUpdateCardDefinition() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ cardId, input }: { cardId: string; input: CardDefinitionInput }) =>
+      updateCardDefinition(cardId, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'card-definitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['cardDefinitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['userCards'] });
+    },
+  });
+}
+
+export function useDisableCardDefinition() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (cardId: string) => disableCardDefinition(cardId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'card-definitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['cardDefinitions'] });
+    },
+  });
+}
+
+export function useUploadCardDefinitionImage() {
+  return useMutation({
+    mutationFn: (input: { localUri: string; fileName?: string | null; mimeType?: string | null; webFile?: Blob | null }) =>
+      uploadCardDefinitionImage(input),
+  });
+}
+
+export function useRecalculateStageCards() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (stage: MatchStage) => recalculateStageCards(stage),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['userCards'] });
+    },
+  });
+}
+
+export type { CardDefinition, CardDefinitionInput };
+
 export function useCreatePredictionQuestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
       questionText,
-      options,
       points,
       lockAtIso,
+      cardImagePath,
     }: {
       questionText: string;
-      options: string[];
       points: number;
       lockAtIso: string;
-    }) => createPredictionQuestion(questionText, options, points, lockAtIso),
+      cardImagePath?: string | null;
+    }) => createPredictionQuestion(questionText, points, lockAtIso, cardImagePath ?? null),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['predictionQuestions'] });
     },
@@ -79,15 +213,24 @@ export function useUpdatePredictionQuestion() {
       questionText,
       points,
       lockAtIso,
+      cardImagePath,
     }: {
       questionId: string;
       questionText: string;
       points: number;
       lockAtIso: string;
-    }) => updatePredictionQuestion(questionId, { questionText, points, lockAtIso }),
+      cardImagePath?: string | null;
+    }) => updatePredictionQuestion(questionId, { questionText, points, lockAtIso, cardImagePath }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['predictionQuestions'] });
     },
+  });
+}
+
+export function useUploadPredictionQuestionCardImage() {
+  return useMutation({
+    mutationFn: (input: { localUri: string; fileName?: string | null; mimeType?: string | null; webFile?: Blob | null }) =>
+      uploadPredictionQuestionCardImage(input),
   });
 }
 
@@ -135,7 +278,7 @@ export function useAuditUserPrediction() {
       predictionId: string;
       status: 'approved' | 'rejected';
     }) => auditUserPrediction(predictionId, status),
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['questionSubmissions'] });
       void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
       void queryClient.invalidateQueries({ queryKey: ['myPoints'] });
@@ -206,12 +349,16 @@ export function useUpdateMatchResult() {
       status,
       homeScore,
       awayScore,
+      winnerTeamId,
+      decisionMethod,
     }: {
       matchId: string;
       status: MatchStatus;
       homeScore: number | null;
       awayScore: number | null;
-    }) => updateMatchResult(matchId, status, homeScore, awayScore),
+      winnerTeamId: string | null;
+      decisionMethod: MatchDecisionMethod | null;
+    }) => updateMatchResult(matchId, status, homeScore, awayScore, winnerTeamId, decisionMethod),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['matches'] });
       void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
@@ -246,7 +393,8 @@ export function useHeroSlides() {
 
 export function useUploadHeroSlideImage() {
   return useMutation({
-    mutationFn: (localUri: string) => uploadHeroSlideImage(localUri),
+    mutationFn: (input: { localUri: string; fileName?: string | null; mimeType?: string | null; webFile?: Blob | null }) =>
+      uploadHeroSlideImage(input),
   });
 }
 
@@ -312,6 +460,58 @@ export function useReorderHeroSlides() {
     mutationFn: (orderedSlideIds: string[]) => reorderHeroSlides(orderedSlideIds),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
+    },
+  });
+}
+
+export function useHomeCardsTileSettings() {
+  return useQuery({
+    queryKey: ['homeCardsTileSettings'],
+    queryFn: getHomeCardsTileSettings,
+  });
+}
+
+export function useUploadHomeCardsTileImage() {
+  return useMutation({
+    mutationFn: (input: { localUri: string; fileName?: string | null; mimeType?: string | null; webFile?: Blob | null }) =>
+      uploadHomeCardsTileImage(input),
+  });
+}
+
+export function useUpdateHomeCardsTileSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { imagePath: string | null; backgroundColor: string }) =>
+      updateHomeCardsTileSettings(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['homeCardsTileSettings'] });
+    },
+  });
+}
+
+export function useMatchesHeroSettings() {
+  return useQuery({
+    queryKey: ['matchesHeroSettings'],
+    queryFn: getMatchesHeroSettings,
+  });
+}
+
+export function useUploadMatchesHeroImage() {
+  return useMutation({
+    mutationFn: (input: { localUri: string; fileName?: string | null; mimeType?: string | null; webFile?: Blob | null }) =>
+      uploadMatchesHeroImage(input),
+  });
+}
+
+export function useUpdateMatchesHeroSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { imagePath: string | null; backgroundColor: string }) =>
+      updateMatchesHeroSettings(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['matchesHeroSettings'] });
     },
   });
 }

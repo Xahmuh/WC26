@@ -1,11 +1,15 @@
 import { Tabs } from 'expo-router';
 
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
+import Theme from '@/constants/theme/design-system';
 
 export default function TabsLayout(): React.JSX.Element {
   return (
     <Tabs
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: Theme.colors.bgDeep },
+      }}
       tabBar={(props) => <FloatingTabBar {...props} />}
     >
       <Tabs.Screen name="home" options={{ title: 'Home' }} />

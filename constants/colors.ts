@@ -1,0 +1,48 @@
+export const Colors = {
+  background: {
+    primary: '#0D0D0D',
+    card: '#141414',
+    cardAlt: '#1A1A1A',
+    elevated: '#1E1E1E',
+    overlay: 'rgba(0, 0, 0, 0.6)',
+  },
+  accent: {
+    lime: '#d7d95e',
+    limeLight: 'rgba(215, 217, 94, 0.15)',
+    limeBorder: 'rgba(215, 217, 94, 0.3)',
+    limeDim: 'rgba(215, 217, 94, 0.6)',
+  },
+  gold: '#FFD700',
+  goldDim: '#C8A800',
+  red: '#E03030',
+  redDim: '#991F1F',
+  blue: '#1A3A8F',
+  blueDim: '#0E2260',
+  text: {
+    primary: '#FFFFFF',
+    secondary: '#888888',
+    tertiary: '#555555',
+    accent: '#d7d95e',
+    gold: '#FFD700',
+    muted: '#444444',
+  },
+  border: {
+    default: 'rgba(215, 217, 94, 0.25)',
+    active: '#d7d95e',
+    subtle: 'rgba(255, 255, 255, 0.07)',
+    divider: 'rgba(255, 255, 255, 0.1)',
+  },
+  status: {
+    open: '#d7d95e',
+    answered: '#888888',
+    closed: '#E03030',
+    live: '#E03030',
+    upcoming: '#d7d95e',
+    finished: '#555555',
+  },
+  multiplier: {
+    background: '#0D0D0D',
+    border: '#d7d95e',
+    text: '#d7d95e',
+  },
+} as const;

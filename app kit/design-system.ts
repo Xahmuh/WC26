@@ -19,9 +19,9 @@ export const Colors = {
   bgBorder:    '#2A3A20',   // Borders, dividers, input outlines
 
   // Accent (the lime-green from the UI)
-  accent:         '#C9DF6A',  // Primary CTA, active state, highlights
-  accentDim:      'rgba(201,223,106,0.15)', // Accent backgrounds
-  accentBorder:   'rgba(201,223,106,0.30)', // Accent borders
+  accent:         '#d7d95e',  // Primary CTA, active state, highlights
+  accentDim:      'rgba(215,217,94,0.15)', // Accent backgrounds
+  accentBorder:   'rgba(215,217,94,0.30)', // Accent borders
   accentDark:     '#0D1A00',  // Text ON accent button
 
   // Text
@@ -58,7 +58,7 @@ export const Gradients = {
   // Card overlay (bottom fade)
   cardFade:   ['transparent', 'rgba(13,15,14,0.9)'] as string[],
   // Accent glow
-  accentGlow: ['rgba(201,223,106,0.25)', 'rgba(201,223,106,0)'] as string[],
+  accentGlow: ['rgba(215,217,94,0.25)', 'rgba(215,217,94,0)'] as string[],
 } as const
 
 // ─────────────────────────────────────────

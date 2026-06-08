@@ -10,12 +10,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated, Platform, Keyboard, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 
-import Theme from '@/constants/theme/design-system';
+import { Colors } from '@/constants';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { useNotifications } from '@/hooks/useNotifications';
+
+type FloatingTabBarProps = {
+  state: {
+    index: number;
+    routes: Array<{ key: string; name: string }>;
+  };
+  descriptors: Record<
+    string,
+    {
+      options?: {
+        tabBarAccessibilityLabel?: string;
+        title?: string;
+      };
+    }
+  >;
+  navigation: {
+    emit: (...args: any[]) => any;
+    navigate: (...args: any[]) => void;
+  };
+};
 
 // route name → semantic icon (outline + filled active variant)
 const TAB_ICONS: Record<string, { base: IconName; active: IconName }> = {
@@ -27,19 +46,16 @@ const TAB_ICONS: Record<string, { base: IconName; active: IconName }> = {
 
 // Kit "Bottom Navigation" exact spec
 const NAV = {
-  bg: '#1C1C1C',
-  borderRadius: 32,
-  borderWidth: 1,
-  borderColor: Theme.colors.bgBorder, // #2A2A2A
-  paddingHorizontal: 24,
+  bg: 'rgba(18,24,24,0.96)',
+  borderTopWidth: 1,
+  borderTopColor: 'rgba(201,223,106,0.24)',
+  borderRadius: 26,
+  paddingHorizontal: 10,
   paddingVertical: 10,
-  gap: 28,
-  iconSize: 22,
-  iconActive: Theme.colors.textPrimary, // #FFFFFF
-  iconInactive: '#555555',
-  dotColor: Theme.colors.accent, // #C8FF00
-  dotSize: 4,
-  bottomOffset: 16,
+  iconSize: 26,
+  iconActive: Colors.accent.lime,
+  iconInactive: '#B8B8B8',
+  bottomOffset: 14,
 };
 
 // Vertical space the floating pill occupies above the screen's safe-area bottom.
@@ -56,6 +72,7 @@ function NavItem({
   onLongPress,
   accessibilityLabel,
   badgeCount,
+  label,
 }: {
   routeName: string;
   isActive: boolean;
@@ -63,6 +80,7 @@ function NavItem({
   onLongPress: () => void;
   accessibilityLabel?: string;
   badgeCount?: number;
+  label: string;
 }): React.JSX.Element {
   const scale = useRef(new Animated.Value(1)).current;
   const icons = TAB_ICONS[routeName] ?? { base: 'home', active: 'homeActive' };
@@ -88,7 +106,9 @@ function NavItem({
           size={NAV.iconSize}
           color={isActive ? NAV.iconActive : NAV.iconInactive}
         />
-        {isActive && <View style={styles.activeDot} />}
+        <Text style={[styles.label, { color: isActive ? NAV.iconActive : NAV.iconInactive }]}>
+          {label}
+        </Text>
         {badgeCount != null && badgeCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
@@ -104,7 +124,7 @@ function useUnreadBadge(): number {
   return result.unreadCount;
 }
 
-export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps): React.JSX.Element | null {
+export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps): React.JSX.Element | null {
   const insets = useSafeAreaInsets();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const unreadBadge = useUnreadBadge();
@@ -124,7 +144,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   if (keyboardOpen) return null;
 
   return (
-    <View style={[styles.container, { bottom: insets.bottom + NAV.bottomOffset }]} pointerEvents="box-none">
+    <View style={[styles.container, { bottom: insets.bottom + NAV.bottomOffset, pointerEvents: 'box-none' }]}>
       <View style={styles.nav}>
         {state.routes.map((route, index) => {
           const options = descriptors[route.key]?.options;
@@ -150,6 +170,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               onPress={onPress}
               onLongPress={onLongPress}
               accessibilityLabel={options?.tabBarAccessibilityLabel ?? options?.title}
+              label={options?.title ?? route.name}
               badgeCount={route.name === 'profile' ? unreadBadge : undefined}
             />
           );
@@ -162,22 +183,26 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 14,
+    right: 14,
     alignItems: 'center',
     zIndex: 100,
   },
   nav: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: NAV.gap,
+    justifyContent: 'space-around',
+    width: '100%',
     backgroundColor: NAV.bg,
+    borderWidth: NAV.borderTopWidth,
+    borderColor: NAV.borderTopColor,
     borderRadius: NAV.borderRadius,
-    borderWidth: NAV.borderWidth,
-    borderColor: NAV.borderColor,
     paddingHorizontal: NAV.paddingHorizontal,
     paddingVertical: NAV.paddingVertical,
     ...Platform.select({
+      web: {
+        boxShadow: '0 4px 24px rgba(0, 0, 0, 0.8)',
+      },
       ios: {
         shadowColor: '#000000',
         shadowOffset: { width: 0, height: 4 },
@@ -190,17 +215,17 @@ const styles = StyleSheet.create({
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    minWidth: 64,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   navItemInner: {
     alignItems: 'center',
     gap: 4,
   },
-  activeDot: {
-    width: NAV.dotSize,
-    height: NAV.dotSize,
-    borderRadius: NAV.dotSize / 2,
-    backgroundColor: NAV.dotColor,
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   badge: {
     position: 'absolute',
@@ -209,7 +234,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: Theme.colors.live,
+    backgroundColor: Colors.red,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,

@@ -102,18 +102,22 @@ export const TextStyles = StyleSheet.create({
 export const Shadows = {
   none: {},
   sm: Platform.select({
+    web: { boxShadow: '0 1px 4px rgba(0, 0, 0, 0.3)' },
     ios: { shadowColor: Colors.overlay, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 4 },
     android: { elevation: 2 },
   }),
   md: Platform.select({
+    web: { boxShadow: '0 4px 8px rgba(0, 0, 0, 0.4)' },
     ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
     android: { elevation: 6 },
   }),
   lg: Platform.select({
+    web: { boxShadow: '0 8px 16px rgba(0, 0, 0, 0.5)' },
     ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 16 },
     android: { elevation: 12 },
   }),
   accentGlow: Platform.select({
+    web: { boxShadow: '0 0 12px rgba(201, 223, 106, 0.35)' },
     ios: { shadowColor: Colors.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.35, shadowRadius: 12 },
     android: { elevation: 8 },
   }),

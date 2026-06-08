@@ -25,12 +25,12 @@
 
 ## Design Philosophy
 
-**Dark Athletic Premium** — The UI language is built on deep black surfaces, restrained typography hierarchy, and a single electric accent (lime `#C8FF00`) that fires only at points of action and focus.
+**Dark Athletic Premium** — The UI language is built on deep black surfaces, restrained typography hierarchy, and a single electric accent (lime `#d7d95e`) that fires only at points of action and focus.
 
 | Principle | Application |
 |-----------|-------------|
 | **Contrast-first** | All content sits on near-black backgrounds; legibility is never compromised |
-| **Monochromatic with a single pop** | Everything is achromatic except `#C8FF00` (active) and `#E03030` (live) |
+| **Monochromatic with a single pop** | Everything is achromatic except `#d7d95e` (active) and `#E03030` (live) |
 | **Data density** | Cards pack league, teams, scores, and time with no wasted whitespace |
 | **Floating nav** | Bottom bar is a pill — not a full-width bar — giving content breathing room |
 | **Live state** | Red border + pulsing dot + glow shadow = unmistakeable live signal |
@@ -86,7 +86,7 @@ clutchtime-ui-kit/
 
 | Token | HEX | When to use |
 |-------|-----|-------------|
-| `accentLime` | `#C8FF00` | Active pill, active nav dot, primary CTA |
+| `accentLime` | `#d7d95e` | Active pill, active nav dot, primary CTA |
 | `accentLimeDark` | `#A0CC00` | Pressed state of lime elements |
 | `liveRed` | `#E03030` | Live indicator dot, live card border |
 | `liveRedBg` | `rgba(224,48,48,0.1)` | Live card tinted background |
@@ -224,7 +224,7 @@ elevation:     8   // Android (no glow, just elevation)
 ### 2. SportFilterTabs
 - Horizontal `ScrollView`, no scrollbar
 - Pills: `borderRadius: pill`
-- **Active:** bg `#C8FF00`, text `#111111`
+- **Active:** bg `#d7d95e`, text `#111111`
 - **Inactive:** bg `#252525`, border `#333`, text `#777`
 - Padding: `16px horizontal / 6px vertical`
 
@@ -292,7 +292,7 @@ elevation:     8   // Android (no glow, just elevation)
 
 ### Active State
 - Icon becomes white (filled variant)
-- 4px `#C8FF00` dot appears below icon
+- 4px `#d7d95e` dot appears below icon
 - No background highlight on the icon itself
 
 ### Icons (L → R)

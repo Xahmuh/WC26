@@ -32,6 +32,7 @@ const GLYPHS = {
   edit: 'create-outline',
   share: 'share-social-outline',
   copy: 'copy-outline',
+  gift: 'gift-outline',
   refresh: 'refresh',
   chevronDown: 'chevron-down',
   // tabs

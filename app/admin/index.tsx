@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
-import { ScrollView, Text, View, TextInput, Pressable, ActivityIndicator, Alert, Modal } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ScrollView, Text, View, TextInput, Pressable, ActivityIndicator, Alert, Modal, Image, Platform, KeyboardAvoidingView, StyleSheet } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 
 import Theme from '@/constants/theme/design-system';
 import { Card } from '@/components/ui/Card';
@@ -10,6 +11,8 @@ import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { HeroCarousel } from '@/components/ui/HeroCarousel';
 import { HeroBannerManager } from '@/components/admin/HeroBannerManager';
+import { HomeCardsTileManager } from '@/components/admin/HomeCardsTileManager';
+import { MatchesHeroManager } from '@/components/admin/MatchesHeroManager';
 import { DateTimePickerModal } from '@/components/ui/DateTimePickerModal';
 import { useMatches } from '@/hooks/useMatches';
 import { usePredictionQuestions } from '@/hooks/usePredictionQuestions';
@@ -21,26 +24,48 @@ import {
   useResolvePredictionQuestion,
   useUpdateQuestionStatus,
   useUpdatePredictionQuestion,
+  useUploadPredictionQuestionCardImage,
   useDeletePredictionQuestion,
   useQuestionSubmissions,
   useAuditUserPrediction,
   useCreateCustomMatch,
   useUpdateMatchResult,
   useDeleteMatch,
+  useScoringRules,
+  useUpdateScoringRules,
+  useStageMultipliers,
+  useSetStageMultiplier,
+  useCardDefinitions,
+  useCreateCardDefinition,
+  useUpdateCardDefinition,
+  useDisableCardDefinition,
+  useUploadCardDefinitionImage,
+  useRecalculateStageCards,
 } from '@/hooks/useAdmin';
-import type { Team, MatchStage, MatchStatus } from '@/types';
+import type { CardDefinition, Team, MatchDecisionMethod, MatchStage, MatchStatus, Match, PredictionQuestion } from '@/types';
 import { formatKickoff } from '@/lib/dates';
+import { useResponsive } from '@/lib/responsive';
 import { useAuthStore } from '@/stores/auth.store';
+
+async function ensureImageLibraryPermission(message: string): Promise<boolean> {
+  if (Platform.OS === 'web') return true;
+
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permission Denied', message);
+    return false;
+  }
+
+  return true;
+}
 
 interface SubmissionsAuditSectionProps {
   questionId: string;
-  points: number;
   auditMutation: any;
 }
 
 function SubmissionsAuditSection({
   questionId,
-  points,
   auditMutation,
 }: SubmissionsAuditSectionProps): React.JSX.Element {
   const { data: submissions, isLoading, isError, error } = useQuestionSubmissions(questionId);
@@ -145,6 +170,919 @@ function SubmissionsAuditSection({
   );
 }
 
+const STAGE_LABELS: Record<MatchStage, string> = {
+  GROUP: 'Group Stage',
+  ROUND_OF_32: 'Round of 32',
+  ROUND_OF_16: 'Round of 16',
+  QUARTER_FINAL: 'Quarter Final',
+  SEMI_FINAL: 'Semi Final',
+  THIRD_PLACE: 'Third Place',
+  FINAL: 'Final',
+};
+
+const STAGE_ORDER: MatchStage[] = [
+  'GROUP',
+  'ROUND_OF_32',
+  'ROUND_OF_16',
+  'QUARTER_FINAL',
+  'SEMI_FINAL',
+  'THIRD_PLACE',
+  'FINAL',
+];
+
+const MULTIPLIER_OPTIONS = [1, 2, 3, 4, 5, 6];
+
+type AdminTab = 'matches' | 'add_match' | 'questions' | 'cards' | 'hero_banner' | 'scoring';
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function ScoringSettingsSection(): React.JSX.Element {
+  const rulesQuery = useScoringRules();
+  const updateRulesMutation = useUpdateScoringRules();
+  const stagesQuery = useStageMultipliers();
+  const setStageMultiplierMutation = useSetStageMultiplier();
+
+  const [winnerPoints, setWinnerPoints] = useState('');
+  const [exactBonusPoints, setExactBonusPoints] = useState('');
+  const [didHydrate, setDidHydrate] = useState(false);
+  useEffect(() => {
+    if (rulesQuery.data && !didHydrate) {
+      setWinnerPoints(String(rulesQuery.data.winnerPoints));
+      setExactBonusPoints(String(rulesQuery.data.exactBonusPoints));
+      setDidHydrate(true);
+    }
+  }, [rulesQuery.data, didHydrate]);
+
+  const handleSaveRules = () => {
+    const parsed = {
+      winnerPoints: parseInt(winnerPoints, 10),
+      exactBonusPoints: parseInt(exactBonusPoints, 10),
+    };
+
+    if (Object.values(parsed).some((v) => Number.isNaN(v) || v < 0)) {
+      Alert.alert('Invalid points', 'Please enter non-negative whole numbers for every field.');
+      return;
+    }
+
+    updateRulesMutation.mutate(parsed, {
+      onError: (err: any) => Alert.alert('Error', err.message || 'Failed to update scoring rules.'),
+      onSuccess: () => Alert.alert('Saved', 'Scoring rules updated. They apply to matches scored from now on.'),
+    });
+  };
+
+  const handleStageMultiplier = (stage: MatchStage, multiplier: number) => {
+    setStageMultiplierMutation.mutate(
+      { stage, multiplier },
+      {
+        onError: (err: any) => Alert.alert('Error', err.message || 'Failed to update stage multiplier.'),
+        onSuccess: (affected) =>
+          Alert.alert(
+            'Applied',
+            `${STAGE_LABELS[stage]} default multiplier set to ${multiplier}x` +
+              (affected ? ` — applied to ${affected} match${affected === 1 ? '' : 'es'}.` : '.')
+          ),
+      }
+    );
+  };
+
+  const stageMultiplierByStage = new Map(
+    (stagesQuery.data ?? []).map((row) => [row.stage, row.multiplier])
+  );
+
+  return (
+    <View className="gap-6">
+      {/* Points per prediction aspect */}
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
+        <Text className="text-sm font-bold text-textPrimary">Points per Prediction Aspect</Text>
+        <Text className="text-xs text-textSecondary">
+          Scoring is kept simple: a prediction only earns points for picking the correct
+          winner/draw, plus a bonus for nailing the exact score (no partial credit for
+          matching just one side's goal count). These are the base (1x) values — the match's
+          multiplier is applied on top.
+        </Text>
+
+        {rulesQuery.isLoading ? (
+          <LoadingSpinner label="Loading scoring rules..." />
+        ) : (
+          <View className="gap-3">
+            {[
+              { label: 'Correct winner / draw', value: winnerPoints, set: setWinnerPoints },
+              { label: 'Exact score bonus', value: exactBonusPoints, set: setExactBonusPoints },
+            ].map((field) => (
+              <View key={field.label} className="flex-row items-center justify-between gap-3">
+                <Text className="text-sm text-textSecondary flex-1">{field.label}</Text>
+                <TextInput
+                  value={field.value}
+                  onChangeText={field.set}
+                  keyboardType="number-pad"
+                  className="h-10 w-20 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-center text-sm font-bold text-textPrimary"
+                  placeholderTextColor={Theme.colors.textTertiary}
+                />
+              </View>
+            ))}
+
+            <Button
+              label={updateRulesMutation.isPending ? 'Saving...' : 'Save Points'}
+              onPress={handleSaveRules}
+              disabled={updateRulesMutation.isPending}
+            />
+          </View>
+        )}
+      </Card>
+
+      {/* Per-stage multiplier presets */}
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
+        <Text className="text-sm font-bold text-textPrimary">Stage Multiplier Presets</Text>
+        <Text className="text-xs text-textSecondary">
+          Pick a default multiplier (1x-6x) for each tournament stage. Applying a value here
+          updates every match currently in that stage — you can still fine-tune individual
+          matches from the "Matches" tab afterwards.
+        </Text>
+
+        {stagesQuery.isLoading ? (
+          <LoadingSpinner label="Loading stage presets..." />
+        ) : (
+          <View className="gap-3">
+            {STAGE_ORDER.map((stage) => {
+              const current = stageMultiplierByStage.get(stage) ?? 1;
+              const isMutating =
+                setStageMultiplierMutation.isPending &&
+                setStageMultiplierMutation.variables?.stage === stage;
+
+              return (
+                <View key={stage} className="gap-1.5">
+                  <Text className="text-xs font-semibold text-textSecondary uppercase">
+                    {STAGE_LABELS[stage]}
+                  </Text>
+                  {isMutating ? (
+                    <ActivityIndicator size="small" color={Theme.colors.accent} />
+                  ) : (
+                    <View className="flex-row flex-wrap gap-1">
+                      {MULTIPLIER_OPTIONS.map((mult) => (
+                        <Pressable
+                          key={mult}
+                          onPress={() => handleStageMultiplier(stage, mult)}
+                          className={`px-2.5 py-1 rounded-md border ${
+                            current === mult
+                              ? 'bg-accentDim border-accent'
+                              : 'bg-bgSurface1 border-bgBorder'
+                          }`}
+                        >
+                          <Text
+                            className={`text-xs font-bold ${
+                              current === mult ? 'text-accent' : 'text-textSecondary'
+                            }`}
+                          >
+                            {mult}x
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </Card>
+    </View>
+  );
+}
+
+function ScoringSettingsSectionWithEdit(): React.JSX.Element {
+  const rulesQuery = useScoringRules();
+  const updateRulesMutation = useUpdateScoringRules();
+  const stagesQuery = useStageMultipliers();
+  const setStageMultiplierMutation = useSetStageMultiplier();
+
+  const [winnerPoints, setWinnerPoints] = useState('');
+  const [exactBonusPoints, setExactBonusPoints] = useState('');
+  const [didHydrateRules, setDidHydrateRules] = useState(false);
+  const [isEditingStages, setIsEditingStages] = useState(false);
+  const [stageDraft, setStageDraft] = useState<Partial<Record<MatchStage, number>>>({});
+
+  useEffect(() => {
+    if (rulesQuery.data && !didHydrateRules) {
+      setWinnerPoints(String(rulesQuery.data.winnerPoints));
+      setExactBonusPoints(String(rulesQuery.data.exactBonusPoints));
+      setDidHydrateRules(true);
+    }
+  }, [rulesQuery.data, didHydrateRules]);
+
+  const stageMultiplierByStage = new Map(
+    (stagesQuery.data ?? []).map((row) => [row.stage, row.multiplier])
+  );
+
+  const getSavedStageMultiplier = (stage: MatchStage) => stageMultiplierByStage.get(stage) ?? 1;
+
+  const resetStageDraft = () => {
+    const nextDraft: Partial<Record<MatchStage, number>> = {};
+    STAGE_ORDER.forEach((stage) => {
+      nextDraft[stage] = getSavedStageMultiplier(stage);
+    });
+    setStageDraft(nextDraft);
+  };
+
+  const handleSaveRules = () => {
+    const parsed = {
+      winnerPoints: parseInt(winnerPoints, 10),
+      exactBonusPoints: parseInt(exactBonusPoints, 10),
+    };
+
+    if (Object.values(parsed).some((value) => Number.isNaN(value) || value < 0)) {
+      Alert.alert('Invalid points', 'Please enter non-negative whole numbers for every field.');
+      return;
+    }
+
+    updateRulesMutation.mutate(parsed, {
+      onError: (err: any) => Alert.alert('Error', err.message || 'Failed to update scoring rules.'),
+      onSuccess: () => Alert.alert('Saved', 'Scoring rules updated. They apply to matches scored from now on.'),
+    });
+  };
+
+  const handleStartStageEdit = () => {
+    resetStageDraft();
+    setIsEditingStages(true);
+  };
+
+  const handleCancelStageEdit = () => {
+    resetStageDraft();
+    setIsEditingStages(false);
+  };
+
+  const handleSaveStageEdit = async () => {
+    const changed = STAGE_ORDER
+      .map((stage) => ({
+        stage,
+        current: getSavedStageMultiplier(stage),
+        next: stageDraft[stage] ?? getSavedStageMultiplier(stage),
+      }))
+      .filter((item) => item.current !== item.next);
+
+    if (changed.length === 0) {
+      setIsEditingStages(false);
+      Alert.alert('No changes', 'Stage multiplier presets are already up to date.');
+      return;
+    }
+
+    try {
+      const results = await Promise.all(
+        changed.map((item) =>
+          setStageMultiplierMutation.mutateAsync({ stage: item.stage, multiplier: item.next })
+        )
+      );
+      const affected = results.reduce((sum, value) => sum + (value ?? 0), 0);
+      setIsEditingStages(false);
+      Alert.alert(
+        'Saved',
+        `Updated ${changed.length} stage preset${changed.length === 1 ? '' : 's'}` +
+          (affected ? ` and applied to ${affected} match${affected === 1 ? '' : 'es'}.` : '.')
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to save stage multiplier presets.');
+    }
+  };
+
+  return (
+    <View className="gap-6">
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
+        <Text className="text-sm font-bold text-textPrimary">Points per Prediction Aspect</Text>
+        <Text className="text-xs text-textSecondary">
+          Scoring is kept simple: a prediction earns points for the correct winner/draw,
+          plus a bonus for the exact score. The match multiplier is applied on top.
+        </Text>
+
+        {rulesQuery.isLoading ? (
+          <LoadingSpinner label="Loading scoring rules..." />
+        ) : (
+          <View className="gap-3">
+            {[
+              { label: 'Correct winner / draw', value: winnerPoints, set: setWinnerPoints },
+              { label: 'Exact score bonus', value: exactBonusPoints, set: setExactBonusPoints },
+            ].map((field) => (
+              <View key={field.label} className="flex-row items-center justify-between gap-3">
+                <Text className="text-sm text-textSecondary flex-1">{field.label}</Text>
+                <TextInput
+                  value={field.value}
+                  onChangeText={field.set}
+                  keyboardType="number-pad"
+                  className="h-10 w-20 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-center text-sm font-bold text-textPrimary"
+                  placeholderTextColor={Theme.colors.textTertiary}
+                />
+              </View>
+            ))}
+
+            <Button
+              label={updateRulesMutation.isPending ? 'Saving...' : 'Save Points'}
+              onPress={handleSaveRules}
+              disabled={updateRulesMutation.isPending}
+            />
+          </View>
+        )}
+      </Card>
+
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
+        <View className="flex-row items-center justify-between gap-3">
+          <Text className="text-sm font-bold text-textPrimary">Stage Multiplier Presets</Text>
+          {!isEditingStages && (
+            <Pressable
+              onPress={handleStartStageEdit}
+              disabled={stagesQuery.isLoading}
+              className="rounded-lg border border-accentBorder bg-accentDim px-3 py-2 active:opacity-80"
+            >
+              <Text className="text-[10px] font-bold uppercase tracking-wide text-accent">Edit</Text>
+            </Pressable>
+          )}
+        </View>
+        <Text className="text-xs text-textSecondary">
+          Pick a default multiplier for each tournament stage. Changes are only applied after Save Changes.
+        </Text>
+
+        {stagesQuery.isLoading ? (
+          <LoadingSpinner label="Loading stage presets..." />
+        ) : (
+          <View className="gap-3">
+            {STAGE_ORDER.map((stage) => {
+              const saved = getSavedStageMultiplier(stage);
+              const current = isEditingStages ? stageDraft[stage] ?? saved : saved;
+
+              return (
+                <View key={stage} className="gap-1.5">
+                  <Text className="text-xs font-semibold text-textSecondary uppercase">
+                    {STAGE_LABELS[stage]}
+                  </Text>
+                  <View className="flex-row flex-wrap gap-1">
+                    {MULTIPLIER_OPTIONS.map((multiplier) => (
+                      <Pressable
+                        key={multiplier}
+                        onPress={() => {
+                          if (!isEditingStages) return;
+                          setStageDraft((prev) => ({ ...prev, [stage]: multiplier }));
+                        }}
+                        disabled={!isEditingStages || setStageMultiplierMutation.isPending}
+                        className={`px-2.5 py-1 rounded-md border ${
+                          current === multiplier
+                            ? 'bg-accentDim border-accent'
+                            : 'bg-bgSurface1 border-bgBorder'
+                        } ${!isEditingStages ? 'opacity-80' : ''}`}
+                      >
+                        <Text
+                          className={`text-xs font-bold ${
+                            current === multiplier ? 'text-accent' : 'text-textSecondary'
+                          }`}
+                        >
+                          {multiplier}x
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              );
+            })}
+
+            {isEditingStages && (
+              <View className="flex-row gap-2 pt-2">
+                <View className="flex-1">
+                  <Button
+                    label="Cancel"
+                    variant="secondary"
+                    onPress={handleCancelStageEdit}
+                    disabled={setStageMultiplierMutation.isPending}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Button
+                    label={setStageMultiplierMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    onPress={handleSaveStageEdit}
+                    loading={setStageMultiplierMutation.isPending}
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+      </Card>
+    </View>
+  );
+}
+
+interface CardFormState {
+  name: string;
+  description: string;
+  imagePath: string | null;
+  imagePreviewUri: string | null;
+  awardStage: MatchStage;
+  usableFromStage: MatchStage;
+  usableUntilStage: MatchStage;
+  thresholdPercent: string;
+  maxUses: string;
+  multiplierBonus: string;
+  isActive: boolean;
+}
+
+function createEmptyCardForm(): CardFormState {
+  return {
+    name: '',
+    description: '',
+    imagePath: null,
+    imagePreviewUri: null,
+    awardStage: 'GROUP',
+    usableFromStage: 'GROUP',
+    usableUntilStage: 'ROUND_OF_32',
+    thresholdPercent: '70',
+    maxUses: '1',
+    multiplierBonus: '1',
+    isActive: true,
+  };
+}
+
+function getStageIndex(stage: MatchStage): number {
+  const index = STAGE_ORDER.indexOf(stage);
+  return index === -1 ? 0 : index;
+}
+
+function StageSelector({
+  label,
+  value,
+  stages,
+  onChange,
+}: {
+  label: string;
+  value: MatchStage;
+  stages: MatchStage[];
+  onChange: (stage: MatchStage) => void;
+}): React.JSX.Element {
+  return (
+    <View className="gap-1.5">
+      <Text className="text-xs font-semibold text-textSecondary uppercase">{label}</Text>
+      <View className="flex-row flex-wrap gap-1.5">
+        {stages.map((stage) => {
+          const selected = value === stage;
+          return (
+            <Pressable
+              key={stage}
+              onPress={() => onChange(stage)}
+              className={`px-2.5 py-1.5 rounded-lg border ${
+                selected ? 'bg-accentDim border-accent' : 'bg-bgSurface1 border-bgBorder'
+              }`}
+            >
+              <Text className={`text-[10px] font-bold ${selected ? 'text-accent' : 'text-textSecondary'}`}>
+                {STAGE_LABELS[stage]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function StageCardsSection(): React.JSX.Element {
+  const cardsQuery = useCardDefinitions();
+  const createMutation = useCreateCardDefinition();
+  const updateMutation = useUpdateCardDefinition();
+  const disableMutation = useDisableCardDefinition();
+  const uploadMutation = useUploadCardDefinitionImage();
+  const recalculateMutation = useRecalculateStageCards();
+
+  const [form, setForm] = useState<CardFormState>(() => createEmptyCardForm());
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const awardStageIndex = getStageIndex(form.awardStage);
+  const usableFromIndex = getStageIndex(form.usableFromStage);
+  const usableFromOptions = STAGE_ORDER.slice(awardStageIndex);
+  const usableUntilOptions = STAGE_ORDER.slice(usableFromIndex);
+
+  const setAwardStage = (nextStage: MatchStage) => {
+    setForm((prev) => {
+      const awardIndex = getStageIndex(nextStage);
+      const nextFrom =
+        getStageIndex(prev.usableFromStage) < awardIndex ? nextStage : prev.usableFromStage;
+      const nextUntil =
+        getStageIndex(prev.usableUntilStage) < getStageIndex(nextFrom)
+          ? nextFrom
+          : prev.usableUntilStage;
+
+      return {
+        ...prev,
+        awardStage: nextStage,
+        usableFromStage: nextFrom,
+        usableUntilStage: nextUntil,
+      };
+    });
+  };
+
+  const setUsableFromStage = (nextStage: MatchStage) => {
+    setForm((prev) => ({
+      ...prev,
+      usableFromStage: nextStage,
+      usableUntilStage:
+        getStageIndex(prev.usableUntilStage) < getStageIndex(nextStage)
+          ? nextStage
+          : prev.usableUntilStage,
+    }));
+  };
+
+  const resetForm = () => {
+    setEditingCardId(null);
+    setForm(createEmptyCardForm());
+  };
+
+  const startEditCard = (card: CardDefinition) => {
+    setEditingCardId(card.id);
+    setForm({
+      name: card.name,
+      description: card.description ?? '',
+      imagePath: card.image_path,
+      imagePreviewUri: card.image_url ?? null,
+      awardStage: card.award_stage,
+      usableFromStage: card.usable_from_stage,
+      usableUntilStage: card.usable_until_stage,
+      thresholdPercent: String(card.threshold_percent),
+      maxUses: String(card.max_uses),
+      multiplierBonus: String(card.multiplier_bonus),
+      isActive: card.is_active,
+    });
+  };
+
+  const handlePickCardImage = async () => {
+    if (Platform.OS !== 'web') {
+      const hasPermission = await ensureImageLibraryPermission('We need storage permission to pick a card image.');
+      if (!hasPermission) return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [20, 29],
+      quality: 0.8,
+    });
+
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset?.uri) return;
+
+    setForm((prev) => ({ ...prev, imagePreviewUri: asset.uri }));
+
+    uploadMutation.mutate(
+      {
+        localUri: asset.uri,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        webFile: asset.file ?? null,
+      },
+      {
+        onSuccess: (path) => {
+          setForm((prev) => ({ ...prev, imagePath: path }));
+        },
+        onError: (err: any) => {
+          Alert.alert('Upload Failed', err.message || 'Could not upload the card image.');
+        },
+      }
+    );
+  };
+
+  const buildCardInput = () => {
+    const threshold = Number(form.thresholdPercent);
+    const maxUses = parseInt(form.maxUses, 10);
+    const multiplierBonus = parseInt(form.multiplierBonus, 10);
+
+    if (!form.name.trim()) {
+      Alert.alert('Invalid card', 'Card name is required.');
+      return null;
+    }
+    if (!Number.isFinite(threshold) || threshold <= 0 || threshold > 100) {
+      Alert.alert('Invalid threshold', 'Threshold percent must be between 1 and 100.');
+      return null;
+    }
+    if (Number.isNaN(maxUses) || maxUses < 1 || maxUses > 20) {
+      Alert.alert('Invalid uses', 'Max uses must be between 1 and 20.');
+      return null;
+    }
+    if (Number.isNaN(multiplierBonus) || multiplierBonus < 1 || multiplierBonus > 10) {
+      Alert.alert('Invalid multiplier', 'Multiplier bonus must be between 1 and 10.');
+      return null;
+    }
+    if (getStageIndex(form.usableFromStage) < getStageIndex(form.awardStage)) {
+      Alert.alert('Invalid stage window', 'Usable from stage cannot be before the earning stage.');
+      return null;
+    }
+    if (getStageIndex(form.usableUntilStage) < getStageIndex(form.usableFromStage)) {
+      Alert.alert('Invalid stage window', 'Usable until stage must be after usable from stage.');
+      return null;
+    }
+    if (uploadMutation.isPending) {
+      Alert.alert('Image upload', 'Please wait until the card image upload finishes.');
+      return null;
+    }
+
+    return {
+      name: form.name.trim(),
+      description: form.description.trim() || null,
+      imagePath: form.imagePath,
+      awardStage: form.awardStage,
+      thresholdPercent: threshold,
+      usableFromStage: form.usableFromStage,
+      usableUntilStage: form.usableUntilStage,
+      maxUses,
+      multiplierBonus,
+      isActive: form.isActive,
+    };
+  };
+
+  const handleSaveCard = () => {
+    const input = buildCardInput();
+    if (!input) return;
+
+    if (editingCardId) {
+      updateMutation.mutate(
+        { cardId: editingCardId, input },
+        {
+          onSuccess: () => {
+            resetForm();
+            Alert.alert('Saved', 'Card definition updated.');
+          },
+          onError: (err: any) => Alert.alert('Error', err.message || 'Failed to update card.'),
+        }
+      );
+      return;
+    }
+
+    createMutation.mutate(input, {
+      onSuccess: () => {
+        resetForm();
+        Alert.alert('Created', 'Card definition created.');
+      },
+      onError: (err: any) => Alert.alert('Error', err.message || 'Failed to create card.'),
+    });
+  };
+
+  const handleDisableCard = (card: CardDefinition) => {
+    Alert.alert(
+      'Disable card?',
+      `${card.name} will stop being awarded. Already-earned cards stay in user inventories.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disable',
+          style: 'destructive',
+          onPress: () => {
+            disableMutation.mutate(card.id, {
+              onError: (err: any) => Alert.alert('Error', err.message || 'Failed to disable card.'),
+            });
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRecalculateStage = (stage: MatchStage) => {
+    recalculateMutation.mutate(stage, {
+      onSuccess: (count) => {
+        Alert.alert(
+          'Recalculated',
+          `Awarded ${count} card${count === 1 ? '' : 's'} for ${STAGE_LABELS[stage]}.`
+        );
+      },
+      onError: (err: any) => Alert.alert('Error', err.message || 'Failed to recalculate cards.'),
+    });
+  };
+
+  return (
+    <View className="gap-6">
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-4">
+        <View className="flex-row items-center justify-between gap-3">
+          <View className="min-w-0 flex-1">
+            <Text className="text-base font-bold text-textPrimary">
+              {editingCardId ? 'Edit Stage Card' : 'Create Stage Card'}
+            </Text>
+            <Text className="mt-1 text-xs text-textSecondary">
+              Configure how users earn a card and where it can boost match multipliers.
+            </Text>
+          </View>
+          {editingCardId ? (
+            <Pressable
+              onPress={resetForm}
+              className="rounded-lg border border-bgBorder bg-bgSurface1 px-3 py-2"
+            >
+              <Text className="text-[10px] font-bold uppercase text-textSecondary">New</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View className="gap-1.5">
+          <Text className="text-xs font-semibold text-textSecondary uppercase">Card Name</Text>
+          <TextInput
+            value={form.name}
+            onChangeText={(name) => setForm((prev) => ({ ...prev, name }))}
+            placeholder="e.g. Captain Card"
+            placeholderTextColor={Theme.colors.textTertiary}
+            className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+          />
+        </View>
+
+        <View className="gap-1.5">
+          <Text className="text-xs font-semibold text-textSecondary uppercase">Description</Text>
+          <TextInput
+            value={form.description}
+            onChangeText={(description) => setForm((prev) => ({ ...prev, description }))}
+            placeholder="Short admin note shown to users"
+            placeholderTextColor={Theme.colors.textTertiary}
+            className="min-h-20 rounded-lg border border-bgBorder bg-bgSurface1 px-3 py-2 text-sm text-textPrimary"
+            multiline
+          />
+        </View>
+
+        <View className="gap-2">
+          <Text className="text-xs font-semibold text-textSecondary uppercase">Card Image</Text>
+          <View className="flex-row items-center gap-3">
+            <View className="h-24 w-16 overflow-hidden rounded-xl border border-bgBorder bg-bgSurface1 items-center justify-center">
+              {form.imagePreviewUri ? (
+                <Image source={{ uri: form.imagePreviewUri }} resizeMode="cover" className="h-full w-full" />
+              ) : (
+                <Icon name="gift" size={24} color={Theme.colors.textTertiary} />
+              )}
+            </View>
+            <View className="min-w-0 flex-1 gap-2">
+              <Button
+                label={uploadMutation.isPending ? 'Uploading...' : 'Upload Image'}
+                variant="secondary"
+                onPress={handlePickCardImage}
+                loading={uploadMutation.isPending}
+              />
+              <Text className="text-[10px] text-textTertiary">
+                Portrait artwork works best for the card collection screen.
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <StageSelector
+          label="Which stage earns this card?"
+          value={form.awardStage}
+          stages={STAGE_ORDER}
+          onChange={setAwardStage}
+        />
+
+        <StageSelector
+          label="Usable from"
+          value={form.usableFromStage}
+          stages={usableFromOptions}
+          onChange={setUsableFromStage}
+        />
+
+        <StageSelector
+          label="Usable until"
+          value={form.usableUntilStage}
+          stages={usableUntilOptions}
+          onChange={(usableUntilStage) => setForm((prev) => ({ ...prev, usableUntilStage }))}
+        />
+
+        <View className="flex-row flex-wrap gap-3">
+          <View className="min-w-[96px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Threshold %</Text>
+            <TextInput
+              value={form.thresholdPercent}
+              onChangeText={(thresholdPercent) => setForm((prev) => ({ ...prev, thresholdPercent }))}
+              keyboardType="numeric"
+              placeholder="70"
+              placeholderTextColor={Theme.colors.textTertiary}
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+          <View className="min-w-[96px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Max Uses</Text>
+            <TextInput
+              value={form.maxUses}
+              onChangeText={(maxUses) => setForm((prev) => ({ ...prev, maxUses }))}
+              keyboardType="numeric"
+              placeholder="1"
+              placeholderTextColor={Theme.colors.textTertiary}
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+          <View className="min-w-[96px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Multiplier +</Text>
+            <TextInput
+              value={form.multiplierBonus}
+              onChangeText={(multiplierBonus) => setForm((prev) => ({ ...prev, multiplierBonus }))}
+              keyboardType="numeric"
+              placeholder="1"
+              placeholderTextColor={Theme.colors.textTertiary}
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+        </View>
+
+        <Pressable
+          onPress={() => setForm((prev) => ({ ...prev, isActive: !prev.isActive }))}
+          className={`rounded-xl border px-3 py-3 ${
+            form.isActive ? 'border-accent bg-accentDim' : 'border-bgBorder bg-bgSurface1'
+          }`}
+        >
+          <View className="flex-row items-center justify-between gap-3">
+            <Text className={`text-xs font-bold ${form.isActive ? 'text-accent' : 'text-textSecondary'}`}>
+              {form.isActive ? 'Active - can be awarded' : 'Inactive - hidden from awards'}
+            </Text>
+            <Icon
+              name={form.isActive ? 'checkCircle' : 'closeCircle'}
+              size={16}
+              color={form.isActive ? Theme.colors.accent : Theme.colors.textTertiary}
+            />
+          </View>
+        </Pressable>
+
+        <Button
+          label={editingCardId ? 'Save Card' : 'Create Card'}
+          onPress={handleSaveCard}
+          loading={isSaving}
+          disabled={isSaving || uploadMutation.isPending}
+        />
+      </Card>
+
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-4">
+        <View className="gap-1">
+          <Text className="text-base font-bold text-textPrimary">Existing Cards</Text>
+          <Text className="text-xs text-textSecondary">
+            Recalculate a stage after editing thresholds to award cards to existing users.
+          </Text>
+        </View>
+
+        {cardsQuery.isLoading ? (
+          <LoadingSpinner label="Loading cards..." />
+        ) : cardsQuery.isError ? (
+          <Text className="text-xs text-live">{cardsQuery.error.message}</Text>
+        ) : (cardsQuery.data ?? []).length === 0 ? (
+          <Text className="text-sm text-textTertiary text-center py-4">No cards created yet.</Text>
+        ) : (
+          <View className="gap-3">
+            {(cardsQuery.data ?? []).map((card) => (
+              <View key={card.id} className="rounded-xl border border-bgBorder bg-bgSurface1 p-3 gap-3">
+                <View className="flex-row gap-3">
+                  <View className="h-20 w-14 overflow-hidden rounded-lg border border-bgBorder bg-bgSurface2 items-center justify-center">
+                    {card.image_url ? (
+                      <Image source={{ uri: card.image_url }} resizeMode="cover" className="h-full w-full" />
+                    ) : (
+                      <Icon name="gift" size={22} color={Theme.colors.textTertiary} />
+                    )}
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <View className="flex-row flex-wrap items-center gap-2">
+                      <Text className="min-w-0 flex-shrink text-sm font-bold text-textPrimary" numberOfLines={1}>
+                        {card.name}
+                      </Text>
+                      <View className={`rounded px-2 py-0.5 ${card.is_active ? 'bg-successDim' : 'bg-liveDim'}`}>
+                        <Text className={`text-[9px] font-bold uppercase ${card.is_active ? 'text-success' : 'text-live'}`}>
+                          {card.is_active ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="mt-1 text-xs text-textSecondary" numberOfLines={2}>
+                      {card.description || 'No description'}
+                    </Text>
+                    <Text className="mt-2 text-[10px] font-bold uppercase text-textTertiary">
+                      {STAGE_LABELS[card.award_stage]} - {card.threshold_percent}% - +{card.multiplier_bonus} boost
+                    </Text>
+                    <Text className="mt-1 text-[10px] text-textTertiary">
+                      Usable: {STAGE_LABELS[card.usable_from_stage]} to {STAGE_LABELS[card.usable_until_stage]} - {card.max_uses} use{card.max_uses === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="flex-row flex-wrap gap-2">
+                  <Pressable
+                    onPress={() => startEditCard(card)}
+                    className="rounded-lg border border-bgBorder bg-bgSurface2 px-3 py-2"
+                  >
+                    <Text className="text-[10px] font-bold uppercase text-textSecondary">Edit</Text>
+                  </Pressable>
+                  {card.is_active ? (
+                    <Pressable
+                      onPress={() => handleDisableCard(card)}
+                      disabled={disableMutation.isPending}
+                      className="rounded-lg border border-live/30 bg-liveDim px-3 py-2"
+                    >
+                      <Text className="text-[10px] font-bold uppercase text-live">Disable</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    onPress={() => handleRecalculateStage(card.award_stage)}
+                    disabled={recalculateMutation.isPending}
+                    className="rounded-lg border border-accentBorder bg-accentDim px-3 py-2"
+                  >
+                    <Text className="text-[10px] font-bold uppercase text-accent">
+                      {recalculateMutation.isPending ? 'Recalculating...' : 'Recalculate Stage'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </Card>
+    </View>
+  );
+}
+
 interface SingleTeamPickerModalProps {
   visible: boolean;
   onClose: () => void;
@@ -161,6 +1099,13 @@ function SingleTeamPickerModal({
   title,
 }: SingleTeamPickerModalProps): React.JSX.Element {
   const [search, setSearch] = useState('');
+  const insets = useSafeAreaInsets();
+  const { height } = useResponsive();
+
+  const overlayTopPadding = Math.max(16, insets.top + 16);
+  const overlayBottomPadding = Math.max(16, insets.bottom + 16);
+  const cardMaxHeight = Math.max(260, height - insets.top - insets.bottom - 48);
+  const listMaxHeight = Math.max(160, Math.min(300, cardMaxHeight - 150));
   
   const filtered = teams.filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -169,9 +1114,18 @@ function SingleTeamPickerModal({
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Card className="w-full max-w-sm border border-bgBorder bg-bgSurface2 p-5 gap-4 rounded-2xl max-h-[80%]">
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={[
+          singleTeamPickerStyles.overlay,
+          { paddingTop: overlayTopPadding, paddingBottom: overlayBottomPadding },
+        ]}
+      >
+        <Card
+          className="w-full max-w-sm border border-bgBorder bg-bgSurface2 p-5 gap-4 rounded-2xl"
+          style={{ maxHeight: cardMaxHeight }}
+        >
           <View className="flex-row justify-between items-center pb-2 border-b border-bgBorder/50">
             <Text className="text-base font-bold text-textPrimary">{title}</Text>
             <Pressable onPress={onClose} className="p-1 px-2.5 rounded bg-bgSurface3 border border-bgBorder">
@@ -188,7 +1142,12 @@ function SingleTeamPickerModal({
             autoCapitalize="none"
           />
 
-          <ScrollView className="flex-grow mt-2" style={{ maxHeight: 300 }}>
+          <ScrollView
+            className="flex-grow mt-2"
+            style={{ maxHeight: listMaxHeight }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <View className="gap-2">
               {filtered.map((team) => (
                 <Pressable
@@ -209,10 +1168,20 @@ function SingleTeamPickerModal({
             </View>
           </ScrollView>
         </Card>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
+
+const singleTeamPickerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+});
 
 export default function AdminDashboard(): React.JSX.Element {
   const router = useRouter();
@@ -228,6 +1197,7 @@ export default function AdminDashboard(): React.JSX.Element {
   const resolveQuestionMutation = useResolvePredictionQuestion();
   const updateQuestionStatusMutation = useUpdateQuestionStatus();
   const updateQuestionMutation = useUpdatePredictionQuestion();
+  const uploadQuestionCardImageMutation = useUploadPredictionQuestionCardImage();
   const deleteQuestionMutation = useDeletePredictionQuestion();
   const auditMutation = useAuditUserPrediction();
   const createMatchMutation = useCreateCustomMatch();
@@ -246,6 +1216,8 @@ export default function AdminDashboard(): React.JSX.Element {
   const [qPoints, setQPoints] = useState('10');
   const [qLockAt, setQLockAt] = useState<Date | null>(null);
   const [isQLockPickerOpen, setIsQLockPickerOpen] = useState(false);
+  const [qCardImagePath, setQCardImagePath] = useState<string | null>(null);
+  const [qCardImagePreviewUri, setQCardImagePreviewUri] = useState<string | null>(null);
 
   // Edit Question Accordion State
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -253,6 +1225,8 @@ export default function AdminDashboard(): React.JSX.Element {
   const [editQPoints, setEditQPoints] = useState('10');
   const [editQLockAt, setEditQLockAt] = useState<Date | null>(null);
   const [isEditQLockPickerOpen, setIsEditQLockPickerOpen] = useState(false);
+  const [editQCardImagePath, setEditQCardImagePath] = useState<string | null>(null);
+  const [editQCardImagePreviewUri, setEditQCardImagePreviewUri] = useState<string | null>(null);
 
   // Delete Question confirmation
   const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null);
@@ -284,13 +1258,42 @@ export default function AdminDashboard(): React.JSX.Element {
   const [editStatus, setEditStatus] = useState<MatchStatus>('SCHEDULED');
   const [editHomeScore, setEditHomeScore] = useState('');
   const [editAwayScore, setEditAwayScore] = useState('');
+  const [editWinnerTeamId, setEditWinnerTeamId] = useState<string | null>(null);
+  const [editDecisionMethod, setEditDecisionMethod] = useState<MatchDecisionMethod>('FT');
 
-  // Active tab: 'matches', 'add_match', 'questions', or 'hero_banner'
-  const [activeTab, setActiveTab] = useState<'matches' | 'add_match' | 'questions' | 'hero_banner'>('matches');
+  const [activeTab, setActiveTab] = useState<AdminTab>('matches');
+
+  // Delete match confirmation. Uses an in-app Modal instead of Alert.alert
+  // because Alert button callbacks do not fire reliably on react-native-web.
+  const [deletingMatchId, setDeletingMatchId] = useState<string | null>(null);
+  const [matchPendingDelete, setMatchPendingDelete] = useState<string | null>(null);
+  const [deleteMatchError, setDeleteMatchError] = useState<string | null>(null);
+
+  const handleDeleteMatch = useCallback((matchId: string) => {
+    setDeleteMatchError(null);
+    setMatchPendingDelete(matchId);
+  }, []);
+
+  const confirmDeleteMatch = useCallback(() => {
+    const matchId = matchPendingDelete;
+    if (!matchId) return;
+    setDeleteMatchError(null);
+    setDeletingMatchId(matchId);
+    deleteMatchMutation.mutate(matchId, {
+      onSuccess: () => {
+        setDeletingMatchId(null);
+        setMatchPendingDelete(null);
+      },
+      onError: (err: any) => {
+        setDeletingMatchId(null);
+        setDeleteMatchError(err?.message || 'Failed to delete match.');
+      },
+    });
+  }, [matchPendingDelete, deleteMatchMutation]);
 
   if (!isAdmin) {
     return (
-      <SafeAreaView className="flex-1 bg-bgDeep justify-center items-center px-6">
+      <SafeAreaView className="flex-1 justify-center items-center px-6">
         <Icon name="ban" size={40} color={Theme.colors.live} />
         <Text className="text-xl font-bold text-textPrimary mt-4">Access Denied</Text>
         <Text className="text-sm text-textSecondary text-center mt-2">
@@ -326,15 +1329,17 @@ export default function AdminDashboard(): React.JSX.Element {
     createQuestionMutation.mutate(
       {
         questionText: qText.trim(),
-        options: [],
         points: pointsVal,
         lockAtIso: qLockAt.toISOString(),
+        cardImagePath: qCardImagePath,
       },
       {
         onSuccess: () => {
           setQText('');
           setQPoints('10');
           setQLockAt(null);
+          setQCardImagePath(null);
+          setQCardImagePreviewUri(null);
           Alert.alert('Success', 'Prediction question created!');
         },
         onError: (err: any) => {
@@ -396,11 +1401,60 @@ export default function AdminDashboard(): React.JSX.Element {
     );
   };
 
-  const handleStartEditQuestion = (q: { id: string; question_text: string; points: number; lock_at?: string | null }) => {
+  const handlePickQuestionCardImage = async (mode: 'create' | 'edit') => {
+    if (Platform.OS !== 'web') {
+      const hasPermission = await ensureImageLibraryPermission('We need storage permission to pick a card image.');
+      if (!hasPermission) return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [20, 29],
+      quality: 0.75,
+    });
+
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset?.uri) return;
+    const localUri = asset.uri;
+
+    if (mode === 'create') {
+      setQCardImagePreviewUri(localUri);
+    } else {
+      setEditQCardImagePreviewUri(localUri);
+    }
+
+    uploadQuestionCardImageMutation.mutate({
+      localUri,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      webFile: asset.file ?? null,
+    }, {
+      onSuccess: (path) => {
+        if (mode === 'create') {
+          setQCardImagePath(path);
+        } else {
+          setEditQCardImagePath(path);
+        }
+      },
+      onError: (err: any) => {
+        Alert.alert('Upload Failed', err.message || 'Could not upload the card image.');
+        if (mode === 'create') {
+          setQCardImagePreviewUri(null);
+        } else {
+          setEditQCardImagePreviewUri(null);
+        }
+      },
+    });
+  };
+
+  const handleStartEditQuestion = (q: PredictionQuestion) => {
     setEditingQuestionId(q.id);
     setEditQText(q.question_text);
     setEditQPoints(String(q.points));
     setEditQLockAt(q.lock_at ? new Date(q.lock_at) : null);
+    setEditQCardImagePath(q.card_image_path ?? null);
+    setEditQCardImagePreviewUri(q.card_image_url ?? null);
   };
 
   const handleSaveEditQuestion = (questionId: string) => {
@@ -424,6 +1478,7 @@ export default function AdminDashboard(): React.JSX.Element {
         questionText: editQText.trim(),
         points: pointsVal,
         lockAtIso: editQLockAt.toISOString(),
+        cardImagePath: editQCardImagePath,
       },
       {
         onSuccess: () => {
@@ -509,7 +1564,7 @@ export default function AdminDashboard(): React.JSX.Element {
     );
   };
 
-  const handleSaveResult = (matchId: string) => {
+  const handleSaveResult = (match: Match) => {
     let homeScoreNum: number | null = null;
     let awayScoreNum: number | null = null;
 
@@ -534,12 +1589,22 @@ export default function AdminDashboard(): React.JSX.Element {
       return;
     }
 
+    if (editStatus === 'FINISHED' && match.is_knockout && !editWinnerTeamId) {
+      Alert.alert(
+        'Error',
+        'Knockout matches cannot end in a draw. Please select the team that qualifies.'
+      );
+      return;
+    }
+
     updateResultMutation.mutate(
       {
-        matchId,
+        matchId: match.id,
         status: editStatus,
         homeScore: homeScoreNum,
         awayScore: awayScoreNum,
+        winnerTeamId: match.is_knockout && editStatus === 'FINISHED' ? editWinnerTeamId : null,
+        decisionMethod: match.is_knockout && editStatus === 'FINISHED' ? editDecisionMethod : null,
       },
       {
         onSuccess: () => {
@@ -553,37 +1618,8 @@ export default function AdminDashboard(): React.JSX.Element {
     );
   };
 
-  // Delete match confirmation. Uses an in-app Modal (below) instead of
-  // Alert.alert because Alert button callbacks DON'T fire on react-native-web,
-  // so the old confirm dialog's "Delete" did nothing on web.
-  const [deletingMatchId, setDeletingMatchId] = useState<string | null>(null);
-  const [matchPendingDelete, setMatchPendingDelete] = useState<string | null>(null);
-  const [deleteMatchError, setDeleteMatchError] = useState<string | null>(null);
-
-  const handleDeleteMatch = useCallback((matchId: string) => {
-    setDeleteMatchError(null);
-    setMatchPendingDelete(matchId);
-  }, []);
-
-  const confirmDeleteMatch = useCallback(() => {
-    const matchId = matchPendingDelete;
-    if (!matchId) return;
-    setDeleteMatchError(null);
-    setDeletingMatchId(matchId);
-    deleteMatchMutation.mutate(matchId, {
-      onSuccess: () => {
-        setDeletingMatchId(null);
-        setMatchPendingDelete(null);
-      },
-      onError: (err: any) => {
-        setDeletingMatchId(null);
-        setDeleteMatchError(err?.message || 'Failed to delete match.');
-      },
-    });
-  }, [matchPendingDelete, deleteMatchMutation]);
-
   return (
-    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1" edges={['top', 'bottom']}>
       {/* Header */}
       <View className="px-4 py-3 flex-row items-center justify-between border-b border-bgBorder">
         <View className="flex-row items-center gap-3">
@@ -641,6 +1677,16 @@ export default function AdminDashboard(): React.JSX.Element {
           </Text>
         </Pressable>
         <Pressable
+          onPress={() => setActiveTab('cards')}
+          className={`flex-1 py-3 items-center border-b-2 ${
+            activeTab === 'cards' ? 'border-accent' : 'border-transparent'
+          }`}
+        >
+          <Text className={`font-bold ${activeTab === 'cards' ? 'text-accent' : 'text-textSecondary'}`}>
+            Cards
+          </Text>
+        </Pressable>
+        <Pressable
           onPress={() => setActiveTab('hero_banner')}
           className={`flex-1 py-3 items-center border-b-2 ${
             activeTab === 'hero_banner' ? 'border-accent' : 'border-transparent'
@@ -650,6 +1696,16 @@ export default function AdminDashboard(): React.JSX.Element {
             Hero
           </Text>
         </Pressable>
+        <Pressable
+          onPress={() => setActiveTab('scoring')}
+          className={`flex-1 py-3 items-center border-b-2 ${
+            activeTab === 'scoring' ? 'border-accent' : 'border-transparent'
+          }`}
+        >
+          <Text className={`font-bold ${activeTab === 'scoring' ? 'text-accent' : 'text-textSecondary'}`}>
+            Scoring
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView ref={scrollRef} contentContainerClassName="p-4 gap-6">
@@ -657,7 +1713,7 @@ export default function AdminDashboard(): React.JSX.Element {
         {activeTab === 'matches' && (
           <View className="gap-4">
             <Text className="text-sm text-textSecondary">
-              Toggle specific matches to Double (2x) or Triple (3x) points. Changes apply immediately to new/unsynced points calculations.
+              Set a points multiplier (1x-6x) for specific matches. Changes apply immediately to new/unsynced points calculations. Use the "Scoring" tab to set defaults per stage.
             </Text>
 
             {/* Search Bar */}
@@ -730,6 +1786,10 @@ export default function AdminDashboard(): React.JSX.Element {
                     const isMutating =
                       setMultiplierMutation.isPending &&
                       setMultiplierMutation.variables?.matchId === match.id;
+                    const needsManualQualifier =
+                      match.is_knockout &&
+                      match.status === 'FINISHED' &&
+                      !match.winner_team_id;
 
                     return (
                       <Card key={match.id} className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
@@ -752,7 +1812,7 @@ export default function AdminDashboard(): React.JSX.Element {
                               <Text className="text-[9px] text-textSecondary font-bold uppercase">{match.status}</Text>
                             </View>
                             <Text className="text-xs font-bold text-accent uppercase tracking-wider">
-                              {match.stage}
+                              {STAGE_LABELS[match.stage]}
                             </Text>
                           </View>
                         </View>
@@ -777,12 +1837,25 @@ export default function AdminDashboard(): React.JSX.Element {
                                 <Text className="text-base font-extrabold text-accent">{match.away_score}</Text>
                               )}
                             </View>
+                            {match.is_knockout && match.winner_team_id && (
+                              <Text className="text-[10px] text-accent font-bold mt-1">
+                                Qualifier: {match.winner_team_id === match.home_team.id ? match.home_team.name : match.away_team.name}
+                                {match.decision_method ? ` (${match.decision_method})` : ''}
+                              </Text>
+                            )}
+                            {needsManualQualifier && (
+                              <View className="mt-2 rounded-lg border border-live/30 bg-liveDim px-2 py-1.5">
+                                <Text className="text-[10px] font-bold text-live">
+                                  Needs manual qualifier before points can be finalized.
+                                </Text>
+                              </View>
+                            )}
                           </View>
                           {isMutating ? (
                             <ActivityIndicator size="small" color={Theme.colors.accent} />
                           ) : (
-                            <View className="flex-row gap-1">
-                              {[1, 2, 3].map((mult) => (
+                            <View className="flex-row flex-wrap gap-1 justify-end max-w-[180px]">
+                              {[1, 2, 3, 4, 5, 6].map((mult) => (
                                 <Pressable
                                   key={mult}
                                   onPress={() => handleMultiplierChange(match.id, currentMult, mult)}
@@ -860,6 +1933,61 @@ export default function AdminDashboard(): React.JSX.Element {
                               </View>
                             </View>
 
+                            {match.is_knockout && editStatus === 'FINISHED' && (
+                              <View className="gap-3">
+                                <View className="gap-1.5">
+                                  <Text className="text-xs text-textTertiary uppercase font-semibold">
+                                    Qualifying Team
+                                  </Text>
+                                  <View className="flex-row gap-2">
+                                    {[match.home_team, match.away_team].map((team) => (
+                                      <Pressable
+                                        key={team.id || team.name}
+                                        onPress={() => setEditWinnerTeamId(team.id)}
+                                        className={`flex-1 px-2.5 py-2 rounded border ${
+                                          editWinnerTeamId === team.id
+                                            ? 'bg-accentDim border-accent'
+                                            : 'bg-bgSurface2 border-bgBorder'
+                                        }`}
+                                      >
+                                        <Text
+                                          className={`text-[10px] font-bold text-center ${
+                                            editWinnerTeamId === team.id ? 'text-accent' : 'text-textSecondary'
+                                          }`}
+                                          numberOfLines={1}
+                                        >
+                                          {team.name}
+                                        </Text>
+                                      </Pressable>
+                                    ))}
+                                  </View>
+                                </View>
+
+                                <View className="gap-1.5">
+                                  <Text className="text-xs text-textTertiary uppercase font-semibold">
+                                    Decision Method
+                                  </Text>
+                                  <View className="flex-row gap-1.5">
+                                    {(['FT', 'ET', 'PEN'] as MatchDecisionMethod[]).map((method) => (
+                                      <Pressable
+                                        key={method}
+                                        onPress={() => setEditDecisionMethod(method)}
+                                        className={`px-3 py-1.5 rounded border ${
+                                          editDecisionMethod === method
+                                            ? 'bg-accentDim border-accent'
+                                            : 'bg-bgSurface2 border-bgBorder'
+                                        }`}
+                                      >
+                                        <Text className={`text-[10px] font-bold ${editDecisionMethod === method ? 'text-accent' : 'text-textSecondary'}`}>
+                                          {method}
+                                        </Text>
+                                      </Pressable>
+                                    ))}
+                                  </View>
+                                </View>
+                              </View>
+                            )}
+
                             {editStatus === 'FINISHED' && (
                               <View className="bg-liveDim/20 border border-live/30 p-2 rounded-lg">
                                 <Text className="text-[10px] font-semibold text-live leading-relaxed">
@@ -876,7 +2004,7 @@ export default function AdminDashboard(): React.JSX.Element {
                                 <Text className="text-xs font-bold text-textSecondary">Cancel</Text>
                               </Pressable>
                               <Pressable
-                                onPress={() => handleSaveResult(match.id)}
+                                onPress={() => handleSaveResult(match)}
                                 disabled={updateResultMutation.isPending}
                                 className="px-3 py-2 rounded-lg bg-accent active:opacity-75"
                               >
@@ -895,6 +2023,8 @@ export default function AdminDashboard(): React.JSX.Element {
                               setEditStatus(match.status);
                               setEditHomeScore(match.home_score !== null ? String(match.home_score) : '');
                               setEditAwayScore(match.away_score !== null ? String(match.away_score) : '');
+                              setEditWinnerTeamId(match.winner_team_id);
+                              setEditDecisionMethod(match.decision_method ?? 'FT');
                             }}
                             className="mt-2 border-t border-bgBorder/50 pt-2 flex-row items-center justify-between"
                           >
@@ -997,7 +2127,7 @@ export default function AdminDashboard(): React.JSX.Element {
               <View className="gap-1.5">
                 <Text className="text-xs font-semibold text-textSecondary uppercase">Stage</Text>
                 <View className="flex-row flex-wrap gap-1.5">
-                  {(['GROUP', 'ROUND_OF_16', 'QUARTER_FINAL', 'SEMI_FINAL', 'THIRD_PLACE', 'FINAL'] as MatchStage[]).map((s) => (
+                  {STAGE_ORDER.map((s) => (
                     <Pressable
                       key={s}
                       onPress={() => setStage(s)}
@@ -1006,7 +2136,7 @@ export default function AdminDashboard(): React.JSX.Element {
                       }`}
                     >
                       <Text className={`text-[10px] font-bold ${stage === s ? 'text-accent' : 'text-textSecondary'}`}>
-                        {s.replace(/_/g, ' ')}
+                        {STAGE_LABELS[s]}
                       </Text>
                     </Pressable>
                   ))}
@@ -1103,10 +2233,53 @@ export default function AdminDashboard(): React.JSX.Element {
                 </Pressable>
               </View>
 
+              <View className="gap-1.5">
+                <Text className="text-xs font-semibold text-textSecondary uppercase">Card Image (optional)</Text>
+                <Pressable
+                  onPress={() => handlePickQuestionCardImage('create')}
+                  className="h-40 rounded-xl border border-dashed border-bgBorder bg-bgSurface1 items-center justify-center overflow-hidden active:opacity-85"
+                >
+                  {uploadQuestionCardImageMutation.isPending && qCardImagePreviewUri ? (
+                    <View className="absolute inset-0 items-center justify-center bg-black/50 z-10">
+                      <ActivityIndicator size="small" color={Theme.colors.accent} />
+                    </View>
+                  ) : null}
+                  {qCardImagePreviewUri ? (
+                    <Image
+                      source={{ uri: qCardImagePreviewUri }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View className="items-center gap-1 px-4">
+                      <Icon name="add" size={20} color={Theme.colors.textTertiary} />
+                      <Text className="text-xs font-semibold text-textSecondary text-center">
+                        Tap to upload a card image
+                      </Text>
+                      <Text className="text-[10px] text-textTertiary text-center">
+                        Recommended 720 x 1044 px. If empty, the default card design stays.
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+                {qCardImagePath ? (
+                  <Pressable
+                    onPress={() => {
+                      setQCardImagePath(null);
+                      setQCardImagePreviewUri(null);
+                    }}
+                    className="self-start rounded-lg border border-live/30 bg-liveDim px-3 py-2 active:opacity-80"
+                  >
+                    <Text className="text-[10px] font-bold uppercase text-live">Remove Image</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
               <Button
-                label="Publish Question"
+                label={uploadQuestionCardImageMutation.isPending ? 'Uploading Image...' : 'Publish Question'}
                 onPress={handleCreateQuestion}
                 loading={createQuestionMutation.isPending}
+                disabled={uploadQuestionCardImageMutation.isPending}
               />
             </Card>
 
@@ -1184,11 +2357,25 @@ export default function AdminDashboard(): React.JSX.Element {
                           </View>
                         </View>
 
-                        <Text className="text-base font-bold text-textPrimary">{q.question_text}</Text>
+                        <View className="flex-row gap-3">
+                          {q.card_image_url ? (
+                            <Image
+                              source={{ uri: q.card_image_url }}
+                              style={{ width: 54, height: 78, borderRadius: 10, backgroundColor: Theme.colors.bgSurface1 }}
+                              resizeMode="cover"
+                            />
+                          ) : null}
+                          <View className="flex-1 gap-1">
+                            <Text className="text-base font-bold text-textPrimary">{q.question_text}</Text>
 
-                        <Text className="text-xs text-textSecondary">
-                          Deadline: <Text className="text-textPrimary font-semibold">{formatKickoff(q.lock_at || '')}</Text>
-                        </Text>
+                            <Text className="text-xs text-textSecondary">
+                              Deadline: <Text className="text-textPrimary font-semibold">{formatKickoff(q.lock_at || '')}</Text>
+                            </Text>
+                            {q.card_image_url ? (
+                              <Text className="text-[10px] font-semibold uppercase tracking-wide text-accent">Custom card image</Text>
+                            ) : null}
+                          </View>
+                        </View>
 
                         {/* Admin Edit / Delete actions */}
                         <View className="flex-row gap-2">
@@ -1270,6 +2457,50 @@ export default function AdminDashboard(): React.JSX.Element {
                               </Pressable>
                             </View>
 
+                            <View className="gap-1">
+                              <Text className="text-[10px] text-textTertiary uppercase font-semibold">
+                                Card Image (optional)
+                              </Text>
+                              <Pressable
+                                onPress={() => handlePickQuestionCardImage('edit')}
+                                className="h-40 rounded-xl border border-dashed border-bgBorder bg-bgSurface2 items-center justify-center overflow-hidden active:opacity-85"
+                              >
+                                {uploadQuestionCardImageMutation.isPending && editQCardImagePreviewUri ? (
+                                  <View className="absolute inset-0 items-center justify-center bg-black/50 z-10">
+                                    <ActivityIndicator size="small" color={Theme.colors.accent} />
+                                  </View>
+                                ) : null}
+                                {editQCardImagePreviewUri ? (
+                                  <Image
+                                    source={{ uri: editQCardImagePreviewUri }}
+                                    style={{ width: '100%', height: '100%' }}
+                                    resizeMode="cover"
+                                  />
+                                ) : (
+                                  <View className="items-center gap-1 px-4">
+                                    <Icon name="add" size={18} color={Theme.colors.textTertiary} />
+                                    <Text className="text-xs font-semibold text-textSecondary text-center">
+                                      Tap to upload a card image
+                                    </Text>
+                                    <Text className="text-[10px] text-textTertiary text-center">
+                                      Leave empty to keep the default card design.
+                                    </Text>
+                                  </View>
+                                )}
+                              </Pressable>
+                              {editQCardImagePath || editQCardImagePreviewUri ? (
+                                <Pressable
+                                  onPress={() => {
+                                    setEditQCardImagePath(null);
+                                    setEditQCardImagePreviewUri(null);
+                                  }}
+                                  className="self-start rounded-lg border border-live/30 bg-liveDim px-3 py-2 active:opacity-80"
+                                >
+                                  <Text className="text-[10px] font-bold uppercase text-live">Remove Image</Text>
+                                </Pressable>
+                              ) : null}
+                            </View>
+
                             <View className="flex-row gap-2 justify-end">
                               <Pressable
                                 onPress={() => setEditingQuestionId(null)}
@@ -1279,10 +2510,10 @@ export default function AdminDashboard(): React.JSX.Element {
                               </Pressable>
                               <Pressable
                                 onPress={() => handleSaveEditQuestion(q.id)}
-                                disabled={updateQuestionMutation.isPending}
+                                disabled={updateQuestionMutation.isPending || uploadQuestionCardImageMutation.isPending}
                                 className="px-3 py-2 rounded-lg bg-accent active:opacity-75"
                               >
-                                {updateQuestionMutation.isPending ? (
+                                {updateQuestionMutation.isPending || uploadQuestionCardImageMutation.isPending ? (
                                   <ActivityIndicator size="small" color={Theme.colors.accentDark} />
                                 ) : (
                                   <Text className="text-xs font-bold text-accentDark">Save Changes</Text>
@@ -1350,7 +2581,6 @@ export default function AdminDashboard(): React.JSX.Element {
                         {expandedAudits[q.id] && (
                           <SubmissionsAuditSection
                             questionId={q.id}
-                            points={q.points}
                             auditMutation={auditMutation}
                           />
                         )}
@@ -1363,6 +2593,9 @@ export default function AdminDashboard(): React.JSX.Element {
           </View>
         )}
 
+        {/* Cards Tab */}
+        {activeTab === 'cards' && <StageCardsSection />}
+
         {/* Hero Banner Tab */}
         {activeTab === 'hero_banner' && (
           <View className="gap-4">
@@ -1371,8 +2604,13 @@ export default function AdminDashboard(): React.JSX.Element {
               <HeroCarousel />
             </View>
             <HeroBannerManager />
+            <MatchesHeroManager />
+            <HomeCardsTileManager />
           </View>
         )}
+
+        {/* Scoring Tab */}
+        {activeTab === 'scoring' && <ScoringSettingsSectionWithEdit />}
       </ScrollView>
 
       {/* Team Picker Modals */}

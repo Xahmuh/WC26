@@ -1,148 +1,101 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View, Pressable, ActivityIndicator, Alert, TextInput, Image, Modal, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import Theme from '@/constants/theme/design-system';
-import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
-import { MatchCard } from '@/components/match/MatchCard';
-import { Card } from '@/components/ui/Card';
+import { AvatarButton, NotificationBell, SkeletonBox } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { HeroCarousel } from '@/components/ui/HeroCarousel';
-import { EmptyState, ErrorState } from '@/components/ui/States';
+import { Colors, Typography } from '@/constants';
+import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
+import { HomeKpiBar } from '@/components/home/HomeKpiBar';
+import { HeroBannerCarousel } from '@/components/home/HeroBannerCarousel';
+import { MyCardsPreview } from '@/components/home/MyCardsPreview';
+import { NextMatchCountdown } from '@/components/home/NextMatchCountdown';
+import { MyTeamsMatches } from '@/components/home/MyTeamsMatches';
+import { PendingPredictions } from '@/components/home/PendingPredictions';
+import { TodayMatchesSection } from '@/components/home/TodayMatchesSection';
+import { PerformancePreview } from '@/components/home/PerformancePreview';
+import { MiniLeaderboard } from '@/components/home/MiniLeaderboard';
+import { PredictionCarousel } from '@/components/predictions/PredictionCarousel';
+import { useVideoPopup } from '@/hooks/useVideoPopup';
+import { useSubmitQuestionPrediction, useUserQuestionPredictions, usePredictionQuestions as usePredictionQuestionsQuery } from '@/hooks/usePredictionQuestions';
+import { useAuthStore } from '@/stores/auth.store';
+import { queryClient } from '@/lib/queryClient';
+import { supabase } from '@/lib/supabase';
+import { useCountdown } from '@/hooks/useCountdown';
+import type { PredictionQuestion, UserProfile } from '@/types';
+import { useResponsive } from '@/lib/responsive';
+import { BrandingVideoModal } from '@/components/video/BrandingVideoModal';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
 import { PlayerProfileModal } from '@/components/ui/PlayerProfileModal';
-import { NotificationBell } from '@/components/ui/NotificationBell';
-import { BrandingVideoModal } from '@/components/video/BrandingVideoModal';
-import { useVideoPopup } from '@/hooks/useVideoPopup';
-import { supabase } from '@/lib/supabase';
-import { useLeaderboard } from '@/hooks/useLeaderboard';
-import { useMatches } from '@/hooks/useMatches';
-import { useMyPoints } from '@/hooks/usePoints';
-import { useMyPredictions } from '@/hooks/usePredictions';
-import {
-  usePredictionQuestions,
-  useUserQuestionPredictions,
-  useSubmitQuestionPrediction,
-} from '@/hooks/usePredictionQuestions';
-import { useCountdown } from '@/hooks/useCountdown';
-import { PredictionCarousel } from '@/components/predictions/PredictionCarousel';
-import { isToday } from '@/lib/dates';
-import { useResponsive } from '@/lib/responsive';
-import { useAuthStore } from '@/stores/auth.store';
-import type { PredictionQuestion } from '@/types';
-import { Container } from '@/components/ui/Container';
-
-// Horizontal slider sizing — cards are fixed-width so the next one peeks in.
-const SLIDER_GAP = 12;
-const SLIDER_SIDE_INSET = 24; // px-6 from outer ScrollView
 
 export default function HomeScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useResponsive();
-  const sliderVisibleWidth = windowWidth - SLIDER_SIDE_INSET * 2;
-  const sliderCardWidth = Math.min(320, sliderVisibleWidth - 32);
+  const { isSmall } = useResponsive();
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
-
+  const [refreshing, setRefreshing] = useState(false);
   const [savingTeams, setSavingTeams] = useState(false);
-  const [openQuestion, setOpenQuestion] = useState<PredictionQuestion | null>(null);
+  const [teamPickerOpen, setTeamPickerOpen] = useState(false);
+  const [dismissedMandatoryTeamPicker, setDismissedMandatoryTeamPicker] = useState(false);
+  const [isBrandingSettling, setIsBrandingSettling] = useState(false);
+  const brandingSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; rank?: number } | null>(null);
   const { isVisible: isVideoPopupVisible, dismiss: dismissVideoPopup } = useVideoPopup();
+  const isStartupPopupActive = isVideoPopupVisible || isBrandingSettling;
 
-  const handleSaveTeams = async (teams: string[]) => {
-    if (!userId) return;
-    setSavingTeams(true);
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ supported_teams: teams })
-        .eq('id', userId);
+  const showPicker =
+    !isStartupPopupActive &&
+    !dismissedMandatoryTeamPicker &&
+    Boolean(profile) &&
+    (!profile?.supported_teams || profile.supported_teams.length === 0);
+  const teamPickerVisible = showPicker || teamPickerOpen;
 
-      if (error) throw error;
-      await refreshProfile();
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save supported teams.');
-    } finally {
-      setSavingTeams(false);
+  useEffect(() => {
+    return () => {
+      if (brandingSettleTimerRef.current) {
+        clearTimeout(brandingSettleTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleBrandingVideoClose = useCallback(() => {
+    dismissVideoPopup();
+    setIsBrandingSettling(true);
+
+    if (brandingSettleTimerRef.current) {
+      clearTimeout(brandingSettleTimerRef.current);
     }
-  };
 
-  const showPicker = Boolean(profile) && (!profile?.supported_teams || profile.supported_teams.length === 0);
+    brandingSettleTimerRef.current = setTimeout(() => {
+      setIsBrandingSettling(false);
+      brandingSettleTimerRef.current = null;
+    }, 350);
+  }, [dismissVideoPopup]);
 
-  const matchesQuery = useMatches();
-  const predictionsQuery = useMyPredictions();
-  const pointsQuery = useMyPoints();
-  const leaderboardQuery = useLeaderboard();
-  
-  // Custom Tournament Predictions Hooks
-  const questionsQuery = usePredictionQuestions();
-  const userPredsQuery = useUserQuestionPredictions();
-  const submitPredMutation = useSubmitQuestionPrediction();
-
-  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
-
-  const matches = matchesQuery.data ?? [];
-  const predictions = predictionsQuery.data;
-  const points = pointsQuery.data;
-  
-  const questions = questionsQuery.data ?? [];
-  const userPreds = userPredsQuery.data ?? new Map<string, { prediction: string; status: 'pending' | 'approved' | 'rejected' }>();
-
-  const todaysMatches = useMemo(
-    // Issue 5 — Today's matches shows only still-relevant fixtures; finished /
-    // postponed / cancelled drop off. (Status is IN_PLAY here, never "LIVE".)
-    () =>
-      matches.filter(
-        (m) =>
-          isToday(m.kickoff_time) &&
-          (m.status === 'SCHEDULED' || m.status === 'IN_PLAY')
-      ),
-    [matches]
-  );
-
-  const myRecentPredictions = useMemo(() => {
-    if (!predictions) return [];
-    const byId = new Map(matches.map((m) => [m.id, m]));
-    return [...predictions.values()]
-      .map((p) => ({ prediction: p, match: byId.get(p.match_id) }))
-      .filter((x): x is { prediction: typeof x.prediction; match: NonNullable<typeof x.match> } =>
-        x.match !== undefined && x.match.status !== 'FINISHED'
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.match.kickoff_time).getTime() -
-          new Date(b.match.kickoff_time).getTime()
-      );
-  }, [predictions, matches]);
-
-  const myRank = useMemo(() => {
-    const entry = leaderboardQuery.data?.find((e) => e.user_id === userId);
-    return entry?.rank ?? null;
-  }, [leaderboardQuery.data, userId]);
-
-  const predictionsMade = predictions?.size ?? 0;
-
-  // Issue 1 — keep total points & rank fresh on every focus. Uses stable
-  // refetch refs (react-query / zustand memoize these) so the focus callback
-  // identity never changes on render → no re-fetch loop.
-  const refetchLeaderboard = leaderboardQuery.refetch;
-  const refetchPoints = pointsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
       void refreshProfile();
-      void refetchLeaderboard();
-      void refetchPoints();
-    }, [refreshProfile, refetchLeaderboard, refetchPoints])
+    }, [refreshProfile])
   );
 
-  // Issue 1 — realtime: reflect total_points the instant the user's row changes
-  // (e.g. right after the admin finalizes a match and scoring runs).
   useEffect(() => {
     if (!userId) return;
+
     const channel = supabase
       .channel(`home-user-${userId}`)
       .on(
@@ -153,249 +106,124 @@ export default function HomeScreen(): React.JSX.Element {
         }
       )
       .subscribe();
+
     return () => {
       void supabase.removeChannel(channel);
     };
   }, [userId, refreshProfile]);
 
-  const refreshing =
-    matchesQuery.isRefetching ||
-    predictionsQuery.isRefetching ||
-    pointsQuery.isRefetching ||
-    questionsQuery.isRefetching ||
-    userPredsQuery.isRefetching;
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshProfile();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['matches'] }),
+        queryClient.invalidateQueries({ queryKey: ['leaderboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['predictions'] }),
+        queryClient.invalidateQueries({ queryKey: ['predictionQuestions'] }),
+        queryClient.invalidateQueries({ queryKey: ['userQuestionPredictions'] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshProfile]);
 
-  const onRefresh = (): void => {
-    void refreshProfile();
-    void matchesQuery.refetch();
-    void predictionsQuery.refetch();
-    void pointsQuery.refetch();
-    void leaderboardQuery.refetch();
-    void questionsQuery.refetch();
-    void userPredsQuery.refetch();
-  };
+  const handleSaveTeams = useCallback(
+    async (teams: string[]): Promise<boolean> => {
+      if (!userId) return false;
 
-  const handleOptionSelect = (questionId: string, option: string) => {
-    submitPredMutation.mutate({ questionId, prediction: option });
-  };
+      setSavingTeams(true);
+      try {
+        const { error } = await supabase
+          .from('users')
+          .update({ supported_teams: teams })
+          .eq('id', userId);
+
+        if (error) throw error;
+        await refreshProfile();
+        return true;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Failed to save supported teams.';
+        Alert.alert('Error', message);
+        return false;
+      } finally {
+        setSavingTeams(false);
+      }
+    },
+    [refreshProfile, userId]
+  );
+
+  const handleEditTeams = useCallback(() => {
+    setTeamPickerOpen(true);
+  }, []);
+
+  const handleTeamPickerSave = useCallback(
+    async (teams: string[]) => {
+      const saved = await handleSaveTeams(teams);
+      if (saved) {
+        setTeamPickerOpen(false);
+      }
+    },
+    [handleSaveTeams]
+  );
 
   return (
-    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
-      {/* Frozen Header */}
-      <View className="px-6 pt-6 pb-2 flex-row items-center justify-between bg-bgDeep z-10">
-        {/* Profile Avatar */}
-        <Pressable onPress={() => router.push('/profile')} className="w-10 h-10 rounded-full border border-bgBorder overflow-hidden active:opacity-80">
-          <Image
-            source={profile?.avatar_url ? { uri: profile.avatar_url } : require('@/assets/default_avatar.jpg')}
-            style={{ width: '100%', height: '100%' }}
-          />
-        </Pressable>
-
-        {/* Center logo */}
-        <View className="flex-1 items-center px-4">
-          <Image
-            source={require('@/assets/icona.png')}
-            style={{ width: '100%', height: 85, maxWidth: 220 }}
-            resizeMode="contain"
-          />
-        </View>
-
-        {/* Right icon */}
-        <View className="w-10 items-end">
-          <NotificationBell />
-        </View>
-      </View>
-
+    <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView
-        contentContainerClassName="px-6 pt-2 gap-6"
-        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE },
+        ]}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={Theme.colors.accent}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={Colors.accent.lime} />
         }
       >
-        <Container nested>
-        <View className="gap-6">
+        <HomeHeader profile={profile} onAvatarPress={() => router.push('/profile' as never)} />
 
-        {/* Hero Banner Slides */}
-        <HeroCarousel />
+        <HomeKpiBar />
 
-        {/* Quick stats */}
-        <View className="flex-row gap-3">
-          <StatTile
-            label="Total points"
-            value={profile ? (profile.total_points ?? 0) : '—'}
-            onPress={() => userId && setSelectedPlayer({ id: userId, rank: myRank ?? undefined })}
-          />
-          <StatTile
-            label="Rank"
-            value={myRank ?? '—'}
-            onPress={() => router.push('/leaderboard')}
-          />
-          <StatTile 
-            label="Predictions" 
-            value={predictionsMade} 
-            onPress={() => router.push('/profile/predictions' as any)}
-          />
+        <HeroBannerCarousel />
+
+        <View style={styles.featureRow}>
+          <View style={styles.featureHalf}>
+            <MyCardsPreview />
+          </View>
+          <View style={styles.featureHalf}>
+            <NextMatchCountdown />
+          </View>
         </View>
 
-        {/* Special Tournament Predictions (Admin Questions) */}
-        {questions.length > 0 && (
-          <View className="gap-3">
-            <View className="flex-row items-center gap-2.5">
-              <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
-              <Text className="text-lg font-semibold text-textPrimary">Tournament Predictions</Text>
-            </View>
-            <PredictionCarousel
-              questions={questions}
-              predictionRecords={userPreds}
-              onCardPress={(question) => setOpenQuestion(question)}
-            />
-          </View>
-        )}
+        <MyTeamsMatches onEditTeams={handleEditTeams} />
 
-        <Modal
-          visible={openQuestion !== null}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setOpenQuestion(null)}
-        >
-          <Pressable
-            style={[StyleSheet.absoluteFill, { backgroundColor: Theme.colors.overlay }]}
-            onPress={() => setOpenQuestion(null)}
-          />
-          <View style={styles.modalCenter} pointerEvents="box-none">
-            <View style={{ width: '100%', maxWidth: 420 }}>
-              {openQuestion && (
-                <PredictionQuestionCard
-                  question={openQuestion}
-                  predictionRecord={userPreds.get(openQuestion.id)}
-                  onOptionSelect={(questionId, option) => {
-                    handleOptionSelect(questionId, option);
-                  }}
-                  isSubmitting={submitPredMutation.isPending && submitPredMutation.variables?.questionId === openQuestion.id}
-                  submittingOption={submitPredMutation.isPending && submitPredMutation.variables?.questionId === openQuestion.id ? submitPredMutation.variables?.prediction : undefined}
-                />
-              )}
-              <Pressable
-                onPress={() => setOpenQuestion(null)}
-                className="mt-3 self-center px-4 py-2 rounded-xl"
-                style={{ backgroundColor: Theme.colors.bgSurface3 }}
-              >
-                <Text className="text-textSecondary text-xs font-bold uppercase">Close</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
+        <PendingPredictions />
 
-        {/* Today's matches */}
-        <View className="gap-3">
-          <View className="flex-row items-center gap-2.5">
-            <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
-            <Text className="text-lg font-semibold text-textPrimary">Today’s matches</Text>
-          </View>
-          {matchesQuery.isLoading ? (
-            <LoadingSpinner label="Loading matches…" />
-          ) : matchesQuery.isError ? (
-            <ErrorState
-              message={matchesQuery.error.message}
-              onRetry={() => void matchesQuery.refetch()}
-            />
-          ) : todaysMatches.length === 0 ? (
-            <EmptyState
-              title="No matches today"
-              description="Check the Matches tab for upcoming fixtures."
-              icon="calendar"
-            />
-          ) : (
-            <ScrollView
-              horizontal
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={sliderCardWidth + SLIDER_GAP}
-              decelerationRate="fast"
-              contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
-            >
-              {todaysMatches.map((match) => (
-                <View key={match.id} style={{ width: sliderCardWidth }}>
-                  <MatchCard
-                    match={match}
-                    prediction={predictions?.get(match.id)}
-                    points={points?.get(match.id)}
-                    onPress={(id) => router.push(`/match/${id}`)}
-                  />
-                </View>
-              ))}
-            </ScrollView>
-          )}
+        <TodayMatchesSection />
+
+        <View style={[styles.doubleRow, isSmall ? styles.doubleRowCompact : null]}>
+          <PerformancePreview style={styles.splitCard} />
+          <MiniLeaderboard style={styles.splitCard} />
         </View>
 
-        {/* My recent predictions */}
-        <View className="gap-3">
-          <View className="flex-row items-center gap-2.5">
-            <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
-            <Text className="text-lg font-semibold text-textPrimary">My predictions</Text>
-            {myRecentPredictions.length > 0 && (
-              <View 
-                className="bg-accent rounded-full min-w-[20px] h-5 items-center justify-center px-1.5"
-                style={{ backgroundColor: Theme.colors.accent }}
-              >
-                <Text 
-                  className="text-accentDark text-[11px] font-bold"
-                  style={{ color: Theme.colors.accentDark }}
-                >
-                  {myRecentPredictions.length}
-                </Text>
-              </View>
-            )}
-          </View>
-          {predictionsQuery.isLoading ? (
-            <LoadingSpinner label="Loading predictions…" />
-          ) : myRecentPredictions.length === 0 ? (
-            <EmptyState
-              title="No predictions yet"
-              description="Pick a match and submit your first scoreline."
-              icon="edit"
-            />
-          ) : (
-            <ScrollView
-              horizontal
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={sliderCardWidth + SLIDER_GAP}
-              decelerationRate="fast"
-              contentContainerStyle={{ gap: SLIDER_GAP, paddingRight: 8 }}
-            >
-              {myRecentPredictions.map(({ prediction, match }) => (
-                <View key={prediction.id} style={{ width: sliderCardWidth }}>
-                  <MatchCard
-                    match={match}
-                    prediction={prediction}
-                    points={points?.get(match.id)}
-                    onPress={(id) => router.push(`/match/${id}`)}
-                  />
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-        </View>
-        </Container>
+        <TournamentPredictionsSection />
       </ScrollView>
 
-      {showPicker && (
+      {teamPickerVisible ? (
         <TeamPickerModal
-          visible={true}
-          onClose={() => {}}
-          selectedTeams={[]}
-          onSave={handleSaveTeams}
+          visible={teamPickerVisible}
+          onClose={() => {
+            if (showPicker) {
+              setDismissedMandatoryTeamPicker(true);
+            }
+            setTeamPickerOpen(false);
+          }}
+          selectedTeams={profile?.supported_teams ?? []}
+          onSave={handleTeamPickerSave}
           saving={savingTeams}
-          isMandatory={true}
+          isMandatory={showPicker}
         />
-      )}
+      ) : null}
 
       <PlayerProfileModal
         visible={selectedPlayer !== null}
@@ -404,37 +232,97 @@ export default function HomeScreen(): React.JSX.Element {
         rank={selectedPlayer?.rank}
       />
 
-      <BrandingVideoModal visible={isVideoPopupVisible} onClose={dismissVideoPopup} />
+      <BrandingVideoModal visible={isVideoPopupVisible} onClose={handleBrandingVideoClose} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  modalCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-});
+function HomeHeader({
+  profile,
+  onAvatarPress,
+}: {
+  profile: UserProfile | null;
+  onAvatarPress: () => void;
+}): React.JSX.Element {
+  const displayName = profile?.display_name ?? profile?.username ?? 'Player';
 
-interface StatTileProps {
-  label: string;
-  value: string | number;
-  onPress?: () => void;
+  return (
+    <View style={styles.header}>
+      <View style={styles.headerSide}>
+        {profile ? (
+          <AvatarButton
+            displayName={displayName}
+            avatarUrl={profile?.avatar_url}
+            size={54}
+            onPress={onAvatarPress}
+          />
+        ) : (
+          <SkeletonBox width={54} height={54} borderRadius={27} />
+        )}
+      </View>
+
+      <View style={styles.headerCenter}>
+        <Image source={require('@/assets/icona.png')} style={styles.logo} resizeMode="contain" />
+      </View>
+
+      <View style={styles.headerSideRight}>
+        <NotificationBell />
+      </View>
+    </View>
+  );
 }
 
-function StatTile({ label, value, onPress }: StatTileProps): React.JSX.Element {
+function TournamentPredictionsSection(): React.JSX.Element | null {
+  const [openQuestion, setOpenQuestion] = useState<PredictionQuestion | null>(null);
+  const questionsQuery = usePredictionQuestionsQuery();
+  const userPredsQuery = useUserQuestionPredictions();
+  const submitPredMutation = useSubmitQuestionPrediction();
+
+  const questions = questionsQuery.data ?? [];
+  const userPreds =
+    userPredsQuery.data ?? new Map<string, { prediction: string; status: 'pending' | 'approved' | 'rejected' }>();
+
+  const handleOptionSelect = useCallback(
+    (questionId: string, prediction: string) => {
+      submitPredMutation.mutate({ questionId, prediction });
+    },
+    [submitPredMutation]
+  );
+
+  if (questions.length === 0 && !questionsQuery.isLoading) {
+    return null;
+  }
+
   return (
-    <Pressable onPress={onPress} className="flex-1 active:opacity-80">
-      <Card
-        className="items-center justify-center gap-1 p-3 min-h-[88px]"
-        style={{ backgroundColor: Theme.colors.accent, borderColor: Theme.colors.accent }}
-      >
-        <Text className="text-3xl font-black text-center" style={{ color: Theme.colors.accentDark }}>{value}</Text>
-        <Text className="text-center text-[11px] font-bold" style={{ color: Theme.colors.accentDark }}>{label}</Text>
-      </Card>
-    </Pressable>
+    <View style={styles.tournamentSection}>
+      <View style={styles.tournamentHeader}>
+        <View style={styles.tournamentHeaderLine} />
+        <Text style={styles.tournamentTitle}>Tournament Predictions</Text>
+      </View>
+
+      {questionsQuery.isLoading ? (
+        <View style={styles.tournamentLoading}>
+          <SkeletonBox width="100%" height={180} borderRadius={16} />
+        </View>
+      ) : (
+        <PredictionCarousel
+          questions={questions}
+          predictionRecords={userPreds}
+          onCardPress={(question) => setOpenQuestion(question)}
+        />
+      )}
+
+      <PredictionQuestionModal
+        visible={openQuestion !== null}
+        question={openQuestion}
+        predictionRecord={openQuestion ? userPreds.get(openQuestion.id) : undefined}
+        isSubmitting={
+          submitPredMutation.isPending && submitPredMutation.variables?.questionId === openQuestion?.id
+        }
+        onClose={() => setOpenQuestion(null)}
+        onOptionSelect={handleOptionSelect}
+      />
+    </View>
   );
 }
 
@@ -443,13 +331,13 @@ function PredictionQuestionCard({
   predictionRecord,
   onOptionSelect,
   isSubmitting,
-  submittingOption,
+  showImage = true,
 }: {
   question: PredictionQuestion;
   predictionRecord: { prediction: string; status: 'pending' | 'approved' | 'rejected' } | undefined;
   onOptionSelect: (questionId: string, option: string) => void;
   isSubmitting: boolean;
-  submittingOption: string | undefined;
+  showImage?: boolean;
 }): React.JSX.Element {
   const countdown = useCountdown(question.lock_at || '');
   const isResolved = question.status === 'resolved';
@@ -467,7 +355,6 @@ function PredictionQuestionCard({
     setTextVal(selectedAnswer || '');
   }
 
-  // Format countdown text
   let countdownText = '';
   if (!isLocked) {
     if (countdown.days > 0) {
@@ -478,162 +365,677 @@ function PredictionQuestionCard({
       countdownText = `${countdown.minutes}m ${countdown.seconds}s`;
     }
   }
+  const trimmedTextVal = textVal.trim();
+  const hasTextChanged = trimmedTextVal !== (selectedAnswer || '');
+  const canSubmitText = !isLocked && !isSubmitting && trimmedTextVal.length > 0 && hasTextChanged;
+  const submitTextLabel = selectedAnswer && !hasTextChanged ? 'Saved' : selectedAnswer ? 'Update Answer' : 'Submit';
 
   return (
-    <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
-      <View className="flex-row items-start justify-between gap-2">
-        <Text
-          numberOfLines={1}
-          className="flex-1 text-xs text-textSecondary uppercase tracking-wider font-semibold"
-        >
-          <Icon name="trophy" size={12} color={Theme.colors.textSecondary} /> {question.points} PTS Question
-        </Text>
-        <View className="flex-row items-center justify-end gap-1.5 flex-wrap shrink-0" style={{ maxWidth: '58%' }}>
-          {predictionRecord && (
+    <View style={styles.questionCard}>
+      <View style={styles.questionInner}>
+        <Text style={styles.questionTitle}>{question.question_text}</Text>
+
+        {predictionRecord ? (
+          <View style={styles.recordBadgeWrap}>
             <View
-              className={`rounded px-1.5 py-0.5 ${
+              style={[
+                styles.recordBadge,
                 auditStatus === 'approved'
-                  ? 'bg-successDim'
+                  ? styles.recordApproved
                   : auditStatus === 'rejected'
-                  ? 'bg-liveDim'
-                  : 'bg-accentDim/40'
-              }`}
+                  ? styles.recordRejected
+                  : styles.recordPending,
+              ]}
             >
               <Text
-                className={`text-[9px] font-bold uppercase ${
+                style={[
+                  styles.recordText,
                   auditStatus === 'approved'
-                    ? 'text-success'
+                    ? styles.recordApprovedText
                     : auditStatus === 'rejected'
-                    ? 'text-live'
-                    : 'text-textSecondary'
-                }`}
+                    ? styles.recordRejectedText
+                    : styles.recordPendingText,
+                ]}
               >
-                {auditStatus === 'approved'
-                  ? 'Approved'
-                  : auditStatus === 'rejected'
-                  ? 'Rejected'
-                  : 'Pending Audit'}
+                {auditStatus === 'approved' ? 'Approved' : auditStatus === 'rejected' ? 'Rejected' : 'Pending'}
               </Text>
             </View>
-          )}
-          {isResolved ? (
-            <View className="rounded bg-successDim px-1.5 py-0.5">
-              <Text className="text-[10px] text-success font-bold uppercase">Resolved</Text>
-            </View>
-          ) : isLocked ? (
-            <View className="rounded bg-bgBorder px-1.5 py-0.5">
-              <Text className="text-[10px] text-textSecondary font-bold uppercase">Locked</Text>
-            </View>
-          ) : (
-            <View className="rounded bg-accentDim px-1.5 py-0.5 border border-accentBorder">
-              <Text className="text-[10px] text-accent font-bold uppercase">
-                Ends in {countdownText}
-              </Text>
-            </View>
-          )}
-        </View>
+          </View>
+        ) : null}
+
+        {isResolved ? (
+          <View style={styles.statusChip}>
+            <Text style={styles.statusChipText}>Resolved</Text>
+          </View>
+        ) : isLocked ? (
+          <View style={styles.statusChipMuted}>
+            <Text style={styles.statusChipMutedText}>Locked</Text>
+          </View>
+        ) : (
+          <View style={styles.statusChipOpen}>
+            <Text style={styles.statusChipOpenText}>{countdownText ? `Ends in ${countdownText}` : 'Open'}</Text>
+          </View>
+        )}
       </View>
 
-      <Text className="text-base font-bold text-textPrimary">{question.question_text}</Text>
+      <View style={styles.questionBody}>
+        {showImage && question.card_image_url ? (
+          <View style={styles.questionImageWrap}>
+            <Image source={{ uri: question.card_image_url }} style={styles.questionImage} resizeMode="cover" />
+          </View>
+        ) : null}
 
-      {/* Options list or Free text input */}
-      {question.options && question.options.length > 0 ? (
-        <View className="gap-2">
-          {question.options.map((option) => {
-            const isSelected = selectedAnswer === option;
-            const isCorrect = question.correct_answer === option;
-            
-            let btnStyle = 'bg-bgSurface1 border-bgBorder';
-            let textStyle = 'text-textSecondary';
-            
-            if (isSelected) {
-              if (isResolved) {
-                if (isCorrect) {
-                  btnStyle = 'bg-successDim border-success';
-                  textStyle = 'text-success font-semibold';
-                } else {
-                  btnStyle = 'bg-liveDim border-live';
-                  textStyle = 'text-live font-semibold';
-                }
-              } else {
-                btnStyle = 'bg-accentDim border-accent';
-                textStyle = 'text-accent font-semibold';
-              }
-            } else if (isResolved && isCorrect) {
-              btnStyle = 'bg-successDim/20 border-success/30';
-              textStyle = 'text-success/70';
-            }
-
-            const mutatingThis = isSubmitting && submittingOption === option;
-
-            return (
-              <Pressable
-                key={option}
-                onPress={() => !isLocked && onOptionSelect(question.id, option)}
-                disabled={isLocked || isSubmitting}
-                className={`h-11 flex-row items-center justify-between rounded-xl border px-4 active:opacity-85 ${btnStyle}`}
-              >
-                <Text className={`text-sm ${textStyle}`}>{option}</Text>
-                {mutatingThis ? (
-                  <ActivityIndicator size="small" color={Theme.colors.accent} />
-                ) : isResolved && isCorrect ? (
-                  <Text className="text-success text-xs font-bold"><Icon name="checkCircle" size={12} color={Theme.colors.success} /> Correct</Text>
-                ) : isSelected && isResolved && !isCorrect ? (
-                  <Text className="text-live text-xs font-bold"><Icon name="closeCircle" size={12} color={Theme.colors.live} /> Incorrect</Text>
-                ) : isSelected ? (
-                  <Text className="text-accent text-xs">● Selected</Text>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : (
-        <View className="flex-row items-center gap-2 mt-1">
+        <View style={styles.freeTextRow}>
           <TextInput
             value={textVal}
             onChangeText={setTextVal}
-            placeholder={isLocked ? "No prediction submitted" : "Type your prediction..."}
-            placeholderTextColor={Theme.colors.textTertiary}
+            placeholder={isLocked ? 'No prediction submitted' : 'Type your prediction...'}
+            placeholderTextColor={Colors.text.tertiary}
             editable={!isLocked && !isSubmitting}
-            className={`flex-1 h-11 rounded-xl border border-bgBorder bg-bgSurface1 px-4 text-sm text-textPrimary ${
-              isLocked ? 'opacity-60' : ''
-            }`}
+            multiline
+            numberOfLines={3}
+            style={[styles.freeTextInput, isLocked && styles.freeTextInputDisabled]}
           />
-          {!isLocked && textVal.trim() !== (selectedAnswer || '') && (
+          {!isLocked ? (
             <Pressable
               onPress={() => {
-                const val = textVal.trim();
-                if (!val) {
+                if (!trimmedTextVal) {
                   Alert.alert('Error', 'Prediction cannot be empty.');
                   return;
                 }
-                onOptionSelect(question.id, val);
+                if (!hasTextChanged) return;
+                onOptionSelect(question.id, trimmedTextVal);
               }}
-              disabled={isSubmitting}
-              className="bg-accent px-4 rounded-xl h-11 items-center justify-center active:opacity-85"
+              disabled={!canSubmitText}
+              style={[styles.submitButton, !canSubmitText && styles.submitButtonDisabled]}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color={Theme.colors.accentDark} />
+                <ActivityIndicator size="small" color={Colors.background.primary} />
               ) : (
-                <Text className="text-accentDark text-xs font-bold uppercase">Submit</Text>
+                <Text style={[styles.submitButtonText, !canSubmitText && styles.submitButtonTextDisabled]}>
+                  {submitTextLabel}
+                </Text>
               )}
             </Pressable>
-          )}
+          ) : null}
         </View>
-      )}
 
-      {isResolved && (
-        <View className="mt-1 flex-row items-center justify-between border-t border-bgBorder pt-2">
-          <Text className="text-xs text-textSecondary">
-            Correct Answer: <Text className="font-bold text-textPrimary">{question.correct_answer || 'Audited'}</Text>
-          </Text>
-          {auditStatus === 'approved' ? (
-            <Text className="text-xs font-bold text-success"><Icon name="trophy" size={12} color={Theme.colors.success} /> +{question.points} PTS Earned</Text>
-          ) : (
-            <Text className="text-xs text-textTertiary">No points earned</Text>
-          )}
-        </View>
-      )}
-    </Card>
+        {isResolved ? (
+          <View style={styles.resultFooter}>
+            <Text style={styles.resultFooterText}>
+              Correct Answer: <Text style={styles.resultFooterStrong}>{question.correct_answer || 'Audited'}</Text>
+            </Text>
+            {auditStatus === 'approved' ? (
+              <Text style={styles.resultEarned}>
+                <Icon name="trophy" size={12} color={Colors.accent.lime} /> +{question.points} PTS Earned
+              </Text>
+            ) : (
+              <Text style={styles.resultMuted}>No points earned</Text>
+            )}
+          </View>
+        ) : null}
+      </View>
+    </View>
   );
 }
+
+function PredictionQuestionModal({
+  visible,
+  question,
+  predictionRecord,
+  isSubmitting,
+  onClose,
+  onOptionSelect,
+}: {
+  visible: boolean;
+  question: PredictionQuestion | null;
+  predictionRecord: { prediction: string; status: 'pending' | 'approved' | 'rejected' } | undefined;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onOptionSelect: (questionId: string, option: string) => void;
+}): React.JSX.Element | null {
+  const { width, height } = useResponsive();
+  const insets = useSafeAreaInsets();
+  const isCompact = width < 480;
+  const countdown = useCountdown(question?.lock_at || '');
+  const isResolved = question?.status === 'resolved';
+  const isTimeUp = countdown.isElapsed;
+  const isLocked = question?.status === 'closed' || isResolved || isTimeUp;
+  const hasPrediction = Boolean(predictionRecord?.prediction);
+  const modalTitle = isResolved
+    ? 'Result is in'
+    : isLocked
+      ? 'Prediction locked'
+      : hasPrediction
+        ? 'Update your pick'
+        : 'Make your pick';
+  const statusLabel = isResolved ? 'Resolved' : isLocked ? 'Locked' : hasPrediction ? 'Submitted' : 'Open';
+  const shellPaddingTop = Math.max(16, insets.top + 12);
+  const shellPaddingBottom = Math.max(16, insets.bottom + 12);
+  const availableHeight = height - shellPaddingTop - shellPaddingBottom;
+  const modalHeight = Math.min(isCompact ? 440 : 500, Math.max(340, Math.floor(availableHeight * 0.78)));
+
+  if (!visible || !question) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Pressable style={styles.modalBackdrop} onPress={onClose} />
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.modalShell,
+          styles.modalShellCenter,
+          {
+            paddingHorizontal: isCompact ? 16 : 24,
+            paddingTop: shellPaddingTop,
+            paddingBottom: shellPaddingBottom,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.modalCardWrap,
+            isCompact ? styles.modalCardWrapCompact : styles.modalCardWrapWide,
+            { height: modalHeight, maxHeight: modalHeight },
+          ]}
+        >
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderIcon}>
+              <Icon name="target" size={16} color={Colors.accent.lime} />
+            </View>
+            <View style={styles.modalHeaderCopy}>
+              <Text style={styles.modalEyebrow}>Tournament Prediction</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                {modalTitle}
+              </Text>
+            </View>
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close tournament prediction"
+              hitSlop={10}
+              style={styles.modalCloseButton}
+            >
+              <Icon name="close" size={18} color={Colors.text.primary} />
+            </Pressable>
+          </View>
+
+          <View style={styles.modalMetaRow}>
+            <View style={styles.modalPointsPill}>
+              <Icon name="trophy" size={12} color={Colors.background.primary} />
+              <Text style={styles.modalPointsText}>{question.points} pts</Text>
+            </View>
+            <View
+              style={[
+                styles.modalStatusPill,
+                isResolved ? styles.modalStatusResolved : isLocked ? styles.modalStatusLocked : styles.modalStatusOpen,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.modalStatusText,
+                  isResolved ? styles.modalStatusResolvedText : isLocked ? styles.modalStatusLockedText : styles.modalStatusOpenText,
+                ]}
+              >
+                {statusLabel}
+              </Text>
+            </View>
+          </View>
+
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalQuestionWrap}>
+              <PredictionQuestionCard
+                question={question}
+                predictionRecord={predictionRecord}
+                onOptionSelect={onOptionSelect}
+                isSubmitting={isSubmitting}
+                showImage={false}
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: Colors.background.primary,
+  },
+  scrollContent: {
+    paddingHorizontal: 14,
+    gap: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingTop: 6,
+    marginBottom: 2,
+  },
+  headerSide: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  headerCenter: {
+    flex: 1.55,
+    alignItems: 'center',
+  },
+  logo: {
+    width: 188,
+    height: 86,
+  },
+  headerSideRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  featureRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'stretch',
+  },
+  featureHalf: {
+    flex: 1,
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    alignSelf: 'stretch',
+  },
+  doubleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'stretch',
+  },
+  doubleRowCompact: {
+    gap: 8,
+  },
+  splitCard: {
+    flex: 1,
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    minHeight: 228,
+    alignSelf: 'stretch',
+  },
+  tournamentSection: {
+    gap: 12,
+  },
+  tournamentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tournamentHeaderLine: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: Colors.accent.lime,
+  },
+  tournamentTitle: {
+    color: Colors.text.primary,
+    fontSize: 18,
+    fontWeight: Typography.weight.bold,
+  },
+  tournamentLoading: {
+    marginTop: 4,
+  },
+  questionCard: {
+    borderRadius: 0,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  questionInner: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  questionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  questionBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.accent.limeBorder,
+    backgroundColor: Colors.accent.limeLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  questionBadgeText: {
+    color: Colors.accent.lime,
+    fontSize: 9,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  questionMeta: {
+    color: Colors.text.tertiary,
+    fontSize: 10,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  questionTitle: {
+    color: Colors.text.primary,
+    fontSize: 17,
+    fontWeight: Typography.weight.black,
+    lineHeight: 22,
+  },
+  recordBadgeWrap: {
+    alignItems: 'flex-end',
+  },
+  recordBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  recordPending: {
+    backgroundColor: '#1E1E1E',
+  },
+  recordApproved: {
+    backgroundColor: 'rgba(74,222,128,0.15)',
+  },
+  recordRejected: {
+    backgroundColor: 'rgba(224,48,48,0.15)',
+  },
+  recordText: {
+    fontSize: 9,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  recordPendingText: {
+    color: Colors.text.secondary,
+  },
+  recordApprovedText: {
+    color: Colors.accent.lime,
+  },
+  recordRejectedText: {
+    color: Colors.red,
+  },
+  statusChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: 'rgba(74,222,128,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusChipText: {
+    color: Colors.accent.lime,
+    fontSize: 9,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  statusChipMuted: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: '#1E1E1E',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusChipMutedText: {
+    color: Colors.text.secondary,
+    fontSize: 9,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  statusChipOpen: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.accent.limeBorder,
+    backgroundColor: Colors.background.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusChipOpenText: {
+    color: Colors.accent.lime,
+    fontSize: 9,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  questionBody: {
+    paddingHorizontal: 0,
+    paddingBottom: 4,
+    gap: 10,
+  },
+  questionImageWrap: {
+    overflow: 'hidden',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border.subtle,
+    backgroundColor: Colors.background.cardAlt,
+  },
+  questionImage: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+  },
+  freeTextRow: {
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  freeTextInput: {
+    minHeight: 94,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border.subtle,
+    backgroundColor: Colors.background.cardAlt,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: Colors.text.primary,
+    fontSize: Typography.size.sm,
+    textAlignVertical: 'top',
+  },
+  freeTextInputDisabled: {
+    opacity: 0.6,
+  },
+  submitButton: {
+    minHeight: 44,
+    borderRadius: 999,
+    backgroundColor: Colors.accent.lime,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: Colors.accent.lime,
+    overflow: 'hidden',
+  },
+  submitButtonDisabled: {
+    opacity: 0.55,
+  },
+  submitButtonText: {
+    color: Colors.background.primary,
+    fontSize: 12,
+    fontWeight: Typography.weight.bold,
+    textTransform: 'uppercase',
+  },
+  submitButtonTextDisabled: {
+    color: Colors.background.primary,
+  },
+  resultFooter: {
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border.subtle,
+    gap: 8,
+  },
+  resultFooterText: {
+    flex: 1,
+    color: Colors.text.secondary,
+    fontSize: 12,
+  },
+  resultFooterStrong: {
+    color: Colors.text.primary,
+    fontWeight: Typography.weight.bold,
+  },
+  resultEarned: {
+    color: Colors.accent.lime,
+    fontSize: 12,
+    fontWeight: Typography.weight.bold,
+  },
+  resultMuted: {
+    color: Colors.text.tertiary,
+    fontSize: 12,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+  },
+  modalShell: {
+    flex: 1,
+  },
+  modalShellCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCardWrap: {
+    width: '100%',
+    flexShrink: 1,
+    overflow: 'hidden',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.border.default,
+    backgroundColor: Colors.background.card,
+  },
+  modalCardWrapWide: {
+    maxWidth: 420,
+  },
+  modalCardWrapCompact: {
+    maxWidth: '100%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  modalHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.accent.limeBorder,
+    backgroundColor: Colors.accent.limeLight,
+  },
+  modalHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  modalEyebrow: {
+    color: Colors.accent.lime,
+    fontSize: 9,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  modalTitle: {
+    color: Colors.text.primary,
+    fontSize: 16,
+    fontWeight: Typography.weight.black,
+    marginTop: 2,
+  },
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border.subtle,
+    backgroundColor: Colors.background.cardAlt,
+  },
+  modalMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  modalPointsPill: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.accent.lime,
+    paddingHorizontal: 10,
+  },
+  modalPointsText: {
+    color: Colors.background.primary,
+    fontSize: 11,
+    fontWeight: Typography.weight.black,
+    textTransform: 'uppercase',
+  },
+  modalStatusPill: {
+    minHeight: 28,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+  },
+  modalStatusOpen: {
+    borderColor: Colors.accent.limeBorder,
+    backgroundColor: Colors.accent.limeLight,
+  },
+  modalStatusLocked: {
+    borderColor: Colors.border.default,
+    backgroundColor: Colors.background.cardAlt,
+  },
+  modalStatusResolved: {
+    borderColor: 'rgba(74,222,128,0.28)',
+    backgroundColor: 'rgba(74,222,128,0.12)',
+  },
+  modalStatusText: {
+    fontSize: 11,
+    fontWeight: Typography.weight.bold,
+    textTransform: 'uppercase',
+  },
+  modalStatusOpenText: {
+    color: Colors.accent.lime,
+  },
+  modalStatusLockedText: {
+    color: Colors.text.secondary,
+  },
+  modalStatusResolvedText: {
+    color: Colors.accent.lime,
+  },
+  modalScroll: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: 14,
+  },
+  modalQuestionWrap: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border.subtle,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+});

@@ -13,6 +13,7 @@ import {
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth.store';
+import { userCardKeys } from '@/hooks/useUserCards';
 import type { Prediction, PredictionRow } from '@/types';
 
 export const predictionKeys = {
@@ -27,6 +28,8 @@ function mapPrediction(row: PredictionRow): Prediction {
     match_id: row.match_id,
     pred_home_score: row.pred_home_score,
     pred_away_score: row.pred_away_score,
+    pred_winner_team_id: row.pred_winner_team_id,
+    applied_user_card_id: row.applied_user_card_id,
     is_locked: row.is_locked,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -63,6 +66,8 @@ export interface SubmitPredictionInput {
   matchId: string;
   predHome: number;
   predAway: number;
+  predWinnerTeamId?: string | null;
+  appliedUserCardId?: string | null;
 }
 
 interface OptimisticContext {
@@ -84,7 +89,7 @@ export function useSubmitPrediction(): UseMutationResult<
   const userId = useAuthStore((s) => s.session?.user.id);
 
   return useMutation({
-    mutationFn: async ({ matchId, predHome, predAway }) => {
+    mutationFn: async ({ matchId, predHome, predAway, predWinnerTeamId, appliedUserCardId }) => {
       if (!userId) throw new Error('You must be signed in to predict.');
 
       const { data, error } = await supabase
@@ -95,6 +100,8 @@ export function useSubmitPrediction(): UseMutationResult<
             match_id: matchId,
             pred_home_score: predHome,
             pred_away_score: predAway,
+            pred_winner_team_id: predWinnerTeamId ?? null,
+            applied_user_card_id: appliedUserCardId ?? null,
           },
           { onConflict: 'user_id,match_id' }
         )
@@ -105,7 +112,7 @@ export function useSubmitPrediction(): UseMutationResult<
       return mapPrediction(data);
     },
 
-    onMutate: async ({ matchId, predHome, predAway }) => {
+    onMutate: async ({ matchId, predHome, predAway, predWinnerTeamId, appliedUserCardId }) => {
       const queryKey = predictionKeys.byUser(userId ?? 'anon');
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<Map<string, Prediction>>(queryKey);
@@ -119,6 +126,8 @@ export function useSubmitPrediction(): UseMutationResult<
           match_id: matchId,
           pred_home_score: predHome,
           pred_away_score: predAway,
+          pred_winner_team_id: predWinnerTeamId ?? null,
+          applied_user_card_id: appliedUserCardId ?? null,
           is_locked: false,
           created_at: existing?.created_at ?? new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -148,6 +157,7 @@ export function useSubmitPrediction(): UseMutationResult<
       if (context) {
         void queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
+      void queryClient.invalidateQueries({ queryKey: userCardKeys.all });
     },
   });
 }

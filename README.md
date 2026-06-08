@@ -15,15 +15,14 @@ predictions.
 
 ## How scoring works
 
-`lib/scoring.ts` (and its Deno twin `supabase/functions/_shared/scoring.ts`):
+The database scoring function is the source of truth. Local helpers mirror the
+same simplified rules for tests/UI:
 
 | Reward                         | Points |
 | ------------------------------ | ------ |
-| Correct result (win/draw)      | +5     |
-| Correct home goals             | +2     |
-| Correct away goals             | +2     |
-| Exact score bonus              | +5     |
-| **Max per match**              | **14** |
+| Correct result / qualifier     | configurable (+3 default) |
+| Exact 90-minute score bonus    | configurable (+5 default) |
+| Home/away partial goal points  | not awarded |
 
 Wrong predictions score 0 — never negative.
 

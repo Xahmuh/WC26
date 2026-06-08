@@ -1,5 +1,19 @@
-import { useMemo, useState } from 'react';
-import { Modal, ScrollView, Text, View, Image, Alert, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  Modal,
+  ScrollView,
+  Text,
+  View,
+  Image,
+  Alert,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+  Platform,
+  StyleSheet,
+  RefreshControl,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,7 +25,6 @@ import { Container } from '@/components/ui/Container';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
-import { Card } from '@/components/ui/Card';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
 import { useResponsive } from '@/lib/responsive';
@@ -21,10 +34,12 @@ import { useMyPoints } from '@/hooks/usePoints';
 import { useMyPredictions } from '@/hooks/usePredictions';
 import { useAuthStore } from '@/stores/auth.store';
 import { supabase } from '@/lib/supabase';
+import { compressLocalImage } from '@/lib/imageUpload';
 
 export default function ProfileScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const { scale: rs, isSmall } = useResponsive();
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
@@ -32,7 +47,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const signOut = useAuthStore((s) => s.signOut);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
 
-  const { data: teams = [] } = useTeams();
+  const { data: teams = [], refetch: refetchTeams } = useTeams();
   const [showPicker, setShowPicker] = useState(false);
   const [savingTeams, setSavingTeams] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
@@ -40,10 +55,10 @@ export default function ProfileScreen(): React.JSX.Element {
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleChangeAvatar = async () => {
     if (!userId) return;
-    let pickedUri = '';
 
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -56,78 +71,60 @@ export default function ProfileScreen(): React.JSX.Element {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.6,
+        quality: 0.75,
       });
 
       if (result.canceled || !result.assets?.[0]?.uri) return;
-      pickedUri = result.assets[0].uri;
 
+      const pickedUri = result.assets[0].uri;
       setUploadingAvatar(true);
 
-      const fileExt = pickedUri.split('.').pop() || 'jpg';
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      const compressedUri = await compressLocalImage(pickedUri, {
+        maxWidth: 512,
+        quality: 0.72,
+      }).catch(() => pickedUri);
 
-      // Try uploading to Supabase storage avatars bucket
-      const formData = new FormData();
-      formData.append('file', {
-        uri: pickedUri,
-        name: fileName,
-        type: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
-      } as any);
+      const fileName = `${userId}-${Date.now()}.jpg`;
+      const filePath = `avatars/${fileName}`;
+      const contentType = 'image/jpeg';
+
+      let fileBody: Blob | FormData;
+      if (Platform.OS === 'web') {
+        const response = await fetch(compressedUri);
+        fileBody = await response.blob();
+      } else {
+        const formData = new FormData();
+        formData.append('file', {
+          uri: compressedUri,
+          name: fileName,
+          type: contentType,
+        } as any);
+        fileBody = formData;
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, formData, {
-          contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+        .upload(filePath, fileBody, {
+          contentType,
           upsert: true,
         });
 
-      if (!uploadError) {
-        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-        const avatarUrl = urlData.publicUrl;
+      if (uploadError) throw uploadError;
 
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ avatar_url: avatarUrl })
-          .eq('id', userId);
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const avatarUrl = urlData.publicUrl;
 
-        if (updateError) throw updateError;
-        await refreshProfile();
-        Alert.alert('Success', 'Avatar updated successfully!');
-      } else {
-        throw uploadError;
-      }
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: avatarUrl })
+        .eq('id', userId);
+
+      if (updateError) throw updateError;
+      await refreshProfile();
+      Alert.alert('Success', 'Avatar updated successfully!');
     } catch (err: any) {
-      console.log('Storage upload failed, trying base64 fallback:', err.message);
-      if (!pickedUri) return;
-      // Fallback to Base64 in users table directly
-      try {
-        const response = await fetch(pickedUri);
-        const blob = await response.blob();
-        // Await the FileReader so `finally` (which clears the spinner) only runs
-        // once the upload actually completes — not while it's still pending.
-        const base64data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(reader.error ?? new Error('Failed to read image.'));
-          reader.readAsDataURL(blob);
-        });
-
-        const { error: base64UpdateError } = await supabase
-          .from('users')
-          .update({ avatar_url: base64data })
-          .eq('id', userId);
-
-        if (base64UpdateError) {
-          Alert.alert('Error', base64UpdateError.message);
-        } else {
-          await refreshProfile();
-          Alert.alert('Success', 'Avatar updated successfully!');
-        }
-      } catch (fallbackErr: any) {
-        Alert.alert('Error', fallbackErr.message || 'Failed to update avatar.');
-      }
+      console.log('Avatar upload failed after compression:', err.message);
+      Alert.alert('Error', err.message || 'Failed to update avatar.');
     } finally {
       setUploadingAvatar(false);
     }
@@ -187,16 +184,48 @@ export default function ProfileScreen(): React.JSX.Element {
     [leaderboardQuery.data, userId]
   );
 
-  const displayHandle = (profile?.username || profile?.display_name) ?? '?';
-  const initials = displayHandle.slice(0, 2).toUpperCase();
+  const primaryName = (profile?.display_name || profile?.username) ?? 'Player';
+  const profileHandle =
+    profile?.username && profile.username !== profile?.display_name ? profile.username : null;
+  const initials = primaryName.slice(0, 2).toUpperCase();
   const isAdmin = profile?.role === 'admin';
+  const trimmedEditName = editNameValue.trim();
+  const canSaveName = Boolean(trimmedEditName) && trimmedEditName !== (profile?.display_name ?? '');
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshProfile(),
+        refetchTeams(),
+        predictionsQuery.refetch(),
+        pointsQuery.refetch(),
+        leaderboardQuery.refetch(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [leaderboardQuery, pointsQuery, predictionsQuery, refetchTeams, refreshProfile]);
 
   return (
-    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
+    <SafeAreaView className="flex-1" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 16 }}
+        contentContainerStyle={{
+          minHeight: screenHeight + 1,
+          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 16,
+        }}
         showsVerticalScrollIndicator={false}
+        alwaysBounceVertical
+        overScrollMode="always"
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void handleRefresh()}
+            tintColor={Theme.colors.accent}
+            colors={[Theme.colors.accent]}
+          />
+        }
       >
         <Container nested className="px-6 pt-6 gap-6">
         <View className="gap-6">
@@ -241,53 +270,151 @@ export default function ProfileScreen(): React.JSX.Element {
 
             {/* Name + inline edit */}
             {editingName ? (
-              <View style={{ width: '100%', alignItems: 'center', marginTop: 14 }}>
-                <TextInput
-                  value={editNameValue}
-                  onChangeText={setEditNameValue}
-                  className="text-[20px] font-bold text-white tracking-tight pb-1"
-                  style={{
-                    width: '100%',
-                    maxWidth: 280,
-                    minWidth: 160,
-                    textAlign: 'center',
-                    borderBottomWidth: 1.5,
-                    borderBottomColor: Theme.colors.accent,
-                  }}
-                  placeholder="Your name"
-                  placeholderTextColor="#666"
-                  autoFocus
-                />
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
-                  <Pressable
-                    onPress={() => setEditingName(false)}
-                    disabled={savingName}
-                    className="w-10 h-10 rounded-full bg-accent items-center justify-center active:opacity-75"
-                  >
-                    <Icon name="close" size={18} color="#111111" />
-                  </Pressable>
-                  <Pressable
-                    onPress={handleSaveName}
-                    disabled={savingName || !editNameValue.trim()}
-                    className="w-10 h-10 rounded-full bg-accent items-center justify-center active:opacity-75"
-                  >
-                    {savingName ? (
-                      <ActivityIndicator size="small" color="#111111" />
-                    ) : (
-                      <Icon name="check" size={18} color="#111111" />
-                    )}
-                  </Pressable>
-                </View>
-              </View>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.055)', 'rgba(201,223,106,0.08)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  width: '100%',
+                  marginTop: 16,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: 'rgba(201,223,106,0.28)',
+                  overflow: 'hidden',
+                }}
+              >
+                <BlurView intensity={24} tint="dark" style={{ padding: 14 }}>
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center gap-2">
+                      <View className="h-7 w-7 items-center justify-center rounded-full bg-accentDim border border-accentBorder">
+                        <Icon name="sparkles" size={13} color={Theme.colors.accent} />
+                      </View>
+                      <View>
+                        <Text className="text-[10px] font-extrabold uppercase tracking-[2px] text-accent">
+                          Display name
+                        </Text>
+                        <Text className="text-[10px] font-semibold text-[#8F8F8F]">
+                          This is what players see
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="text-[10px] font-bold text-[#777777]">
+                      {trimmedEditName.length}/32
+                    </Text>
+                  </View>
+
+                  <TextInput
+                    value={editNameValue}
+                    onChangeText={setEditNameValue}
+                    className="mt-3 text-[22px] font-black text-white tracking-tight"
+                    style={{
+                      width: '100%',
+                      textAlign: 'center',
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,255,255,0.1)',
+                      backgroundColor: 'rgba(0,0,0,0.35)',
+                      paddingHorizontal: 14,
+                      paddingVertical: 11,
+                    }}
+                    placeholder="Your name"
+                    placeholderTextColor="#666"
+                    autoFocus
+                    maxLength={32}
+                    returnKeyType="done"
+                    onSubmitEditing={() => {
+                      if (canSaveName) void handleSaveName();
+                    }}
+                  />
+
+                  <View className="mt-3 flex-row gap-2">
+                    <Pressable
+                      onPress={() => {
+                        setEditNameValue(primaryName);
+                        setEditingName(false);
+                      }}
+                      disabled={savingName}
+                      className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-bgBorder bg-bgSurface3 active:opacity-75"
+                    >
+                      <Icon name="close" size={16} color={Theme.colors.textSecondary} />
+                      <Text className="text-xs font-extrabold uppercase tracking-wider text-textSecondary">
+                        Cancel
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void handleSaveName()}
+                      disabled={savingName || !canSaveName}
+                      className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-accent active:opacity-80"
+                      style={{ opacity: savingName || !canSaveName ? 0.55 : 1 }}
+                    >
+                      {savingName ? (
+                        <ActivityIndicator size="small" color="#111111" />
+                      ) : (
+                        <Icon name="check" size={16} color="#111111" />
+                      )}
+                      <Text className="text-xs font-extrabold uppercase tracking-wider text-[#111111]">
+                        Save
+                      </Text>
+                    </Pressable>
+                  </View>
+                </BlurView>
+              </LinearGradient>
             ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, maxWidth: '100%', marginTop: 14, paddingHorizontal: 8 }}>
-                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: rs(21), fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.5 }}>
-                  {(profile?.username || profile?.display_name) ?? 'Player'}
-                </Text>
-                <Pressable onPress={() => { setEditNameValue(profile?.username || profile?.display_name || ''); setEditingName(true); }} className="min-h-11 min-w-11 items-center justify-center active:opacity-75 shrink-0">
-                  <Icon name="edit" size={15} color="#888" />
-                </Pressable>
-              </View>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.045)', 'rgba(201,223,106,0.07)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  width: '100%',
+                  marginTop: 16,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.1)',
+                  overflow: 'hidden',
+                }}
+              >
+                <BlurView intensity={18} tint="dark" style={{ paddingHorizontal: 14, paddingVertical: 13 }}>
+                  <View className="flex-row items-center gap-3">
+                    <View className="h-10 w-10 items-center justify-center rounded-2xl bg-accentDim border border-accentBorder">
+                      <Text className="text-sm font-black text-accent">{initials}</Text>
+                    </View>
+
+                    <View className="min-w-0 flex-1">
+                      <View className="flex-row items-center gap-1.5">
+                        <Icon name="sparkles" size={11} color={Theme.colors.accent} />
+                        <Text className="text-[9px] font-extrabold uppercase tracking-[2px] text-accent">
+                          Profile name
+                        </Text>
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        style={{ fontSize: rs(23), fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.8 }}
+                      >
+                        {primaryName}
+                      </Text>
+                      {profileHandle ? (
+                        <Text numberOfLines={1} className="text-[11px] font-semibold text-[#8F8F8F]">
+                          @{profileHandle}
+                        </Text>
+                      ) : (
+                        <Text numberOfLines={1} className="text-[11px] font-semibold text-[#8F8F8F]">
+                          Tap edit to keep it sharp
+                        </Text>
+                      )}
+                    </View>
+
+                    <Pressable
+                      onPress={() => {
+                        setEditNameValue(primaryName);
+                        setEditingName(true);
+                      }}
+                      className="h-11 w-11 items-center justify-center rounded-2xl border border-accentBorder bg-accentDim active:opacity-75 shrink-0"
+                    >
+                      <Icon name="edit" size={16} color={Theme.colors.accent} />
+                    </Pressable>
+                  </View>
+                </BlurView>
+              </LinearGradient>
             )}
 
             {/* Role badge */}
@@ -357,6 +484,11 @@ export default function ProfileScreen(): React.JSX.Element {
             onPress={() => setShowPicker(true)}
           />
           <ProfileOption
+            label="Mini Leagues"
+            icon="group"
+            onPress={() => router.push('/leagues' as any)}
+          />
+          <ProfileOption
             label="Notifications"
             icon="bell"
             onPress={() => router.push('/notifications' as any)}
@@ -371,9 +503,9 @@ export default function ProfileScreen(): React.JSX.Element {
         </View>
 
         {/* KPIs */}
-        <View className="gap-3">
-          <View className="flex-row gap-3">
-            <View className="flex-1">
+        <View style={styles.kpiStack}>
+          <View style={styles.kpiRow}>
+            <View style={styles.kpiCell}>
               <StatTile 
                 label="Points" 
                 value={profile?.total_points ?? 0} 
@@ -382,7 +514,7 @@ export default function ProfileScreen(): React.JSX.Element {
                 accentColor="#CA8A04"
               />
             </View>
-            <View className="flex-1">
+            <View style={styles.kpiCell}>
               <StatTile 
                 label="Rank" 
                 value={rank ? `#${rank}` : '—'} 
@@ -392,20 +524,18 @@ export default function ProfileScreen(): React.JSX.Element {
               />
             </View>
           </View>
-          <View className="flex-row gap-3">
-            <Pressable
-              onPress={() => router.push('/profile/predictions' as any)}
-              className="flex-1 active:opacity-80"
-            >
+          <View style={styles.kpiRow}>
+            <View style={styles.kpiCell}>
               <StatTile 
                 label="Predictions" 
                 value={predictionsMade} 
                 icon="target"
                 iconColor="#C084FC"
                 accentColor="#9333EA"
+                onPress={() => router.push('/profile/predictions' as any)}
               />
-            </Pressable>
-            <View className="flex-1">
+            </View>
+            <View style={styles.kpiCell}>
               <StatTile 
                 label="Scored" 
                 value={scored} 
@@ -417,7 +547,7 @@ export default function ProfileScreen(): React.JSX.Element {
           </View>
         </View>
 
-        <View>
+        <View style={styles.signOutBlock}>
           <Button label="Sign out" variant="lime" onPress={() => setShowSignOutConfirm(true)} />
         </View>
         </View>
@@ -499,25 +629,55 @@ interface StatTileProps {
   icon?: any;
   iconColor?: string;
   accentColor?: string;
+  onPress?: () => void;
 }
 
-function StatTile({ label, value, icon }: StatTileProps): React.JSX.Element {
-  return (
-    <View 
-      className="flex-1 p-4 rounded-2xl shadow-md shadow-black/60"
-      style={{ minHeight: 100, backgroundColor: '#222222', borderColor: '#3A3A3A', borderWidth: 1 }}
-    >
+function StatTile({ label, value, icon, onPress }: StatTileProps): React.JSX.Element {
+  const content = (
+    <>
       <View className="flex-row items-center justify-between">
-        <Text className="text-[11px] font-bold text-[#CCCCCC] uppercase tracking-widest mt-1">
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.76}
+          className="text-[11px] font-bold text-[#CCCCCC] uppercase tracking-widest mt-1"
+          style={styles.statTileLabel}
+        >
           {label}
         </Text>
         {icon && (
-          <View style={{ backgroundColor: '#1A1A1A', borderRadius: 8, padding: 6, borderWidth: 1, borderColor: '#2A2A2A' }}>
+          <View style={styles.statTileIcon}>
             <Icon name={icon} size={14} color="#FFFFFF" />
           </View>
         )}
       </View>
-      <Text className="text-[32px] font-black text-white tracking-tighter mt-3">{value}</Text>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.55}
+        className="text-[32px] font-black text-white tracking-tighter mt-3"
+        style={styles.statTileValue}
+      >
+        {value}
+      </Text>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.statTile, pressed && styles.kpiCellPressed]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.statTile}>
+      {content}
     </View>
   );
 }
@@ -536,3 +696,66 @@ function ProfileOption({ label, icon, onPress }: { label: string; icon: any; onP
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  kpiStack: {
+    alignSelf: 'stretch',
+    gap: 12,
+  },
+  kpiRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'stretch',
+  },
+  kpiCell: {
+    width: '48%',
+    minWidth: 0,
+  },
+  kpiCellPressed: {
+    opacity: 0.82,
+  },
+  statTile: {
+    width: '100%',
+    height: 112,
+    overflow: 'hidden',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#3A3A3A',
+    backgroundColor: '#222222',
+    padding: 16,
+    justifyContent: 'space-between',
+    ...Platform.select({
+      web: { boxShadow: '0 8px 18px rgba(0,0,0,0.35)' },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.34,
+        shadowRadius: 10,
+      },
+      android: { elevation: 5 },
+    }),
+  },
+  statTileLabel: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+  statTileIcon: {
+    width: 34,
+    height: 34,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#1A1A1A',
+  },
+  statTileValue: {
+    maxWidth: '100%',
+  },
+  signOutBlock: {
+    marginTop: 4,
+  },
+});

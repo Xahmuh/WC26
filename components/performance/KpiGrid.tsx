@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 
 import Theme from '@/constants/theme/design-system';
+import { useResponsive } from '@/lib/responsive';
 import { KpiCard } from '@/components/performance/KpiCard';
 import type { ComputedKPIs } from '@/types/performance';
 
@@ -8,26 +9,51 @@ interface KpiGridProps {
   kpis: ComputedKPIs;
 }
 
-function streakLabel(streak: ComputedKPIs['streak']): { text: string; color: string } {
-  if (streak.streak_type === 'none' || streak.current_streak === 0) {
-    return { text: '—', color: Theme.colors.textSecondary };
+type KpiCardConfig = {
+  key: string;
+  title: string;
+  value: string;
+  subtitle: string;
+  icon: Parameters<typeof KpiCard>[0]['icon'];
+  accentColor: string;
+};
+
+function chunkCards<T>(cards: T[], columns: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < cards.length; i += columns) {
+    rows.push(cards.slice(i, i + columns));
   }
-  const prefix = streak.streak_type === 'win' ? '🔥' : '❄️';
-  const label = streak.streak_type === 'win' ? 'Win' : 'Loss';
-  const color = streak.streak_type === 'win' ? Theme.colors.accent : Theme.colors.live;
-  return { text: `${prefix} ${streak.current_streak} ${label}`, color };
+  return rows;
+}
+
+function streakLabel(streak: ComputedKPIs['streak']): { value: string; subtitle: string; color: string } {
+  if (streak.streak_type === 'none' || streak.current_streak === 0) {
+    return {
+      value: '0',
+      subtitle: 'No active streak',
+      color: Theme.colors.textSecondary,
+    };
+  }
+
+  return {
+    value: String(streak.current_streak),
+    subtitle: streak.streak_type === 'win' ? 'Win streak' : 'Loss streak',
+    color: streak.streak_type === 'win' ? Theme.colors.accent : Theme.colors.live,
+  };
 }
 
 export function KpiGrid({ kpis }: KpiGridProps): React.JSX.Element {
+  const { isSmall, isTablet, isDesktop } = useResponsive();
   const streak = streakLabel(kpis.streak);
+  const columns = isSmall ? 1 : isTablet || isDesktop ? 3 : 2;
 
-  const cards = [
+  const cards: KpiCardConfig[] = [
     {
       key: 'accuracy',
       title: 'Accuracy Rate',
       value: `${kpis.accuracyRate}%`,
       subtitle: 'Correct outcomes',
-      icon: 'target' as const,
+      icon: 'target',
       accentColor: kpis.accuracyRate >= 60 ? Theme.colors.accent : Theme.colors.textPrimary,
     },
     {
@@ -35,23 +61,23 @@ export function KpiGrid({ kpis }: KpiGridProps): React.JSX.Element {
       title: 'Exact Score',
       value: `${kpis.exactScoreAccuracy}%`,
       subtitle: 'Perfect scorelines',
-      icon: 'star' as const,
-      accentColor: kpis.exactScoreAccuracy >= 15 ? '#FDE047' : Theme.colors.textPrimary,
+      icon: 'star',
+      accentColor: kpis.exactScoreAccuracy >= 15 ? Theme.colors.warning : Theme.colors.textPrimary,
     },
     {
       key: 'ppm',
       title: 'Points / Match',
       value: `${kpis.pointsPerMatch} pts`,
       subtitle: 'Average return',
-      icon: 'star' as const,
+      icon: 'star',
       accentColor: Theme.colors.accent,
     },
     {
       key: 'streak',
       title: 'Streak',
-      value: streak.text,
-      subtitle: 'Latest finished matches',
-      icon: 'flame' as const,
+      value: streak.value,
+      subtitle: streak.subtitle,
+      icon: 'flame',
       accentColor: streak.color,
     },
     {
@@ -59,22 +85,19 @@ export function KpiGrid({ kpis }: KpiGridProps): React.JSX.Element {
       title: 'Participation',
       value: `${kpis.participationRate}%`,
       subtitle: 'Matches covered',
-      icon: 'trendingUp' as const,
+      icon: 'trendingUp',
       accentColor: kpis.participationRate >= 70 ? Theme.colors.accent : Theme.colors.textPrimary,
     },
   ];
 
-  const rows: (typeof cards)[] = [];
-  for (let i = 0; i < cards.length; i += 2) {
-    rows.push(cards.slice(i, i + 2));
-  }
+  const rows = chunkCards(cards, columns);
 
   return (
     <View className="gap-3">
       {rows.map((row, rowIndex) => (
         <View key={`row-${rowIndex}`} className="flex-row gap-3">
           {row.map((card) => (
-            <View key={card.key} className="flex-1">
+            <View key={card.key} className="flex-1 min-w-0">
               <KpiCard
                 title={card.title}
                 value={card.value}
@@ -84,7 +107,6 @@ export function KpiGrid({ kpis }: KpiGridProps): React.JSX.Element {
               />
             </View>
           ))}
-          {row.length === 1 ? <View className="flex-1" /> : null}
         </View>
       ))}
     </View>

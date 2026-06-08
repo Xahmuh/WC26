@@ -15,60 +15,89 @@ export function PredictionCardBadge({
   points,
   isLocked,
   large = false,
-  sizeOverride,
 }: Props): React.JSX.Element {
-  const size     = sizeOverride ?? (large ? ms(90) : ms(62));
-  const fontSize = large ? ms(26) : ms(17);
+  const fontSize = large ? ms(28) : ms(20);
   const label    = points > 0 ? `+${points}` : `${points}`;
+  const accentColor = isLocked ? Theme.colors.textSecondary : Theme.colors.accent;
 
   return (
     <View
       style={[
-        styles.badge,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderWidth: large ? 2.5 : 1.5,
-          backgroundColor: isLocked ? '#0A0F18' : '#121E36', // solid dark backgrounds
-          borderColor: isLocked ? '#1A2C4C' : Theme.colors.accent, // solid borders
-          // lime glow when open
-          shadowColor: isLocked ? 'transparent' : Theme.colors.accent,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: isLocked ? 0 : 0.45,
-          shadowRadius: 12,
-          elevation: isLocked ? 0 : 8,
-        },
+        styles.pointsPlate,
+        large ? styles.pointsPlateLarge : null,
+        isLocked ? styles.pointsPlateLocked : styles.pointsPlateOpen,
       ]}
     >
-      <Text
-        style={[
-          styles.pointsText,
-          {
-            fontSize,
-            lineHeight: fontSize * 1.2,
-            color: isLocked ? Theme.colors.textTertiary : Theme.colors.accent, // lime text when open
-          },
-        ]}
-        accessibilityLabel={`${points} points reward`}
-        accessibilityRole="text"
-        numberOfLines={1}
-        adjustsFontSizeToFit
-      >
-        {label}
-      </Text>
+      <View style={styles.sideRail} />
+      <View style={styles.textStack}>
+        <Text style={[styles.eyebrow, { color: isLocked ? Theme.colors.textTertiary : 'rgba(255,255,255,0.72)' }]}>
+          POINTS
+        </Text>
+        <Text
+          style={[
+            styles.pointsText,
+            {
+              fontSize,
+              lineHeight: fontSize * 1.05,
+              color: accentColor,
+            },
+          ]}
+          accessibilityLabel={`${points} points reward`}
+          accessibilityRole="text"
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {label}
+        </Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  badge: {
+  pointsPlate: {
+    minWidth: ms(92),
+    minHeight: ms(48),
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: ms(8),
+    paddingHorizontal: ms(12),
+    paddingVertical: ms(8),
+    borderRadius: ms(16),
+    borderWidth: 1,
     overflow: 'hidden',
   },
-  pointsText: {
+  pointsPlateLarge: {
+    minWidth: ms(126),
+    minHeight: ms(58),
+    borderRadius: ms(18),
+  },
+  pointsPlateOpen: {
+    backgroundColor: 'rgba(0,0,0,0.54)',
+    borderColor: 'rgba(215,217,94,0.34)',
+  },
+  pointsPlateLocked: {
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  sideRail: {
+    width: ms(3),
+    alignSelf: 'stretch',
+    borderRadius: ms(3),
+    backgroundColor: Theme.colors.accent,
+    opacity: 0.9,
+  },
+  textStack: {
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  eyebrow: {
+    fontSize: ms(8),
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: 1.2,
+  },
+  pointsText: {
+    fontWeight: '900',
+    letterSpacing: -0.8,
   },
 });

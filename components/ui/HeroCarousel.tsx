@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import type { HeroSlide } from '@/types';
 
 const FALLBACK_SLIDE = { source: require('../../assets/herob.jpg'), backgroundColor: '#13214a' };
+const HERO_ASPECT_RATIO = 9 / 4;
 
 async function getActiveHeroSlides(): Promise<HeroSlide[]> {
   const { data, error } = await supabase
@@ -112,7 +113,7 @@ export function HeroCarousel(): React.JSX.Element {
     <View
       onLayout={onLayout}
       className="overflow-hidden bg-bgSurface2"
-      style={{ width: '100%', height: 160, borderRadius: 16 }}
+      style={{ width: '100%', aspectRatio: HERO_ASPECT_RATIO, borderRadius: 16 }}
     >
       {isLoading ? (
         <View style={[styles.centered, { backgroundColor: FALLBACK_SLIDE.backgroundColor }]}>
@@ -147,7 +148,7 @@ export function HeroCarousel(): React.JSX.Element {
                 resizeMode="contain"
               />
               {(item.title || item.subtitle) && (
-                <View style={styles.captionContainer} pointerEvents="none">
+                <View style={[styles.captionContainer, { pointerEvents: 'none' }]}>
                   {item.title && <Text style={styles.title}>{item.title}</Text>}
                   {item.subtitle && <Text style={styles.subtitle}>{item.subtitle}</Text>}
                 </View>

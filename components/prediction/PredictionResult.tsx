@@ -1,9 +1,10 @@
 import { Text, View } from 'react-native';
 
 import { Icon } from '@/components/ui/Icon';
+import { MultiplierBadge } from '@/components/ui/MultiplierBadge';
 import Theme from '@/constants/theme/design-system';
-import { POINTS } from '@/lib/scoring';
 import { useMatchTopScorer } from '@/hooks/usePoints';
+import { useMyCards } from '@/hooks/useUserCards';
 import type { Match, PointsRecord, Prediction } from '@/types';
 
 interface PredictionResultProps {
@@ -21,12 +22,30 @@ export function PredictionResult({
   prediction,
   points,
 }: PredictionResultProps): React.JSX.Element {
-  const hasScore = match.home_score !== null && match.away_score !== null;
   const topScorerQuery = useMatchTopScorer(match.id);
+  const cardsQuery = useMyCards();
   const topScorer = topScorerQuery.data;
+  const appliedCard = (cardsQuery.data ?? []).find(
+    (card) => card.id === prediction?.applied_user_card_id
+  );
+  const effectiveMultiplier = match.points_multiplier + (appliedCard?.multiplier_bonus ?? 0);
 
   return (
     <View className="gap-5">
+        <View className="flex-row items-center justify-between rounded-2xl border border-bgBorder bg-bgSurface2 px-5 py-4">
+          <View className="min-w-0 flex-1">
+            <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest">
+              Match multiplier
+            </Text>
+            <Text className="mt-1 text-xs text-textTertiary">
+              {appliedCard
+                ? `${appliedCard.definition?.name ?? 'Card boost'} added +${appliedCard.multiplier_bonus}`
+                : 'Applied to this match score'}
+            </Text>
+          </View>
+          <MultiplierBadge value={effectiveMultiplier} size="md" />
+        </View>
+
         {!prediction ? (
           <Text className="text-center text-sm font-medium text-textSecondary">
             You did not submit a prediction for this match.
@@ -48,24 +67,12 @@ export function PredictionResult({
                   Points Breakdown
                 </Text>
                 <BreakdownRow
-                  label="Correct winner"
+                  label={match.is_knockout ? 'Correct qualifier' : 'Correct winner / draw'}
                   value={points.winner_points}
-                  max={POINTS.WINNER}
-                />
-                <BreakdownRow
-                  label="Home goals"
-                  value={points.home_goal_points}
-                  max={POINTS.HOME_GOAL}
-                />
-                <BreakdownRow
-                  label="Away goals"
-                  value={points.away_goal_points}
-                  max={POINTS.AWAY_GOAL}
                 />
                 <BreakdownRow
                   label="Exact-score bonus"
                   value={points.exact_bonus}
-                  max={POINTS.EXACT_BONUS}
                 />
                 <View className="mt-2 flex-row items-center justify-between border-t border-bgBorder pt-4">
                   <Text className="text-sm font-black text-textPrimary uppercase tracking-widest">Total Earned</Text>
@@ -122,16 +129,15 @@ export function PredictionResult({
 interface BreakdownRowProps {
   label: string;
   value: number;
-  max: number;
 }
 
-function BreakdownRow({ label, value, max }: BreakdownRowProps): React.JSX.Element {
+function BreakdownRow({ label, value }: BreakdownRowProps): React.JSX.Element {
   const earned = value > 0;
   return (
     <View className="flex-row items-center justify-between mb-1.5">
       <Text className="text-xs font-medium text-textSecondary">{label}</Text>
       <Text className={`text-xs font-bold ${earned ? 'text-success' : 'text-textTertiary'}`}>
-        {earned ? `+${value}` : '0'} <Text className="text-[10px] font-medium opacity-50">/ {max}</Text>
+        {earned ? `+${value}` : '0'}
       </Text>
     </View>
   );

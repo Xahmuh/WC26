@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Text,
   View,
@@ -8,10 +8,14 @@ import {
   StyleSheet,
   Platform,
   Modal,
-  KeyboardAvoidingView,
+  ScrollView,
+  type NativeSyntheticEvent,
+  type TextInputChangeEventData,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Theme from '@/constants/theme/design-system';
+import { useResponsive } from '@/lib/responsive';
 import { useTeams } from '@/hooks/useTeams';
 import { TeamFlag } from './TeamFlag';
 import { Button } from './Button';
@@ -30,6 +34,14 @@ interface TeamPickerModalProps {
 
 const ITEMS_PER_PAGE = 8; // 4 rows of 2 columns keeps it very compact and responsive
 
+function normalizeSearch(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 export function TeamPickerModal({
   visible,
   onClose,
@@ -44,21 +56,59 @@ export function TeamPickerModal({
   const [localSelected, setLocalSelected] = useState<string[]>(selectedTeams || []);
   const [currentPage, setCurrentPage] = useState(1);
   const [isFocused, setIsFocused] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
+  const { height } = useResponsive();
+
+  const overlayTopPadding = Math.max(16, insets.top + 16);
+  const overlayBottomPadding = Math.max(16, insets.bottom + 16);
+  const cardMaxHeight = Math.max(260, height - insets.top - insets.bottom - 48);
+  const listHeight = Math.min(250, Math.max(156, cardMaxHeight - 236));
+  const normalizedSearch = normalizeSearch(search);
+
+  useEffect(() => {
+    if (!visible) return;
+    setLocalSelected(selectedTeams || []);
+  }, [selectedTeams, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setSearch('');
+    setCurrentPage(1);
+  }, [visible]);
 
   const handleSearchChange = (text: string) => {
     setSearch(text);
     setCurrentPage(1); // Reset to page 1 when filter changes
   };
 
-  const filteredTeams = useMemo(() => {
-    return teams.filter((t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      (t.short_name && t.short_name.toLowerCase().includes(search.toLowerCase())) ||
-      (t.code && t.code.toLowerCase().includes(search.toLowerCase()))
-    );
-  }, [teams, search]);
+  const handleNativeSearchChange = (event: NativeSyntheticEvent<TextInputChangeEventData>) => {
+    const nextSearch = event.nativeEvent.text;
+    if (nextSearch !== search) {
+      handleSearchChange(nextSearch);
+    }
+  };
 
-  const totalPages = Math.ceil(filteredTeams.length / ITEMS_PER_PAGE);
+  const filteredTeams = useMemo(() => {
+    if (!normalizedSearch) return teams;
+
+    return teams.filter((team) => {
+      const haystack = [
+        team.name,
+        team.short_name,
+        team.code,
+        team.group_name,
+      ].map(normalizeSearch);
+
+      return haystack.some((value) => value.includes(normalizedSearch));
+    });
+  }, [teams, normalizedSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTeams.length / ITEMS_PER_PAGE));
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(Math.max(1, page), totalPages));
+  }, [totalPages]);
   
   const paginatedTeams = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -82,8 +132,9 @@ export function TeamPickerModal({
   };
 
   // Rendered inside a real RN <Modal> so it always paints above the floating
-  // tab bar (zIndex 100) and OS chrome, and a KeyboardAvoidingView keeps the
-  // "Confirm" button visible when the search keyboard is open on mobile.
+  // tab bar (zIndex 100) and OS chrome. The card intentionally does not use
+  // KeyboardAvoidingView: this picker should stay visually anchored while the
+  // user types in search.
   return (
     <Modal
       visible={visible}
@@ -92,37 +143,48 @@ export function TeamPickerModal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.overlay}
+      <View
+        style={[
+          styles.overlay,
+          { paddingTop: overlayTopPadding, paddingBottom: overlayBottomPadding },
+        ]}
       >
-      <Card className="w-full max-w-sm border border-bgBorder bg-bgSurface2 p-5 gap-4 rounded-2xl shadow-2xl">
+        <Card
+          className="w-full max-w-sm border border-bgBorder bg-bgSurface2 p-5 rounded-2xl shadow-2xl"
+          style={{ maxHeight: cardMaxHeight }}
+        >
+        <View style={styles.modalContent}>
         {/* Header */}
         <View className="flex-row justify-between items-center pb-2 border-b border-bgBorder/50">
-          <View className="gap-0.5">
-            <Text className="text-base font-bold text-textPrimary">{title}</Text>
-            <Text className="text-[11px] text-textSecondary font-semibold">
+          <View className="min-w-0 flex-1 gap-0.5 pr-2">
+            <Text numberOfLines={1} className="text-base font-bold text-textPrimary">{title}</Text>
+            <Text numberOfLines={1} className="text-[11px] text-textSecondary font-semibold">
               Choose up to 3 teams ({localSelected.length}/3 selected)
             </Text>
           </View>
-          <Pressable onPress={onClose} className="p-1.5 rounded-lg bg-bgSurface3 border border-bgBorder active:opacity-75">
+          <Pressable onPress={onClose} className="shrink-0 p-1.5 rounded-lg bg-bgSurface3 border border-bgBorder active:opacity-75">
             <Text className="text-textSecondary text-[10px] font-bold">{isMandatory ? 'Skip' : 'Cancel'}</Text>
           </Pressable>
         </View>
 
         {/* Search Input */}
-        <View 
+        <Pressable
+          onPress={() => searchInputRef.current?.focus()}
           className="flex-row items-center rounded-xl px-3 h-12 gap-2.5"
           style={{
             borderWidth: 1,
             borderColor: isFocused ? Theme.colors.accent : Theme.colors.bgBorder,
             backgroundColor: isFocused ? Theme.colors.bgSurface1 : Theme.colors.bgSurface3,
             ...(isFocused ? {
-              shadowColor: Theme.colors.accent,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.15,
-              shadowRadius: 8,
-              elevation: 4,
+              ...(Platform.OS === 'web'
+                ? { boxShadow: '0 0 8px rgba(201, 223, 106, 0.15)' }
+                : {
+                    shadowColor: Theme.colors.accent,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 8,
+                    elevation: 4,
+                  }),
             } : {}),
           }}
         >
@@ -132,15 +194,21 @@ export function TeamPickerModal({
             color={isFocused ? Theme.colors.accent : Theme.colors.textTertiary} 
           />
           <TextInput
+            ref={searchInputRef}
             value={search}
             onChangeText={handleSearchChange}
+            onChange={handleNativeSearchChange}
             placeholder="Search teams..."
             placeholderTextColor={Theme.colors.textTertiary}
             className="flex-1 text-[13px] text-textPrimary h-full font-semibold"
             style={Platform.OS === 'web' ? { outlineStyle: 'none', borderWidth: 0 } as any : { borderWidth: 0 }}
             autoCapitalize="none"
+            autoCorrect={false}
+            blurOnSubmit={false}
+            returnKeyType="search"
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
+            testID="team-picker-search"
           />
           {search.length > 0 && (
             <Pressable 
@@ -150,16 +218,22 @@ export function TeamPickerModal({
               <Icon name="close" size={10} color={Theme.colors.textSecondary} />
             </Pressable>
           )}
-        </View>
+        </Pressable>
 
         {/* Team List (Paginated Grid) */}
         {isLoading ? (
-          <View className="h-[210px] items-center justify-center">
+          <View style={[styles.teamList, { height: listHeight, alignItems: 'center', justifyContent: 'center' }]}>
             <ActivityIndicator size="small" color={Theme.colors.accent} />
           </View>
         ) : (
-          <View className="h-[210px] justify-between">
-            <View className="flex-row flex-wrap gap-2">
+          <View style={[styles.teamList, { height: listHeight }]}>
+            <ScrollView
+              style={styles.teamGridScroller}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              contentContainerStyle={styles.teamGridContent}
+            >
               {paginatedTeams.map((team) => {
                 const isSelected = localSelected.includes(team.id);
                 const disabled = !isSelected && localSelected.length >= 3;
@@ -197,7 +271,7 @@ export function TeamPickerModal({
                   No teams found matching search.
                 </Text>
               )}
-            </View>
+            </ScrollView>
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
@@ -211,7 +285,7 @@ export function TeamPickerModal({
                       : 'bg-bgSurface3 border-bgBorder active:opacity-75'
                   }`}
                 >
-                  <Text className="text-[10px] font-bold text-textSecondary">← Prev</Text>
+                  <Text className="text-[10px] font-bold text-textSecondary">Prev</Text>
                 </Pressable>
                 
                 <Text className="text-[10px] text-textSecondary font-bold">
@@ -227,7 +301,7 @@ export function TeamPickerModal({
                       : 'bg-bgSurface3 border-bgBorder active:opacity-75'
                   }`}
                 >
-                  <Text className="text-[10px] font-bold text-textSecondary">Next →</Text>
+                  <Text className="text-[10px] font-bold text-textSecondary">Next</Text>
                 </Pressable>
               </View>
             )}
@@ -243,8 +317,9 @@ export function TeamPickerModal({
             onPress={handleSave}
           />
         </View>
+        </View>
       </Card>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -260,5 +335,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
+  },
+  modalContent: {
+    flexShrink: 1,
+    gap: 16,
+  },
+  teamList: {
+    gap: 8,
+  },
+  teamGridScroller: {
+    flex: 1,
+  },
+  teamGridContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingBottom: 4,
   },
 });

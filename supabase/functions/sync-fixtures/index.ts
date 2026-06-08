@@ -42,7 +42,12 @@ interface ApiMatch {
   venue: string | null;
   homeTeam: ApiTeam;
   awayTeam: ApiTeam;
-  score: { fullTime: { home: number | null; away: number | null } };
+  score: {
+    duration: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | string | null;
+    fullTime: { home: number | null; away: number | null };
+    regularTime?: { home: number | null; away: number | null } | null;
+    winner: 'HOME_TEAM' | 'AWAY_TEAM' | 'DRAW' | null;
+  };
 }
 
 interface ApiMatchesResponse {
@@ -52,6 +57,7 @@ interface ApiMatchesResponse {
 type DbStatus = 'SCHEDULED' | 'IN_PLAY' | 'FINISHED' | 'POSTPONED' | 'CANCELLED';
 type DbStage =
   | 'GROUP'
+  | 'ROUND_OF_32'
   | 'ROUND_OF_16'
   | 'QUARTER_FINAL'
   | 'SEMI_FINAL'
@@ -78,6 +84,9 @@ function mapStatus(s: ApiStatus): DbStatus {
 
 function mapStage(stage: string): DbStage {
   switch (stage) {
+    case 'LAST_32':
+    case 'ROUND_OF_32':
+      return 'ROUND_OF_32';
     case 'LAST_16':
     case 'ROUND_OF_16':
       return 'ROUND_OF_16';
@@ -98,8 +107,42 @@ function mapStage(stage: string): DbStage {
 
 function groupLetter(group: string | null): string | null {
   if (!group) return null;
-  const match = group.match(/([A-H])\s*$/i);
+  const match = group.match(/([A-L])\s*$/i);
   return match ? match[1].toUpperCase() : null;
+}
+
+function mapDecisionMethod(
+  duration: ApiMatch['score']['duration']
+): 'FT' | 'ET' | 'PEN' | null {
+  if (duration === 'REGULAR') return 'FT';
+  if (duration === 'EXTRA_TIME') return 'ET';
+  if (duration === 'PENALTY_SHOOTOUT') return 'PEN';
+  return null;
+}
+
+function resolveWinnerTeamId(
+  match: ApiMatch,
+  homeId: string | null,
+  awayId: string | null
+): string | null {
+  if (match.score.winner === 'HOME_TEAM') return homeId;
+  if (match.score.winner === 'AWAY_TEAM') return awayId;
+  if (match.score.fullTime.home !== null && match.score.fullTime.away !== null) {
+    if (match.score.fullTime.home > match.score.fullTime.away) return homeId;
+    if (match.score.fullTime.away > match.score.fullTime.home) return awayId;
+  }
+  return null;
+}
+
+function resolveDecisionMethod(
+  duration: ApiMatch['score']['duration'],
+  home: number | null,
+  away: number | null,
+  winnerTeamId: string | null
+): 'FT' | 'ET' | 'PEN' | null {
+  const method = mapDecisionMethod(duration);
+  if (method || !winnerTeamId || home === null || away === null) return method;
+  return home === away ? 'PEN' : 'FT';
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -166,17 +209,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const awayId = m.awayTeam.id ? idByExternal.get(m.awayTeam.id) ?? null : null;
       const status = mapStatus(m.status);
       const finished = status === 'FINISHED';
+      const stage = mapStage(m.stage);
+      const homeScore = finished ? (m.score.regularTime?.home ?? m.score.fullTime.home) : null;
+      const awayScore = finished ? (m.score.regularTime?.away ?? m.score.fullTime.away) : null;
+      const winnerTeamId = finished ? resolveWinnerTeamId(m, homeId, awayId) : null;
       return {
         external_id: m.id,
         home_team_id: homeId,
         away_team_id: awayId,
         status,
-        stage: mapStage(m.stage),
+        stage,
         group_name: groupLetter(m.group),
         kickoff_time: m.utcDate,
         venue: m.venue,
-        home_score: finished ? m.score.fullTime.home : null,
-        away_score: finished ? m.score.fullTime.away : null,
+        home_score: homeScore,
+        away_score: awayScore,
+        winner_team_id: winnerTeamId,
+        decision_method: finished
+          ? resolveDecisionMethod(m.score.duration, homeScore, awayScore, winnerTeamId)
+          : null,
       };
     });
 
@@ -192,7 +243,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // 5. Tournament completeness guarantee — warn only, never fail the sync.
     const REQUIRED_STAGES: DbStage[] = [
-      'GROUP', 'ROUND_OF_16', 'QUARTER_FINAL', 'SEMI_FINAL', 'THIRD_PLACE', 'FINAL',
+      'GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER_FINAL', 'SEMI_FINAL', 'THIRD_PLACE', 'FINAL',
     ];
     const { data: stageRows } = await supabase.from('matches').select('stage');
     const present = new Set((stageRows ?? []).map((r: { stage: string }) => r.stage));

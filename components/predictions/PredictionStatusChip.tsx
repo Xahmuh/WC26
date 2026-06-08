@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
 import Theme from '@/constants/theme/design-system';
-import { Icon } from '@/components/ui/Icon';
 import { ms } from '@/lib/responsive';
 import { useCountdown } from '@/hooks/useCountdown';
 
@@ -23,8 +22,7 @@ export function PredictionStatusChip({ status, closesAt }: Props): React.JSX.Ele
         accessible
         accessibilityLabel="Prediction locked"
       >
-        <Icon name="lock" size={11} color={Theme.colors.textTertiary} fixed />
-        <Text style={[styles.chipText, { color: Theme.colors.textTertiary }]}>Locked</Text>
+        <Text style={[styles.chipText, { color: '#CBD5E1' }]}>Locked</Text>
       </View>
     );
   }
@@ -40,11 +38,13 @@ export function PredictionStatusChip({ status, closesAt }: Props): React.JSX.Ele
 
   return (
     <View
-      style={[styles.chip, styles.chipOpen]}
+      style={[styles.chip, status === 'submitted' ? styles.chipSubmitted : styles.chipOpen]}
       accessible
       accessibilityLabel={`Closes in ${displayLabel}`}
     >
-      <Text style={[styles.chipText, { color: Theme.colors.accent }]}>{displayLabel}</Text>
+      <Text style={[styles.chipText, { color: Theme.colors.accent }]}>
+        {displayLabel}
+      </Text>
     </View>
   );
 }
@@ -60,16 +60,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipOpen: {
-    backgroundColor: Theme.colors.accentDim,
-    borderColor: Theme.colors.accentBorder,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    borderColor: 'rgba(215,217,94,0.38)',
+  },
+  chipSubmitted: {
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    borderColor: 'rgba(215,217,94,0.38)',
   },
   chipLocked: {
-    backgroundColor: '#0A1324',
-    borderColor: '#1A2C4C',
+    backgroundColor: 'rgba(15,23,42,0.58)',
+    borderColor: 'rgba(203,213,225,0.24)',
   },
   chipText: {
     fontSize: ms(10),
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    fontWeight: '800',
+    letterSpacing: 0.35,
   },
 });

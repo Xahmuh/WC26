@@ -4,6 +4,9 @@ import { isRunningInExpoGo } from 'expo';
 let configured = false;
 type NotificationsModule = typeof import('expo-notifications');
 
+const SPORTS_ALERT_CHANNEL_ID = 'sports-alerts-sound-v2';
+const SPORTS_ALERT_SOUND = 'sound.mp3';
+
 let _Notifications: NotificationsModule | null = null;
 async function getNotifications(): Promise<NotificationsModule | null> {
   // Push notifications were removed from Expo Go in SDK 53 — on Android, merely
@@ -24,7 +27,6 @@ async function getNotifications(): Promise<NotificationsModule | null> {
 
 export async function configureNotifications(): Promise<void> {
   if (configured || Platform.OS === 'web') return;
-  configured = true;
   const Notifications = await getNotifications();
   if (!Notifications) return;
   try {
@@ -36,18 +38,28 @@ export async function configureNotifications(): Promise<void> {
         shouldShowList: true,
       }),
     });
+    const permissionRequest = {
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+      android: {},
+    };
     const current = await Notifications.getPermissionsAsync();
-    if (current.status !== 'granted') {
-      await Notifications.requestPermissionsAsync();
+    if (current.status !== 'granted' || (Platform.OS === 'ios' && current.ios?.allowsSound !== true)) {
+      await Notifications.requestPermissionsAsync(permissionRequest);
     }
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Default',
+      await Notifications.setNotificationChannelAsync(SPORTS_ALERT_CHANNEL_ID, {
+        name: 'Sports Alerts',
         importance: Notifications.AndroidImportance.HIGH,
-        sound: 'default',
+        sound: SPORTS_ALERT_SOUND,
       });
     }
+    configured = true;
   } catch {
+    configured = false;
     // no-op
   }
 }
@@ -61,9 +73,26 @@ export async function playNotificationSound(
   const Notifications = await getNotifications();
   if (!Notifications) return;
   try {
+    const content: {
+      title: string;
+      body?: string;
+      sound: string;
+      data: Record<string, unknown>;
+      channelId?: string;
+    } = {
+      title,
+      body: body ?? undefined,
+      sound: SPORTS_ALERT_SOUND,
+      data: data ?? {},
+    };
+
+    if (Platform.OS === 'android') {
+      content.channelId = SPORTS_ALERT_CHANNEL_ID;
+    }
+
     await Notifications.scheduleNotificationAsync({
       // `data` rides along so a tapped notification can deep-link (e.g. match_id).
-      content: { title, body: body ?? undefined, sound: 'default', data: data ?? {} },
+      content,
       trigger: null,
     });
   } catch {

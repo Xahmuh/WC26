@@ -66,6 +66,13 @@ export type Database = {
             foreignKeyName: "hero_slides_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "hero_slides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -92,16 +99,129 @@ export type Database = {
         }
         Relationships: []
       }
+      league_members: {
+        Row: {
+          joined_at: string
+          league_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          joined_at?: string
+          league_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          joined_at?: string
+          league_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_members_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "league_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "league_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "league_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leagues: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          invite_code: string
+          is_deleted: boolean
+          max_members: number | null
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invite_code: string
+          is_deleted?: boolean
+          max_members?: number | null
+          name: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invite_code?: string
+          is_deleted?: boolean
+          max_members?: number | null
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leagues_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leagues_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leagues_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           away_score: number | null
           away_team_id: string | null
           created_at: string
+          decision_method: Database["public"]["Enums"]["match_decision_method"] | null
           external_id: number
           group_name: string | null
           home_score: number | null
           home_team_id: string | null
           id: string
+          is_knockout: boolean
           is_placeholder: boolean
           kickoff_time: string
           last_synced_at: string | null
@@ -109,16 +229,19 @@ export type Database = {
           stage: Database["public"]["Enums"]["match_stage"]
           status: Database["public"]["Enums"]["match_status"]
           venue: string | null
+          winner_team_id: string | null
         }
         Insert: {
           away_score?: number | null
           away_team_id?: string | null
           created_at?: string
+          decision_method?: Database["public"]["Enums"]["match_decision_method"] | null
           external_id: number
           group_name?: string | null
           home_score?: number | null
           home_team_id?: string | null
           id?: string
+          is_knockout?: boolean
           is_placeholder?: boolean
           kickoff_time: string
           last_synced_at?: string | null
@@ -126,16 +249,19 @@ export type Database = {
           stage?: Database["public"]["Enums"]["match_stage"]
           status?: Database["public"]["Enums"]["match_status"]
           venue?: string | null
+          winner_team_id?: string | null
         }
         Update: {
           away_score?: number | null
           away_team_id?: string | null
           created_at?: string
+          decision_method?: Database["public"]["Enums"]["match_decision_method"] | null
           external_id?: number
           group_name?: string | null
           home_score?: number | null
           home_team_id?: string | null
           id?: string
+          is_knockout?: boolean
           is_placeholder?: boolean
           kickoff_time?: string
           last_synced_at?: string | null
@@ -143,6 +269,7 @@ export type Database = {
           stage?: Database["public"]["Enums"]["match_stage"]
           status?: Database["public"]["Enums"]["match_status"]
           venue?: string | null
+          winner_team_id?: string | null
         }
         Relationships: [
           {
@@ -198,6 +325,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "league_leaderboard"
             referencedColumns: ["user_id"]
           },
           {
@@ -272,6 +406,13 @@ export type Database = {
             foreignKeyName: "points_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "points_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -279,6 +420,7 @@ export type Database = {
       }
       prediction_questions: {
         Row: {
+          card_image_path: string | null
           correct_answer: string | null
           created_at: string
           created_by: string | null
@@ -291,6 +433,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          card_image_path?: string | null
           correct_answer?: string | null
           created_at?: string
           created_by?: string | null
@@ -303,6 +446,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          card_image_path?: string | null
           correct_answer?: string | null
           created_at?: string
           created_by?: string | null
@@ -326,6 +470,13 @@ export type Database = {
             foreignKeyName: "prediction_questions_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "prediction_questions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -339,6 +490,8 @@ export type Database = {
           match_id: string
           pred_away_score: number
           pred_home_score: number
+          pred_winner_team_id: string | null
+          applied_user_card_id: string | null
           updated_at: string
           user_id: string
         }
@@ -349,6 +502,8 @@ export type Database = {
           match_id: string
           pred_away_score: number
           pred_home_score: number
+          pred_winner_team_id?: string | null
+          applied_user_card_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -359,6 +514,8 @@ export type Database = {
           match_id?: string
           pred_away_score?: number
           pred_home_score?: number
+          pred_winner_team_id?: string | null
+          applied_user_card_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -380,6 +537,102 @@ export type Database = {
           {
             foreignKeyName: "predictions_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scoring_rules: {
+        Row: {
+          exact_bonus_points: number
+          id: number
+          updated_at: string
+          updated_by: string | null
+          winner_points: number
+        }
+        Insert: {
+          exact_bonus_points?: number
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+          winner_points?: number
+        }
+        Update: {
+          exact_bonus_points?: number
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+          winner_points?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scoring_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "scoring_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "scoring_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stage_multipliers: {
+        Row: {
+          multiplier: number
+          stage: Database["public"]["Enums"]["match_stage"]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          multiplier?: number
+          stage: Database["public"]["Enums"]["match_stage"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          multiplier?: number
+          stage?: Database["public"]["Enums"]["match_stage"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_multipliers_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "stage_multipliers_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "stage_multipliers_updated_by_fkey"
+            columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -466,6 +719,13 @@ export type Database = {
             foreignKeyName: "user_question_predictions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "league_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "user_question_predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -496,6 +756,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "user_rank_snapshot_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "league_leaderboard"
             referencedColumns: ["user_id"]
           },
           {
@@ -568,6 +835,31 @@ export type Database = {
         }
         Relationships: []
       }
+      league_leaderboard: {
+        Row: {
+          avatar_url: string | null
+          display_name: string | null
+          exact_predictions: number | null
+          league_id: string | null
+          league_member_count: number | null
+          league_rank: number | null
+          predictions_made: number | null
+          predictions_scored: number | null
+          supported_teams: string[] | null
+          total_points: number | null
+          user_id: string | null
+          username: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_members_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_performance: {
         Row: {
           correct_predictions: number | null
@@ -583,6 +875,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "league_leaderboard"
             referencedColumns: ["user_id"]
           },
           {
@@ -616,6 +915,13 @@ export type Database = {
         }[]
       }
       admin_restore_user: { Args: { p_user_id: string }; Returns: undefined }
+      admin_set_stage_multiplier: {
+        Args: {
+          p_multiplier: number
+          p_stage: Database["public"]["Enums"]["match_stage"]
+        }
+        Returns: number
+      }
       admin_set_user_role: {
         Args: { p_role: string; p_user_id: string }
         Returns: undefined
@@ -624,14 +930,72 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      create_league: {
+        Args: {
+          p_avatar_url?: string
+          p_description?: string
+          p_max_members?: number
+          p_name: string
+        }
+        Returns: {
+          avatar_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          invite_code: string
+          is_deleted: boolean
+          max_members: number | null
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      delete_league: { Args: { p_league_id: string }; Returns: undefined }
       finalize_leaderboard: { Args: { p_day?: string }; Returns: undefined }
+      generate_league_invite_code: { Args: never; Returns: string }
       get_user_streak: { Args: { p_user_id: string }; Returns: Json }
       is_active_user: { Args: { p_user_id: string }; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
+      join_league_by_code: {
+        Args: { p_invite_code: string }
+        Returns: {
+          avatar_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          invite_code: string
+          is_deleted: boolean
+          max_members: number | null
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      leave_league: { Args: { p_league_id: string }; Returns: undefined }
       lock_predictions_at_kickoff: { Args: never; Returns: undefined }
       match_day: { Args: { p_kickoff: string }; Returns: string }
       maybe_finalize_day: { Args: { p_day: string }; Returns: undefined }
       refresh_leaderboard: { Args: never; Returns: undefined }
+      regenerate_league_invite_code: {
+        Args: { p_league_id: string }
+        Returns: string
+      }
+      remove_league_member: {
+        Args: { p_league_id: string; p_user_id: string }
+        Returns: undefined
+      }
       resolve_prediction_question: {
         Args: { p_correct_answer: string; p_question_id: string }
         Returns: undefined
@@ -639,11 +1003,44 @@ export type Database = {
       score_match: { Args: { p_match_id: string }; Returns: number }
       sync_matches: { Args: { p_matches: Json }; Returns: number }
       tournament_tz: { Args: never; Returns: string }
+      transfer_league_ownership: {
+        Args: { p_league_id: string; p_new_owner_id: string }
+        Returns: undefined
+      }
+      update_league: {
+        Args: {
+          p_avatar_url?: string
+          p_description?: string
+          p_league_id: string
+          p_max_members?: number
+          p_name?: string
+        }
+        Returns: {
+          avatar_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          invite_code: string
+          is_deleted: boolean
+          max_members: number | null
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       update_username: { Args: { p_username: string }; Returns: undefined }
     }
     Enums: {
+      match_decision_method: "FT" | "ET" | "PEN";
       match_stage:
         | "GROUP"
+        | "ROUND_OF_32"
         | "ROUND_OF_16"
         | "QUARTER_FINAL"
         | "SEMI_FINAL"
@@ -782,8 +1179,10 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      match_decision_method: ["FT", "ET", "PEN"],
       match_stage: [
         "GROUP",
+        "ROUND_OF_32",
         "ROUND_OF_16",
         "QUARTER_FINAL",
         "SEMI_FINAL",

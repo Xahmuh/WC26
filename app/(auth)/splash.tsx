@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { View, Image, Animated, Platform, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CustomSplashScreen(): React.JSX.Element {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const handleGo = useCallback(() => {
     router.replace('/(auth)/login');
@@ -80,102 +82,108 @@ export default function CustomSplashScreen(): React.JSX.Element {
 
   const { width, height } = useWindowDimensions();
 
-  // The background image aspect ratio is 852 x 1846
-  const IMAGE_ASPECT_RATIO = 852 / 1846;
-
-  // Calculate the aspect-ratio matching container dimensions
-  let containerWidth = width;
-  let containerHeight = height;
-
-  if (width / height > IMAGE_ASPECT_RATIO) {
-    // Screen is wider than the image's ratio (e.g. tablet, web desktop)
-    containerWidth = height * IMAGE_ASPECT_RATIO;
-  } else {
-    // Screen is taller than the image's ratio (or matches it)
-    containerHeight = width / IMAGE_ASPECT_RATIO;
-  }
+  const buttonSize = Math.max(68, Math.min(80, width * 0.21, height * 0.12));
+  const rippleSize = buttonSize;
+  const rippleRadius = rippleSize / 2;
+  const buttonBottom = Math.max(insets.bottom + 34, Math.min(84, height * 0.085));
+  const buttonStageHeight = Math.max(170, buttonSize * 2.35);
 
   return (
-    <View className="flex-1 bg-[#01102e] relative justify-center items-center">
+    <View className="flex-1 bg-[#01102e] relative">
       <StatusBar style="light" />
       
-      {/* Aspect Ratio Constraint Container */}
+      {/* Full-bleed Background Image */}
+      <Image
+        source={require('../../assets/splashscreen.png')}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width,
+          height,
+        }}
+        resizeMode="contain"
+      />
+
+      {/* Subtle overlay to keep the UI premium and help the button read on all screens */}
+      <View
+        style={{
+          ...StyleSheet.absoluteFill,
+          backgroundColor: 'rgba(1, 16, 46, 0.10)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Floating Animated Circular Button with Ripples */}
       <View 
         style={{ 
-          width: containerWidth, 
-          height: containerHeight, 
-          position: 'relative',
-          overflow: 'hidden'
+          position: 'absolute',
+          bottom: buttonBottom,
+          left: 0,
+          right: 0,
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: buttonStageHeight,
+          overflow: 'visible',
         }}
       >
-        {/* Background Image */}
-        <Image
-          source={require('../../assets/splashscreen.png')}
-          style={{ width: '100%', height: '100%' }}
-          resizeMode="cover"
+        {/* Ripple Wave 1 (Behind the button) */}
+        <Animated.View
+          style={{
+            position: 'absolute',
+            width: rippleSize,
+            height: rippleSize,
+            borderRadius: rippleRadius,
+            borderWidth: 1.5,
+            borderColor: '#d7d95e',
+            backgroundColor: 'rgba(215, 217, 94, 0.12)',
+            opacity: opacity1,
+            transform: [{ scale: scale1 }],
+          }}
         />
 
-        {/* Floating Animated Circular Button with Ripples (Raised slightly to top: 73% height, lowered 7px total) */}
-        <View 
-          style={{ 
+        {/* Ripple Wave 2 (Behind the button, staggered) */}
+        <Animated.View
+          style={{
             position: 'absolute',
-            top: '73%',
-            marginTop: 35,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 160,
+            width: rippleSize,
+            height: rippleSize,
+            borderRadius: rippleRadius,
+            borderWidth: 1.5,
+            borderColor: '#d7d95e',
+            backgroundColor: 'rgba(215, 217, 94, 0.12)',
+            opacity: opacity2,
+            transform: [{ scale: scale2 }],
+          }}
+        />
+
+        {/* Main GO Button */}
+        <Animated.View 
+          style={{ 
+            transform: [{ scale }],
+            zIndex: 10,
           }}
         >
-          {/* Ripple Wave 1 (Behind the button) */}
-          <Animated.View
+          <Pressable
+            onPress={handleGo}
+            className="rounded-full items-center justify-center shadow-lg active:opacity-80"
             style={{
-              position: 'absolute',
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              borderWidth: 1.5,
-              borderColor: '#C9DF6A', // Lime accent border
-              backgroundColor: 'rgba(201, 223, 106, 0.12)', // Subtle translucent lime fill
-              opacity: opacity1,
-              transform: [{ scale: scale1 }],
-            }}
-          />
-
-          {/* Ripple Wave 2 (Behind the button, staggered) */}
-          <Animated.View
-            style={{
-              position: 'absolute',
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              borderWidth: 1.5,
-              borderColor: '#C9DF6A',
-              backgroundColor: 'rgba(201, 223, 106, 0.12)',
-              opacity: opacity2,
-              transform: [{ scale: scale2 }],
-            }}
-          />
-
-          {/* Main GO Button */}
-          <Animated.View 
-            style={{ 
-              transform: [{ scale }],
-              zIndex: 10,
+              width: buttonSize,
+              height: buttonSize,
+              elevation: 5,
+              backgroundColor: '#d7d95e',
             }}
           >
-            <Pressable
-              onPress={handleGo}
-              className="w-20 h-20 rounded-full items-center justify-center shadow-lg active:opacity-80"
-              style={{ elevation: 5, backgroundColor: '#C9DF6A' }}
+            <Text
+              className="text-[#001C3D] font-extrabold uppercase tracking-normal text-center leading-none"
+              style={{ fontSize: Math.round(buttonSize * 0.42) }}
             >
-              <Text className="text-[#001C3D] text-4xl font-extrabold uppercase tracking-normal text-center leading-none">
-                GO
-              </Text>
-            </Pressable>
-          </Animated.View>
-        </View>
+              GO
+            </Text>
+          </Pressable>
+        </Animated.View>
       </View>
     </View>
   );

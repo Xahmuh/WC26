@@ -14,16 +14,16 @@
 // the new look automatically. (Source: ui kit/DESIGN_SYSTEM.md)
 export const Colors = {
   // Core backgrounds (dark-first, neutral — each ~8-10pt lighter than below)
-  bgDeep: '#0D0D0D', // App root / status-bar / deepest layer
+  bgDeep: '#000000', // App root background
   bgSurface1: '#1A1A1A', // Screen / section background
   bgSurface2: '#222222', // Cards, match tiles (card surface)
   bgSurface3: '#2A2A2A', // Elevated cards, modals, badges
   bgBorder: '#2A2A2A', // Borders, dividers, input outlines (subtle)
 
   // Accent (electric lime — fires only on active / focus / primary action)
-  accent: '#C8FF00', // Primary CTA, active state, highlights
-  accentDim: 'rgba(200,255,0,0.12)', // Accent backgrounds
-  accentBorder: 'rgba(200,255,0,0.30)', // Accent borders
+  accent: '#d7d95e', // Primary CTA, active state, highlights
+  accentDim: 'rgba(215,217,94,0.12)', // Accent backgrounds
+  accentBorder: 'rgba(215,217,94,0.30)', // Accent borders
   accentDark: '#0D0D0D', // Text ON accent button
 
   // Text
@@ -51,10 +51,11 @@ export const Colors = {
 
 // ── 2. GRADIENTS (for LinearGradient) ──────────────────────────────────────
 export const Gradients = {
+  carbonApp: ['#000000', '#040504', '#0B0D08', '#020202'] as string[],
   stadium: ['#1F1F1F', '#161616', '#0D0D0D'] as string[],
   scoreBg: ['#222222', '#111111'] as string[],
   cardFade: ['transparent', 'rgba(13,13,13,0.9)'] as string[],
-  accentGlow: ['rgba(200,255,0,0.25)', 'rgba(200,255,0,0)'] as string[],
+  accentGlow: ['rgba(215,217,94,0.25)', 'rgba(215,217,94,0)'] as string[],
 } as const;
 
 // ── 3. SPACING SCALE ───────────────────────────────────────────────────────

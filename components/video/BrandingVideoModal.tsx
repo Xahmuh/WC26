@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -9,8 +10,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import { Asset } from 'expo-asset';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 import Theme from '@/constants/theme/design-system';
 import { Icon } from '@/components/ui/Icon';
@@ -22,23 +24,16 @@ interface BrandingVideoModalProps {
 }
 
 /**
- * Full-screen branding video popup shown once per `VIDEO_CONFIG.version` on
- * the Home screen. Implemented as a plain RN <Modal> (not an Expo Router
- * route) so Home stays mounted underneath — no navigation stack pollution,
- * no back-button side effects.
+ * Full-screen branding video popup shown once per fresh login session.
+ * Kept as a plain RN Modal so it does not pollute the navigation stack.
  */
-export function BrandingVideoModal({ visible, onClose }: BrandingVideoModalProps): React.JSX.Element {
+export function BrandingVideoModal({ visible, onClose }: BrandingVideoModalProps): React.JSX.Element | null {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isTablet = width >= 768;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const isClosingRef = useRef(false);
 
-  // `require(...)` resolves to a numeric asset id on native and to an
-  // arbitrary module shape on web depending on the bundler — neither is a
-  // reliable cross-platform `useVideoPlayer` source on its own. Resolving it
-  // through `expo-asset` always yields a plain string URI (a `file://`/local
-  // path on native, an http(s) path on web), which `useVideoPlayer` accepts
-  // uniformly everywhere. This is what fixed the video not loading on web.
   const localAssetUri = useMemo(
     () => Asset.fromModule(VIDEO_CONFIG.localAsset).uri,
     []
@@ -49,70 +44,57 @@ export function BrandingVideoModal({ visible, onClose }: BrandingVideoModalProps
     p.loop = false;
   });
 
-  // Fade in + autoplay when shown; reset when hidden.
+  const handleClose = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    try {
+      player.pause();
+    } catch {
+      // Player may already be released when the modal is closing.
+    }
+
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start(() => {
+      onClose();
+      isClosingRef.current = false;
+    });
+  }, [player, onClose, fadeAnim]);
+
   useEffect(() => {
     if (visible) {
+      isClosingRef.current = false;
       player.currentTime = 0;
       player.play();
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 350,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }).start();
     } else {
       fadeAnim.setValue(0);
+      isClosingRef.current = false;
     }
   }, [visible, player, fadeAnim]);
 
-  // Auto-close once the video finishes playing.
   useEffect(() => {
     const sub = player.addListener('playToEnd', () => {
-      onClose();
+      handleClose();
     });
     return () => sub.remove();
-  }, [player, onClose]);
+  }, [player, handleClose]);
 
-  const handleClose = useCallback(() => {
-    try {
-      player.pause();
-    } catch {
-      // ignore — player may already be released
-    }
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => onClose());
-  }, [player, onClose, fadeAnim]);
-
-  const handleReplay = useCallback(() => {
-    player.currentTime = 0;
-    player.play();
-  }, [player]);
-
-  // Fully responsive sizing — works for phones, tablets, and any browser
-  // viewport (incl. mobile-web, where the window can be narrower or shorter
-  // than a native phone screen). We size the card by BOTH available width
-  // and available height so the video (locked to a 16:9 box) always fits
-  // entirely on screen without being cropped or overflowing, then center it.
-  const HEADER_HEIGHT = 52;
-  const FOOTER_HEIGHT = 56;
-  const CHROME_HEIGHT = HEADER_HEIGHT + FOOTER_HEIGHT;
-  const SCREEN_MARGIN = 24;
-
-  const availableWidth = Math.min(width - 24, 800);
-  const availableHeight = Math.min(height - 60, 700);
-
-  // We want a 16:9 aspect ratio for the video, plus some padding for header and footer.
-  // Header is roughly 54px, footer is roughly 66px -> total 120px non-video height
-  const nonVideoHeight = 120;
-  
-  // Calculate max width that fits inside the available height while maintaining 16:9 for the video
-  const maxVideoHeight = availableHeight - nonVideoHeight;
-  const targetWidthForHeight = maxVideoHeight * (16 / 9);
-
-  // Card width is the smaller of the available width, or the width that perfectly fits the max height
-  const cardWidth = Math.min(availableWidth, targetWidthForHeight);
+  const screenMargin = isTablet ? 32 : 18;
+  const safeTop = Math.max(insets.top, 16);
+  const safeBottom = Math.max(insets.bottom, 16);
+  const availableWidth = Math.min(width - screenMargin * 2, isTablet ? 720 : 520);
+  const availableHeight = Math.min(height - safeTop - safeBottom - 28, isTablet ? 680 : 620);
+  const nonVideoHeight = isTablet ? 176 : 166;
+  const maxVideoHeight = Math.max(170, availableHeight - nonVideoHeight);
+  const cardWidth = Math.min(availableWidth, maxVideoHeight * (16 / 9));
 
   if (!visible) return null;
 
@@ -124,23 +106,27 @@ export function BrandingVideoModal({ visible, onClose }: BrandingVideoModalProps
       statusBarTranslucent
       onRequestClose={handleClose}
     >
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: Theme.colors.overlayLight, justifyContent: 'center', alignItems: 'center' }]}>
-        {/* Tap backdrop to close */}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.backdrop,
+          {
+            paddingTop: safeTop,
+            paddingBottom: safeBottom,
+            paddingHorizontal: screenMargin,
+          },
+        ]}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
 
         <Animated.View
           style={[
-            Theme.cards.elevated,
+            styles.card,
             {
-              padding: 0,
               width: cardWidth,
               maxWidth: availableWidth,
               maxHeight: availableHeight,
-              alignSelf: 'center',
-              borderRadius: 36,
-              borderWidth: 1.5,
-              borderColor: Theme.colors.accentBorder,
-              ...Theme.shadows.lg,
+              opacity: fadeAnim,
               transform: [
                 {
                   scale: fadeAnim.interpolate({
@@ -149,63 +135,62 @@ export function BrandingVideoModal({ visible, onClose }: BrandingVideoModalProps
                   }),
                 },
               ],
-            }
+            },
           ]}
-          className="overflow-hidden bg-bgDeep"
         >
-          {/* Header */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderBottomWidth: 1,
-            borderBottomColor: Theme.colors.bgBorder,
-            backgroundColor: Theme.colors.bgSurface1,
-            paddingVertical: Theme.spacing.md,
-            paddingHorizontal: Theme.spacing.xl,
-          }}>
-            <Text style={[Theme.textStyles.display, { fontSize: 15, textTransform: 'uppercase', letterSpacing: Theme.letterSpacing.widest }]} numberOfLines={1}>
-              Welcome To the Game
-            </Text>
+          <LinearGradient
+            colors={['rgba(215,217,94,0.16)', 'rgba(26,26,26,0.98)', '#050505']}
+            locations={[0, 0.38, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.header}>
+            <View style={styles.headerCopy}>
+              <View style={styles.eyebrowRow}>
+                <View style={styles.adBadge}>
+                  <Text style={styles.adBadgeText}>AD</Text>
+                </View>
+                <Text style={styles.eyebrowText}>Featured spotlight</Text>
+              </View>
+              <Text style={styles.title} numberOfLines={1}>
+                Welcome To the Game
+              </Text>
+              <Text style={styles.subtitle} numberOfLines={2}>
+                Watch the latest drop before you jump into your predictions.
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={handleClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close advertisement"
+              hitSlop={10}
+              style={styles.closeButton}
+            >
+              <Text style={styles.closeButtonText}>x</Text>
+            </Pressable>
           </View>
 
-          {/* Video */}
-          <View className="w-full bg-black">
+          <View style={styles.videoShell}>
             <VideoView
               player={player}
-              style={{ width: '100%', aspectRatio: 16 / 9 }}
+              style={styles.video}
               fullscreenOptions={{ enable: true }}
               allowsPictureInPicture={false}
               contentFit="contain"
-              nativeControls
             />
           </View>
 
-          {/* Footer controls */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: Theme.spacing.md,
-            borderTopWidth: 1,
-            borderTopColor: Theme.colors.bgBorder,
-            backgroundColor: Theme.colors.bgSurface1,
-            padding: Theme.spacing.lg,
-          }}>
-            <Pressable
-              onPress={handleReplay}
-              style={[Theme.buttons.secondary, { flex: 1, flexDirection: 'row', gap: Theme.spacing.sm, paddingVertical: 12 }]}
-              className="active:opacity-75"
-            >
-              <Icon name="refresh" size={16} color={Theme.colors.accent} />
-              <Text style={Theme.buttons.secondaryText}>Replay</Text>
-            </Pressable>
+          <View style={styles.footer}>
+            <View style={styles.footerCopy}>
+              <Text style={styles.footerTitle}>Ready when you are</Text>
+              <Text style={styles.footerText}>Continue now or let the clip finish.</Text>
+            </View>
             <Pressable
               onPress={handleClose}
-              style={[Theme.buttons.primary, { flex: 1, flexDirection: 'row', gap: Theme.spacing.sm, paddingVertical: 12 }, Theme.shadows.accentGlow]}
+              style={styles.continueButton}
               className="active:opacity-90"
             >
-              <Text style={Theme.buttons.primaryText}>Continue</Text>
+              <Text style={styles.continueText}>Continue</Text>
               <Icon name="forward" size={16} color={Theme.colors.accentDark} />
             </Pressable>
           </View>
@@ -214,3 +199,143 @@ export function BrandingVideoModal({ visible, onClose }: BrandingVideoModalProps
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  backdrop: {
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  card: {
+    alignSelf: 'center',
+    overflow: 'hidden',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(215,217,94,0.28)',
+    backgroundColor: '#050505',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 22px 70px rgba(0,0,0,0.82), 0 0 34px rgba(215,217,94,0.12)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 18 },
+          shadowOpacity: 0.52,
+          shadowRadius: 30,
+          elevation: 18,
+        }),
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 7,
+  },
+  eyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  adBadge: {
+    borderRadius: 999,
+    backgroundColor: Theme.colors.accent,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  adBadgeText: {
+    color: Theme.colors.accentDark,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+  },
+  eyebrowText: {
+    color: Theme.colors.textTertiary,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  title: {
+    color: Theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  subtitle: {
+    color: Theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  closeButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  closeButtonText: {
+    color: Theme.colors.textPrimary,
+    fontSize: 20,
+    lineHeight: 22,
+    fontWeight: '300',
+  },
+  videoShell: {
+    marginHorizontal: 14,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(215,217,94,0.22)',
+    backgroundColor: '#000',
+  },
+  video: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+  },
+  footerCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  footerTitle: {
+    color: Theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  footerText: {
+    color: Theme.colors.textTertiary,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  continueButton: {
+    minWidth: 132,
+    minHeight: 44,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Theme.colors.accent,
+  },
+  continueText: {
+    color: Theme.colors.accentDark,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+});

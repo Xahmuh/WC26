@@ -6,7 +6,7 @@
 //   2. Fetch ALL finished WC matches in a SINGLE call
 //      (GET /competitions/WC/matches?status=FINISHED).
 //   3. For each DB match not yet marked FINISHED, if the bulk payload reports it
-//      finished with a score, persist the score and trigger scoring.
+//      finished with a score, persist the score. The DB trigger handles scoring.
 //   4. Never throw — always return a { checked, updated } summary.
 //
 // This replaces the previous per-match polling (N requests, 6s apart) with a
@@ -33,6 +33,9 @@ import {
 interface MatchToPoll {
   id: string;
   external_id: number;
+  home_team_id: string | null;
+  away_team_id: string | null;
+  is_knockout: boolean;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -53,7 +56,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Candidate matches: everything we don't yet consider FINISHED.
     const { data: dbMatches, error: selectError } = await supabase
       .from('matches')
-      .select('id, external_id')
+      .select('id, external_id, home_team_id, away_team_id, is_knockout')
       .neq('status', 'FINISHED')
       .returns<MatchToPoll[]>();
 
@@ -88,15 +91,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const api = finishedByExternalId.get(match.external_id);
       if (!api) continue; // not finished yet per the API
 
-      const home = api.score.fullTime.home;
-      const away = api.score.fullTime.away;
+      const home = api.score.regularTime?.home ?? api.score.fullTime.home;
+      const away = api.score.regularTime?.away ?? api.score.fullTime.away;
       if (home === null || away === null) continue; // finished without a score?
+      const winnerTeamId = resolveWinnerTeamId(api.score.winner, match, api);
+      const decisionMethod = resolveDecisionMethod(
+        api.score.duration,
+        home,
+        away,
+        winnerTeamId
+      );
+
+      if (match.is_knockout && !winnerTeamId) {
+        errors.push(`update ${match.external_id}: missing knockout qualifier`);
+        continue;
+      }
 
       const { error: updateError } = await supabase
         .from('matches')
         .update({
           home_score: home,
           away_score: away,
+          winner_team_id: winnerTeamId,
+          decision_method: decisionMethod,
           status: 'FINISHED',
           last_synced_at: new Date().toISOString(),
         })
@@ -108,7 +125,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
 
       updated++;
-      await triggerCalculatePoints(match.id, errors);
     }
 
     return jsonResponse({ checked, updated, errors });
@@ -138,35 +154,36 @@ async function fetchFinishedWithRetry(): Promise<ApiMatch[]> {
   }
 }
 
-/** Invokes calculate-points for a finished match; failures are logged, not thrown. */
-async function triggerCalculatePoints(
-  matchId: string,
-  errors: string[]
-): Promise<void> {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!supabaseUrl || !serviceRoleKey) {
-      errors.push('calculate-points: missing function env');
-      return;
-    }
-
-    const res = await fetch(`${supabaseUrl}/functions/v1/calculate-points`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-      body: JSON.stringify({ match_id: matchId }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      errors.push(`calculate-points ${matchId}: ${res.status} ${text.slice(0, 120)}`);
-    }
-  } catch (err) {
-    errors.push(
-      `calculate-points ${matchId}: ${err instanceof Error ? err.message : String(err)}`
-    );
+function resolveWinnerTeamId(
+  winner: ApiMatch['score']['winner'],
+  match: MatchToPoll,
+  api: ApiMatch
+): string | null {
+  if (winner === 'HOME_TEAM') return match.home_team_id;
+  if (winner === 'AWAY_TEAM') return match.away_team_id;
+  if (api.score.fullTime.home !== null && api.score.fullTime.away !== null) {
+    if (api.score.fullTime.home > api.score.fullTime.away) return match.home_team_id;
+    if (api.score.fullTime.away > api.score.fullTime.home) return match.away_team_id;
   }
+  return null;
+}
+
+function mapDecisionMethod(
+  duration: ApiMatch['score']['duration']
+): 'FT' | 'ET' | 'PEN' | null {
+  if (duration === 'REGULAR') return 'FT';
+  if (duration === 'EXTRA_TIME') return 'ET';
+  if (duration === 'PENALTY_SHOOTOUT') return 'PEN';
+  return null;
+}
+
+function resolveDecisionMethod(
+  duration: ApiMatch['score']['duration'],
+  home: number,
+  away: number,
+  winnerTeamId: string | null
+): 'FT' | 'ET' | 'PEN' | null {
+  const method = mapDecisionMethod(duration);
+  if (method || !winnerTeamId) return method;
+  return home === away ? 'PEN' : 'FT';
 }

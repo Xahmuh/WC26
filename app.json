@@ -7,6 +7,11 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splashscreen.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#01102E"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.wc26.app",
@@ -15,7 +20,7 @@
     "android": {
       "package": "org.wc26.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0D0F0E"
       }
     },
@@ -36,7 +41,10 @@
       [
         "expo-notifications",
         {
-          "color": "#C8FF00"
+          "color": "#C8FF00",
+          "sounds": [
+            "./assets/notification-sounds/sound.mp3"
+          ]
         }
       ],
       "expo-image",

@@ -1,4 +1,4 @@
-import { ActivityIndicator, Image, Pressable, Text } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, Text } from 'react-native';
 
 interface GoogleButtonProps {
   onPress: () => void;
@@ -21,16 +21,20 @@ export function GoogleButton({
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
-      className={`h-12 w-full flex-row items-center justify-center rounded-full bg-white px-6 active:opacity-90 ${
+      className={`relative h-12 w-full flex-row items-center justify-center rounded-full bg-white px-7 active:opacity-90 ${
         isDisabled ? 'opacity-50' : ''
       }`}
-      style={{
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
-      }}
+      style={
+        Platform.OS === 'web'
+          ? { boxShadow: '0 2px 3px rgba(0, 0, 0, 0.1)' }
+          : {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 3,
+              elevation: 2,
+            }
+      }
     >
       {loading ? (
         <ActivityIndicator color="#4285F4" />
@@ -40,10 +44,10 @@ export function GoogleButton({
             source={{
               uri: 'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.png',
             }}
-            style={{ width: 20, height: 20, marginRight: 12 }}
+            style={{ width: 20, height: 20, position: 'absolute', left: 28 }}
             resizeMode="contain"
           />
-          <Text className="text-base font-semibold text-[#1f1f1f]">
+          <Text className="text-center text-base font-semibold text-[#1f1f1f]">
             {label}
           </Text>
         </>
