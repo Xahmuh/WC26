@@ -91,12 +91,12 @@ export default function CustomSplashScreen(): React.JSX.Element {
   const buttonBottom = Math.max(0, Math.max(safeButtonCenterFromBottom, targetButtonCenterFromBottom) - buttonStageHeight / 2);
 
   return (
-    <View className="flex-1 bg-[#01102e] relative">
+    <View className="flex-1 bg-black relative">
       <StatusBar style="light" />
       
       {/* Full-bleed Background Image */}
       <Image
-        source={require('../../assets/splashscreen-compatible.png')}
+        source={require('../../assets/neosplash.png')}
         style={{
           position: 'absolute',
           top: 0,
@@ -113,7 +113,7 @@ export default function CustomSplashScreen(): React.JSX.Element {
       <View
         style={{
           ...StyleSheet.absoluteFill,
-          backgroundColor: 'rgba(1, 16, 46, 0.10)',
+          backgroundColor: 'rgba(0, 0, 0, 0.10)',
           pointerEvents: 'none',
         }}
       />
