@@ -138,13 +138,6 @@ function RootNavigator(): React.JSX.Element {
         }}
       />
       <Stack.Screen
-        name="cards"
-        options={{
-          headerShown: false,
-          presentation: 'card',
-        }}
-      />
-      <Stack.Screen
         name="user-performance"
         options={{
           headerShown: false,

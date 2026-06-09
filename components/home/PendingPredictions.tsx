@@ -11,6 +11,15 @@ import { useMyPredictions } from '@/hooks/usePredictions';
 import { formatShortMatchTime, isNotStartedMatch } from '@/components/home/homeUtils';
 import { useResponsive } from '@/lib/responsive';
 
+const COMPACT_AWAY_NAME_LENGTH = 13;
+
+function getCompactAwayTeamName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= COMPACT_AWAY_NAME_LENGTH) return trimmed;
+
+  return trimmed.split(/[\s-]+/)[0] || trimmed;
+}
+
 function getLockProgress(kickoffTime: string): number {
   const kickoff = new Date(kickoffTime).getTime();
   if (Number.isNaN(kickoff)) return 0;
@@ -143,6 +152,7 @@ export function PendingPredictions({ isLoading = false }: { isLoading?: boolean 
         {rows.map((match) => {
           const firstTeam = match.home_team;
           const secondTeam = match.away_team;
+          const compactAwayTeamName = getCompactAwayTeamName(secondTeam.name);
           const lockProgress = getLockProgress(match.kickoff_time);
           const multiplierProgress = getMultiplierProgress(match.points_multiplier);
           const flagSize = responsive.isSmall ? 22 : responsive.isLarge ? 28 : 24;
@@ -170,25 +180,27 @@ export function PendingPredictions({ isLoading = false }: { isLoading?: boolean 
 
               <View style={styles.matchupRow}>
                 <View style={[styles.teamBlock, styles.teamBlockHome]}>
-                  <TeamFlag team={firstTeam} size={flagSize} fixed />
-                  <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail">
-                    {firstTeam.name}
-                  </Text>
+                  <View style={styles.teamCluster}>
+                    <TeamFlag team={firstTeam} size={flagSize} fixed />
+                    <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail">
+                      {firstTeam.name}
+                    </Text>
+                  </View>
                 </View>
 
-                <View style={styles.vsWrap}>
-                  <Text style={styles.vs}>VS</Text>
-                </View>
+                <View style={styles.matchupCenterSpacer} />
 
                 <View style={[styles.teamBlock, styles.teamBlockAway]}>
-                  <TeamFlag team={secondTeam} size={flagSize} fixed />
-                  <Text
-                    style={[styles.teamName, styles.teamNameAway]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {secondTeam.name}
-                  </Text>
+                  <View style={[styles.teamCluster, styles.teamClusterAway]}>
+                    <TeamFlag team={secondTeam} size={flagSize} fixed />
+                    <Text
+                      style={[styles.teamName, styles.teamNameAway]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {compactAwayTeamName}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
@@ -200,6 +212,11 @@ export function PendingPredictions({ isLoading = false }: { isLoading?: boolean 
                     progress={lockProgress}
                     color={Colors.accent.lime}
                   />
+                  <View style={styles.vsBetweenBars}>
+                    <View style={styles.vsWrap}>
+                      <Text style={styles.vs}>VS</Text>
+                    </View>
+                  </View>
                   <BarRow
                     label="Boost"
                     value={`${match.points_multiplier}x`}
@@ -294,7 +311,21 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   teamBlockAway: {
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
+  },
+  teamCluster: {
+    maxWidth: '100%',
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  matchupCenterSpacer: {
+    width: 32,
+  },
+  teamClusterAway: {
+    flex: 1,
+    justifyContent: 'flex-start',
   },
   teamName: {
     color: Colors.text.primary,
@@ -302,12 +333,11 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weight.bold,
     lineHeight: 14,
     minWidth: 0,
-    flex: 1,
     flexShrink: 1,
     overflow: 'hidden',
   },
   teamNameAway: {
-    textAlign: 'right',
+    textAlign: 'left',
   },
   vs: {
     width: 24,
@@ -332,10 +362,15 @@ const styles = StyleSheet.create({
   },
   barGrid: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'stretch',
+    gap: 6,
+    alignItems: 'center',
     flex: 1,
     minWidth: 0,
+  },
+  vsBetweenBars: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   barBlock: {
     flexDirection: 'column',

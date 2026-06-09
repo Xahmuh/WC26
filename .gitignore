@@ -5,6 +5,9 @@ node_modules/
 .expo/
 dist/
 web-build/
+tmp-*/
+.gradle-cache/
+.android-user-home/
 expo-env.d.ts
 
 # native

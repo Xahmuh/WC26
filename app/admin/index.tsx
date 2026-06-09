@@ -194,6 +194,136 @@ const MULTIPLIER_OPTIONS = [1, 2, 3, 4, 5, 6];
 
 type AdminTab = 'matches' | 'add_match' | 'questions' | 'cards' | 'hero_banner' | 'scoring';
 
+type AdminDialogVariant = 'success' | 'error' | 'warning' | 'info' | 'danger';
+
+interface AdminDialogAction {
+  label: string;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'lime';
+  onPress?: () => void;
+}
+
+interface AdminDialogState {
+  title: string;
+  message?: string;
+  variant?: AdminDialogVariant;
+  actions?: AdminDialogAction[];
+}
+
+type ShowAdminDialog = (dialog: AdminDialogState) => void;
+
+const ADMIN_TABS: Array<{ key: AdminTab; label: string; width: number }> = [
+  { key: 'matches', label: 'Matches', width: 104 },
+  { key: 'add_match', label: 'Add Match', width: 116 },
+  { key: 'questions', label: 'Questions', width: 116 },
+  { key: 'cards', label: 'Cards', width: 88 },
+  { key: 'hero_banner', label: 'Hero', width: 88 },
+  { key: 'scoring', label: 'Scoring', width: 104 },
+];
+
+const ADMIN_DIALOG_META: Record<AdminDialogVariant, { icon: any; color: string; bg: string; border: string }> = {
+  success: {
+    icon: 'checkCircle',
+    color: Theme.colors.success,
+    bg: Theme.colors.successDim,
+    border: 'rgba(74,222,128,0.30)',
+  },
+  error: {
+    icon: 'closeCircle',
+    color: Theme.colors.live,
+    bg: Theme.colors.liveDim,
+    border: 'rgba(224,48,48,0.30)',
+  },
+  warning: {
+    icon: 'warning',
+    color: Theme.colors.warning,
+    bg: Theme.colors.warningDim,
+    border: 'rgba(250,204,21,0.30)',
+  },
+  info: {
+    icon: 'info',
+    color: Theme.colors.accent,
+    bg: Theme.colors.accentDim,
+    border: Theme.colors.accentBorder,
+  },
+  danger: {
+    icon: 'trash',
+    color: Theme.colors.live,
+    bg: Theme.colors.liveDim,
+    border: 'rgba(224,48,48,0.30)',
+  },
+};
+
+function AdminDialogModal({
+  dialog,
+  onClose,
+}: {
+  dialog: AdminDialogState | null;
+  onClose: () => void;
+}): React.JSX.Element | null {
+  if (!dialog) return null;
+
+  const variant = dialog.variant ?? 'info';
+  const meta = ADMIN_DIALOG_META[variant];
+  const actions = dialog.actions?.length ? dialog.actions : [{ label: 'OK', variant: 'primary' as const }];
+  const stackedActions = actions.length > 2;
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable
+        onPress={onClose}
+        style={styles.adminDialogOverlay}
+      >
+        <Pressable
+          onPress={(event) => event.stopPropagation()}
+          style={styles.adminDialogCard}
+        >
+          <View style={styles.adminDialogHeader}>
+            <View
+              style={[
+                styles.adminDialogIcon,
+                { backgroundColor: meta.bg, borderColor: meta.border },
+              ]}
+            >
+              <Icon name={meta.icon} size={22} color={meta.color} fixed />
+            </View>
+            <View style={styles.adminDialogTitleWrap}>
+              <Text style={styles.adminDialogTitle}>{dialog.title}</Text>
+              {dialog.message ? (
+                <Text style={styles.adminDialogMessage}>{dialog.message}</Text>
+              ) : null}
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.adminDialogActions,
+              stackedActions ? styles.adminDialogActionsStacked : styles.adminDialogActionsRow,
+            ]}
+          >
+            {actions.map((action) => (
+              <View key={action.label} style={stackedActions ? undefined : styles.adminDialogActionSlot}>
+                <Button
+                  label={action.label}
+                  variant={action.variant ?? 'primary'}
+                  onPress={() => {
+                    onClose();
+                    action.onPress?.();
+                  }}
+                />
+              </View>
+            ))}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ScoringSettingsSection(): React.JSX.Element {
   const rulesQuery = useScoringRules();
@@ -348,7 +478,7 @@ function ScoringSettingsSection(): React.JSX.Element {
   );
 }
 
-function ScoringSettingsSectionWithEdit(): React.JSX.Element {
+function ScoringSettingsSectionWithEdit({ onDialog }: { onDialog: ShowAdminDialog }): React.JSX.Element {
   const rulesQuery = useScoringRules();
   const updateRulesMutation = useUpdateScoringRules();
   const stagesQuery = useStageMultipliers();
@@ -389,13 +519,27 @@ function ScoringSettingsSectionWithEdit(): React.JSX.Element {
     };
 
     if (Object.values(parsed).some((value) => Number.isNaN(value) || value < 0)) {
-      Alert.alert('Invalid points', 'Please enter non-negative whole numbers for every field.');
+      onDialog({
+        title: 'Invalid points',
+        message: 'Please enter non-negative whole numbers for every field.',
+        variant: 'warning',
+      });
       return;
     }
 
     updateRulesMutation.mutate(parsed, {
-      onError: (err: any) => Alert.alert('Error', err.message || 'Failed to update scoring rules.'),
-      onSuccess: () => Alert.alert('Saved', 'Scoring rules updated. They apply to matches scored from now on.'),
+      onError: (err: any) =>
+        onDialog({
+          title: 'Error',
+          message: err.message || 'Failed to update scoring rules.',
+          variant: 'error',
+        }),
+      onSuccess: () =>
+        onDialog({
+          title: 'Saved',
+          message: 'Scoring rules updated. They apply to matches scored from now on.',
+          variant: 'success',
+        }),
     });
   };
 
@@ -420,7 +564,11 @@ function ScoringSettingsSectionWithEdit(): React.JSX.Element {
 
     if (changed.length === 0) {
       setIsEditingStages(false);
-      Alert.alert('No changes', 'Stage multiplier presets are already up to date.');
+      onDialog({
+        title: 'No changes',
+        message: 'Stage multiplier presets are already up to date.',
+        variant: 'info',
+      });
       return;
     }
 
@@ -432,13 +580,19 @@ function ScoringSettingsSectionWithEdit(): React.JSX.Element {
       );
       const affected = results.reduce((sum, value) => sum + (value ?? 0), 0);
       setIsEditingStages(false);
-      Alert.alert(
-        'Saved',
-        `Updated ${changed.length} stage preset${changed.length === 1 ? '' : 's'}` +
-          (affected ? ` and applied to ${affected} match${affected === 1 ? '' : 'es'}.` : '.')
-      );
+      onDialog({
+        title: 'Saved',
+        message:
+          `Updated ${changed.length} stage preset${changed.length === 1 ? '' : 's'}` +
+          (affected ? ` and applied to ${affected} match${affected === 1 ? '' : 'es'}.` : '.'),
+        variant: 'success',
+      });
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save stage multiplier presets.');
+      onDialog({
+        title: 'Error',
+        message: err.message || 'Failed to save stage multiplier presets.',
+        variant: 'error',
+      });
     }
   };
 
@@ -636,7 +790,7 @@ function StageSelector({
   );
 }
 
-function StageCardsSection(): React.JSX.Element {
+function StageCardsSection({ onDialog }: { onDialog: ShowAdminDialog }): React.JSX.Element {
   const cardsQuery = useCardDefinitions();
   const createMutation = useCreateCardDefinition();
   const updateMutation = useUpdateCardDefinition();
@@ -735,7 +889,11 @@ function StageCardsSection(): React.JSX.Element {
           setForm((prev) => ({ ...prev, imagePath: path }));
         },
         onError: (err: any) => {
-          Alert.alert('Upload Failed', err.message || 'Could not upload the card image.');
+          onDialog({
+            title: 'Upload Failed',
+            message: err.message || 'Could not upload the card image.',
+            variant: 'error',
+          });
         },
       }
     );
@@ -747,31 +905,31 @@ function StageCardsSection(): React.JSX.Element {
     const multiplierBonus = parseInt(form.multiplierBonus, 10);
 
     if (!form.name.trim()) {
-      Alert.alert('Invalid card', 'Card name is required.');
+      onDialog({ title: 'Invalid card', message: 'Card name is required.', variant: 'warning' });
       return null;
     }
     if (!Number.isFinite(threshold) || threshold <= 0 || threshold > 100) {
-      Alert.alert('Invalid threshold', 'Threshold percent must be between 1 and 100.');
+      onDialog({ title: 'Invalid threshold', message: 'Threshold percent must be between 1 and 100.', variant: 'warning' });
       return null;
     }
     if (Number.isNaN(maxUses) || maxUses < 1 || maxUses > 20) {
-      Alert.alert('Invalid uses', 'Max uses must be between 1 and 20.');
+      onDialog({ title: 'Invalid uses', message: 'Max uses must be between 1 and 20.', variant: 'warning' });
       return null;
     }
     if (Number.isNaN(multiplierBonus) || multiplierBonus < 1 || multiplierBonus > 10) {
-      Alert.alert('Invalid multiplier', 'Multiplier bonus must be between 1 and 10.');
+      onDialog({ title: 'Invalid multiplier', message: 'Multiplier bonus must be between 1 and 10.', variant: 'warning' });
       return null;
     }
     if (getStageIndex(form.usableFromStage) < getStageIndex(form.awardStage)) {
-      Alert.alert('Invalid stage window', 'Usable from stage cannot be before the earning stage.');
+      onDialog({ title: 'Invalid stage window', message: 'Usable from stage cannot be before the earning stage.', variant: 'warning' });
       return null;
     }
     if (getStageIndex(form.usableUntilStage) < getStageIndex(form.usableFromStage)) {
-      Alert.alert('Invalid stage window', 'Usable until stage must be after usable from stage.');
+      onDialog({ title: 'Invalid stage window', message: 'Usable until stage must be after usable from stage.', variant: 'warning' });
       return null;
     }
     if (uploadMutation.isPending) {
-      Alert.alert('Image upload', 'Please wait until the card image upload finishes.');
+      onDialog({ title: 'Image upload', message: 'Please wait until the card image upload finishes.', variant: 'info' });
       return null;
     }
 
@@ -799,9 +957,10 @@ function StageCardsSection(): React.JSX.Element {
         {
           onSuccess: () => {
             resetForm();
-            Alert.alert('Saved', 'Card definition updated.');
+            onDialog({ title: 'Saved', message: 'Card definition updated.', variant: 'success' });
           },
-          onError: (err: any) => Alert.alert('Error', err.message || 'Failed to update card.'),
+          onError: (err: any) =>
+            onDialog({ title: 'Error', message: err.message || 'Failed to update card.', variant: 'error' }),
         }
       );
       return;
@@ -810,40 +969,45 @@ function StageCardsSection(): React.JSX.Element {
     createMutation.mutate(input, {
       onSuccess: () => {
         resetForm();
-        Alert.alert('Created', 'Card definition created.');
+        onDialog({ title: 'Created', message: 'Card definition created.', variant: 'success' });
       },
-      onError: (err: any) => Alert.alert('Error', err.message || 'Failed to create card.'),
+      onError: (err: any) =>
+        onDialog({ title: 'Error', message: err.message || 'Failed to create card.', variant: 'error' }),
     });
   };
 
   const handleDisableCard = (card: CardDefinition) => {
-    Alert.alert(
-      'Disable card?',
-      `${card.name} will stop being awarded. Already-earned cards stay in user inventories.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
+    onDialog({
+      title: 'Disable card?',
+      message: `${card.name} will stop being awarded. Already-earned cards stay in user inventories.`,
+      variant: 'danger',
+      actions: [
+        { label: 'Cancel', variant: 'secondary' },
         {
-          text: 'Disable',
-          style: 'destructive',
+          label: 'Disable',
+          variant: 'danger',
           onPress: () => {
             disableMutation.mutate(card.id, {
-              onError: (err: any) => Alert.alert('Error', err.message || 'Failed to disable card.'),
+              onError: (err: any) =>
+                onDialog({ title: 'Error', message: err.message || 'Failed to disable card.', variant: 'error' }),
             });
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleRecalculateStage = (stage: MatchStage) => {
     recalculateMutation.mutate(stage, {
       onSuccess: (count) => {
-        Alert.alert(
-          'Recalculated',
-          `Awarded ${count} card${count === 1 ? '' : 's'} for ${STAGE_LABELS[stage]}.`
-        );
+        onDialog({
+          title: 'Recalculated',
+          message: `Awarded ${count} card${count === 1 ? '' : 's'} for ${STAGE_LABELS[stage]}.`,
+          variant: 'success',
+        });
       },
-      onError: (err: any) => Alert.alert('Error', err.message || 'Failed to recalculate cards.'),
+      onError: (err: any) =>
+        onDialog({ title: 'Error', message: err.message || 'Failed to recalculate cards.', variant: 'error' }),
     });
   };
 
@@ -1173,6 +1337,114 @@ function SingleTeamPickerModal({
   );
 }
 
+const styles = StyleSheet.create({
+  adminDialogOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    paddingHorizontal: 20,
+  },
+  adminDialogCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+    padding: 18,
+    gap: 18,
+    ...Platform.select({
+      web: { boxShadow: '0 18px 42px rgba(0,0,0,0.55)' },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.42,
+        shadowRadius: 22,
+      },
+      android: { elevation: 16 },
+    }),
+  },
+  adminDialogHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  adminDialogIcon: {
+    width: 48,
+    height: 48,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  adminDialogTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 7,
+  },
+  adminDialogTitle: {
+    color: Theme.colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  adminDialogMessage: {
+    color: Theme.colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '500',
+  },
+  adminDialogActions: {
+    width: '100%',
+    gap: 10,
+  },
+  adminDialogActionsRow: {
+    flexDirection: 'row',
+  },
+  adminDialogActionsStacked: {
+    flexDirection: 'column',
+  },
+  adminDialogActionSlot: {
+    flex: 1,
+    minWidth: 0,
+  },
+  adminTabsContent: {
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  adminTabChip: {
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    flexShrink: 0,
+    overflow: 'hidden',
+  },
+  adminTabChipActive: {
+    borderColor: Theme.colors.accent,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  adminTabChipInactive: {
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  adminTabLabel: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  adminTabLabelActive: {
+    color: Theme.colors.accent,
+  },
+  adminTabLabelInactive: {
+    color: Theme.colors.textSecondary,
+  },
+});
+
 const singleTeamPickerStyles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -1262,6 +1534,10 @@ export default function AdminDashboard(): React.JSX.Element {
   const [editDecisionMethod, setEditDecisionMethod] = useState<MatchDecisionMethod>('FT');
 
   const [activeTab, setActiveTab] = useState<AdminTab>('matches');
+  const [adminDialog, setAdminDialog] = useState<AdminDialogState | null>(null);
+  const showAdminDialog = useCallback<ShowAdminDialog>((dialog) => {
+    setAdminDialog(dialog);
+  }, []);
 
   // Delete match confirmation. Uses an in-app Modal instead of Alert.alert
   // because Alert button callbacks do not fire reliably on react-native-web.
@@ -1306,23 +1582,23 @@ export default function AdminDashboard(): React.JSX.Element {
 
   const handleCreateQuestion = () => {
     if (!qText.trim()) {
-      Alert.alert('Error', 'Question text is required.');
+      showAdminDialog({ title: 'Error', message: 'Question text is required.', variant: 'error' });
       return;
     }
 
     const pointsVal = parseInt(qPoints, 10);
     if (isNaN(pointsVal) || pointsVal <= 0) {
-      Alert.alert('Error', 'Points must be a positive number.');
+      showAdminDialog({ title: 'Error', message: 'Points must be a positive number.', variant: 'error' });
       return;
     }
 
     if (!qLockAt) {
-      Alert.alert('Error', 'Please specify the deadline date and time.');
+      showAdminDialog({ title: 'Error', message: 'Please specify the deadline date and time.', variant: 'error' });
       return;
     }
 
     if (qLockAt.getTime() <= Date.now()) {
-      Alert.alert('Error', 'Deadline must be in the future.');
+      showAdminDialog({ title: 'Error', message: 'Deadline must be in the future.', variant: 'error' });
       return;
     }
 
@@ -1340,65 +1616,81 @@ export default function AdminDashboard(): React.JSX.Element {
           setQLockAt(null);
           setQCardImagePath(null);
           setQCardImagePreviewUri(null);
-          Alert.alert('Success', 'Prediction question created!');
+          showAdminDialog({ title: 'Success', message: 'Prediction question created!', variant: 'success' });
         },
         onError: (err: any) => {
-          Alert.alert('Error', err.message || 'Failed to create question.');
+          showAdminDialog({ title: 'Error', message: err.message || 'Failed to create question.', variant: 'error' });
         },
       }
     );
   };
 
   const handleResolveQuestion = (questionId: string, option: string) => {
-    Alert.alert(
-      'Resolve Question',
-      `Are you sure "${option}" is the correct answer? This will award points and refresh the leaderboard.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showAdminDialog({
+      title: 'Resolve Question',
+      message: `Are you sure "${option}" is the correct answer? This will award points and refresh the leaderboard.`,
+      variant: 'warning',
+      actions: [
+        { label: 'Cancel', variant: 'secondary' },
         {
-          text: 'Confirm',
+          label: 'Confirm',
+          variant: 'primary',
           onPress: () => {
             resolveQuestionMutation.mutate(
               { questionId, correctAnswer: option },
               {
                 onSuccess: () => {
-                  Alert.alert('Success', 'Question resolved and points awarded!');
+                  showAdminDialog({
+                    title: 'Success',
+                    message: 'Question resolved and points awarded!',
+                    variant: 'success',
+                  });
                 },
                 onError: (err: any) => {
-                  Alert.alert('Error', err.message || 'Failed to resolve question.');
+                  showAdminDialog({
+                    title: 'Error',
+                    message: err.message || 'Failed to resolve question.',
+                    variant: 'error',
+                  });
                 },
               }
             );
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleToggleStatus = (questionId: string, currentStatus: 'open' | 'closed') => {
     const nextStatus = currentStatus === 'open' ? 'closed' : 'open';
     const actionLabel = nextStatus === 'closed' ? 'Lock Answers' : 'Unlock Answers';
 
-    Alert.alert(
-      `${actionLabel}?`,
-      `Are you sure you want to ${nextStatus === 'closed' ? 'lock' : 'unlock'} predictions for this question?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showAdminDialog({
+      title: `${actionLabel}?`,
+      message: `Are you sure you want to ${nextStatus === 'closed' ? 'lock' : 'unlock'} predictions for this question?`,
+      variant: 'warning',
+      actions: [
+        { label: 'Cancel', variant: 'secondary' },
         {
-          text: 'Confirm',
+          label: 'Confirm',
+          variant: 'primary',
           onPress: () => {
             updateQuestionStatusMutation.mutate(
               { questionId, status: nextStatus },
               {
                 onError: (err: any) => {
-                  Alert.alert('Error', err.message || 'Failed to update status.');
+                  showAdminDialog({
+                    title: 'Error',
+                    message: err.message || 'Failed to update status.',
+                    variant: 'error',
+                  });
                 },
               }
             );
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handlePickQuestionCardImage = async (mode: 'create' | 'edit') => {
@@ -1438,7 +1730,11 @@ export default function AdminDashboard(): React.JSX.Element {
         }
       },
       onError: (err: any) => {
-        Alert.alert('Upload Failed', err.message || 'Could not upload the card image.');
+        showAdminDialog({
+          title: 'Upload Failed',
+          message: err.message || 'Could not upload the card image.',
+          variant: 'error',
+        });
         if (mode === 'create') {
           setQCardImagePreviewUri(null);
         } else {
@@ -1459,16 +1755,16 @@ export default function AdminDashboard(): React.JSX.Element {
 
   const handleSaveEditQuestion = (questionId: string) => {
     if (!editQText.trim()) {
-      Alert.alert('Error', 'Question text is required.');
+      showAdminDialog({ title: 'Error', message: 'Question text is required.', variant: 'error' });
       return;
     }
     const pointsVal = parseInt(editQPoints, 10);
     if (isNaN(pointsVal) || pointsVal <= 0) {
-      Alert.alert('Error', 'Points must be a positive number.');
+      showAdminDialog({ title: 'Error', message: 'Points must be a positive number.', variant: 'error' });
       return;
     }
     if (!editQLockAt) {
-      Alert.alert('Error', 'Please specify the deadline date and time.');
+      showAdminDialog({ title: 'Error', message: 'Please specify the deadline date and time.', variant: 'error' });
       return;
     }
 
@@ -1483,10 +1779,10 @@ export default function AdminDashboard(): React.JSX.Element {
       {
         onSuccess: () => {
           setEditingQuestionId(null);
-          Alert.alert('Success', 'Question updated!');
+          showAdminDialog({ title: 'Success', message: 'Question updated!', variant: 'success' });
         },
         onError: (err: any) => {
-          Alert.alert('Error', err.message || 'Failed to update question.');
+          showAdminDialog({ title: 'Error', message: err.message || 'Failed to update question.', variant: 'error' });
         },
       }
     );
@@ -1524,16 +1820,16 @@ export default function AdminDashboard(): React.JSX.Element {
 
   const handleCreateMatch = () => {
     if (!homeTeam || !awayTeam) {
-      Alert.alert('Error', 'Please select both home and away teams.');
+      showAdminDialog({ title: 'Error', message: 'Please select both home and away teams.', variant: 'error' });
       return;
     }
     if (homeTeam.id === awayTeam.id) {
-      Alert.alert('Error', 'Home and away teams cannot be the same.');
+      showAdminDialog({ title: 'Error', message: 'Home and away teams cannot be the same.', variant: 'error' });
       return;
     }
 
     if (!kickoffDate) {
-      Alert.alert('Error', 'Please select the kickoff date and time.');
+      showAdminDialog({ title: 'Error', message: 'Please select the kickoff date and time.', variant: 'error' });
       return;
     }
 
@@ -1554,11 +1850,11 @@ export default function AdminDashboard(): React.JSX.Element {
           setGroupName('');
           setVenue('');
           setKickoffDate(null);
-          Alert.alert('Success', 'Custom match created!');
+          showAdminDialog({ title: 'Success', message: 'Custom match created!', variant: 'success' });
           setActiveTab('matches');
         },
         onError: (err: any) => {
-          Alert.alert('Error', err.message || 'Failed to create match.');
+          showAdminDialog({ title: 'Error', message: err.message || 'Failed to create match.', variant: 'error' });
         },
       }
     );
@@ -1571,7 +1867,7 @@ export default function AdminDashboard(): React.JSX.Element {
     if (editHomeScore.trim() !== '') {
       homeScoreNum = parseInt(editHomeScore, 10);
       if (isNaN(homeScoreNum) || homeScoreNum < 0) {
-        Alert.alert('Error', 'Home score must be a positive number.');
+        showAdminDialog({ title: 'Error', message: 'Home score must be a positive number.', variant: 'error' });
         return;
       }
     }
@@ -1579,21 +1875,22 @@ export default function AdminDashboard(): React.JSX.Element {
     if (editAwayScore.trim() !== '') {
       awayScoreNum = parseInt(editAwayScore, 10);
       if (isNaN(awayScoreNum) || awayScoreNum < 0) {
-        Alert.alert('Error', 'Away score must be a positive number.');
+        showAdminDialog({ title: 'Error', message: 'Away score must be a positive number.', variant: 'error' });
         return;
       }
     }
 
     if (editStatus === 'FINISHED' && (homeScoreNum === null || awayScoreNum === null)) {
-      Alert.alert('Error', 'Scores are required to finish the match.');
+      showAdminDialog({ title: 'Error', message: 'Scores are required to finish the match.', variant: 'error' });
       return;
     }
 
     if (editStatus === 'FINISHED' && match.is_knockout && !editWinnerTeamId) {
-      Alert.alert(
-        'Error',
-        'Knockout matches cannot end in a draw. Please select the team that qualifies.'
-      );
+      showAdminDialog({
+        title: 'Error',
+        message: 'Knockout matches cannot end in a draw. Please select the team that qualifies.',
+        variant: 'error',
+      });
       return;
     }
 
@@ -1609,10 +1906,14 @@ export default function AdminDashboard(): React.JSX.Element {
       {
         onSuccess: () => {
           setEditingMatchId(null);
-          Alert.alert('Success', 'Match updated and points calculated successfully!');
+          showAdminDialog({
+            title: 'Success',
+            message: 'Match updated and points calculated successfully!',
+            variant: 'success',
+          });
         },
         onError: (err: any) => {
-          Alert.alert('Error', err.message || 'Failed to update match.');
+          showAdminDialog({ title: 'Error', message: err.message || 'Failed to update match.', variant: 'error' });
         },
       }
     );
@@ -1645,68 +1946,39 @@ export default function AdminDashboard(): React.JSX.Element {
       </View>
 
       {/* Tabs */}
-      <View className="flex-row border-b border-bgBorder">
-        <Pressable
-          onPress={() => setActiveTab('matches')}
-          className={`flex-1 py-3 items-center border-b-2 ${
-            activeTab === 'matches' ? 'border-accent' : 'border-transparent'
-          }`}
-        >
-          <Text className={`font-bold ${activeTab === 'matches' ? 'text-accent' : 'text-textSecondary'}`}>
-            Matches
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab('add_match')}
-          className={`flex-1 py-3 items-center border-b-2 ${
-            activeTab === 'add_match' ? 'border-accent' : 'border-transparent'
-          }`}
-        >
-          <Text className={`font-bold ${activeTab === 'add_match' ? 'text-accent' : 'text-textSecondary'}`}>
-            Add Match
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab('questions')}
-          className={`flex-1 py-3 items-center border-b-2 ${
-            activeTab === 'questions' ? 'border-accent' : 'border-transparent'
-          }`}
-        >
-          <Text className={`font-bold ${activeTab === 'questions' ? 'text-accent' : 'text-textSecondary'}`}>
-            Questions
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab('cards')}
-          className={`flex-1 py-3 items-center border-b-2 ${
-            activeTab === 'cards' ? 'border-accent' : 'border-transparent'
-          }`}
-        >
-          <Text className={`font-bold ${activeTab === 'cards' ? 'text-accent' : 'text-textSecondary'}`}>
-            Cards
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab('hero_banner')}
-          className={`flex-1 py-3 items-center border-b-2 ${
-            activeTab === 'hero_banner' ? 'border-accent' : 'border-transparent'
-          }`}
-        >
-          <Text className={`font-bold ${activeTab === 'hero_banner' ? 'text-accent' : 'text-textSecondary'}`}>
-            Hero
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab('scoring')}
-          className={`flex-1 py-3 items-center border-b-2 ${
-            activeTab === 'scoring' ? 'border-accent' : 'border-transparent'
-          }`}
-        >
-          <Text className={`font-bold ${activeTab === 'scoring' ? 'text-accent' : 'text-textSecondary'}`}>
-            Scoring
-          </Text>
-        </Pressable>
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="border-b border-bgBorder"
+        contentContainerStyle={styles.adminTabsContent}
+      >
+        {ADMIN_TABS.map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
+              style={[
+                styles.adminTabChip,
+                { width: tab.width },
+                isActive ? styles.adminTabChipActive : styles.adminTabChipInactive,
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.adminTabLabel,
+                  isActive ? styles.adminTabLabelActive : styles.adminTabLabelInactive,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       <ScrollView ref={scrollRef} contentContainerClassName="p-4 gap-6">
         {/* Matches Multiplier Tab */}
@@ -2594,7 +2866,7 @@ export default function AdminDashboard(): React.JSX.Element {
         )}
 
         {/* Cards Tab */}
-        {activeTab === 'cards' && <StageCardsSection />}
+        {activeTab === 'cards' && <StageCardsSection onDialog={showAdminDialog} />}
 
         {/* Hero Banner Tab */}
         {activeTab === 'hero_banner' && (
@@ -2610,7 +2882,7 @@ export default function AdminDashboard(): React.JSX.Element {
         )}
 
         {/* Scoring Tab */}
-        {activeTab === 'scoring' && <ScoringSettingsSectionWithEdit />}
+        {activeTab === 'scoring' && <ScoringSettingsSectionWithEdit onDialog={showAdminDialog} />}
       </ScrollView>
 
       {/* Team Picker Modals */}
@@ -2738,6 +3010,11 @@ export default function AdminDashboard(): React.JSX.Element {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <AdminDialogModal
+        dialog={adminDialog}
+        onClose={() => setAdminDialog(null)}
+      />
     </SafeAreaView>
   );
 }

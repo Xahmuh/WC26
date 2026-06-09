@@ -512,6 +512,7 @@ export default function ProfileScreen(): React.JSX.Element {
                 icon="star"
                 iconColor="#FDE047"
                 accentColor="#CA8A04"
+                onPress={() => router.push('/user-performance' as never)}
               />
             </View>
             <View style={styles.kpiCell}>
@@ -635,19 +636,18 @@ interface StatTileProps {
 function StatTile({ label, value, icon, onPress }: StatTileProps): React.JSX.Element {
   const content = (
     <>
-      <View className="flex-row items-center justify-between">
+      <View style={styles.statTileHeader}>
         <Text
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.76}
-          className="text-[11px] font-bold text-[#CCCCCC] uppercase tracking-widest mt-1"
           style={styles.statTileLabel}
         >
           {label}
         </Text>
         {icon && (
           <View style={styles.statTileIcon}>
-            <Icon name={icon} size={14} color="#FFFFFF" />
+            <Icon name={icon} size={18} color={Theme.colors.accent} />
           </View>
         )}
       </View>
@@ -655,7 +655,6 @@ function StatTile({ label, value, icon, onPress }: StatTileProps): React.JSX.Ele
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={0.55}
-        className="text-[32px] font-black text-white tracking-tighter mt-3"
         style={styles.statTileValue}
       >
         {value}
@@ -663,22 +662,23 @@ function StatTile({ label, value, icon, onPress }: StatTileProps): React.JSX.Ele
     </>
   );
 
-  if (onPress) {
-    return (
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        style={({ pressed }) => [styles.statTile, pressed && styles.kpiCellPressed]}
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      android_ripple={onPress ? { color: 'rgba(255,255,255,0.045)' } : undefined}
+      style={({ pressed }) => [styles.statTile, pressed && styles.statTilePressed]}
+    >
+      <LinearGradient
+        colors={['#242424', '#202020']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.statTileSurface}
       >
         {content}
-      </Pressable>
-    );
-  }
-
-  return (
-    <View style={styles.statTile}>
-      {content}
-    </View>
+      </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -712,19 +712,17 @@ const styles = StyleSheet.create({
     width: '48%',
     minWidth: 0,
   },
-  kpiCellPressed: {
+  statTilePressed: {
     opacity: 0.82,
   },
   statTile: {
     width: '100%',
-    height: 112,
+    height: 116,
     overflow: 'hidden',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#3A3A3A',
-    backgroundColor: '#222222',
-    padding: 16,
-    justifyContent: 'space-between',
+    borderColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: '#242424',
     ...Platform.select({
       web: { boxShadow: '0 8px 18px rgba(0,0,0,0.35)' },
       ios: {
@@ -736,24 +734,45 @@ const styles = StyleSheet.create({
       android: { elevation: 5 },
     }),
   },
+  statTileSurface: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    justifyContent: 'space-between',
+  },
+  statTileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   statTileLabel: {
     flex: 1,
     minWidth: 0,
-    paddingRight: 8,
+    color: Theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 13,
+    textTransform: 'uppercase',
   },
   statTileIcon: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#1A1A1A',
+    borderColor: 'rgba(215,217,94,0.32)',
+    backgroundColor: Theme.colors.accentDim,
   },
   statTileValue: {
     maxWidth: '100%',
+    marginTop: 12,
+    color: Theme.colors.textPrimary,
+    fontSize: 36,
+    fontWeight: '900',
+    lineHeight: 42,
   },
   signOutBlock: {
     marginTop: 4,
