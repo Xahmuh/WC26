@@ -8,6 +8,15 @@ web-build/
 tmp-*/
 .gradle-cache/
 .android-user-home/
+android/.gradle/
+android/.kotlin/
+android/.cxx/
+android/build/
+android/app/build/
+android/app/src/main/java/inline/
+android/local.properties
+eas-build-*.log
+eas-build-*.txt
 expo-env.d.ts
 
 # native
