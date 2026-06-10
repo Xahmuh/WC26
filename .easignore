@@ -1,0 +1,64 @@
+# Dependencies and package-manager output
+node_modules/
+npm-debug.*
+yarn-error.*
+
+# Local build output and caches
+.expo/
+dist/
+web-build/
+builds/
+tmp-*/
+.gradle-cache/
+.android-user-home/
+android/.gradle/
+android/.kotlin/
+android/.cxx/
+android/build/
+android/app/build/
+android/app/src/main/java/inline/
+android/local.properties
+eas-build-*.log
+eas-build-*.txt
+
+# Local agent/editor/runtime files
+.git/
+.codex/
+.codex-remote-attachments/
+.claude/
+.agents/
+.vscode/
+.vercel/
+.mcp.json
+
+# Secrets and local env files
+.env
+.env.local
+.env*.local
+
+# Docs/specs not needed by cloud build
+*.md
+app kit/
+design system/
+feature spec/
+ui kit/
+
+# Supabase project files are deployed separately, not needed in the mobile build archive
+/supabase/
+
+# Large unused source/preview assets. Keep referenced runtime assets in place.
+assets/splashscreen-compatible.png
+assets/splashscreen.png
+assets/splashscreen-black-lime.png
+assets/Argentina.png
+assets/Brazil.png
+assets/England.png
+assets/RB.png
+assets/GM.png
+assets/UF.png
+assets/Joker.png
+assets/banner.png
+assets/egypt90.png
+assets/paggiopng.png
+assets/elitecard.png
+assets/icona-old-identity.png
