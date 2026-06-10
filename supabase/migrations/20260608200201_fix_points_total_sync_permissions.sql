@@ -6,7 +6,6 @@
 -- authenticated users no longer have permission to update total_points.
 -- ============================================================================
 begin;
-
 create or replace function public.sync_user_total_points()
 returns trigger
 language plpgsql
@@ -27,14 +26,11 @@ begin
   return null;
 end;
 $$;
-
 revoke all on function public.sync_user_total_points() from public;
-
 drop trigger if exists points_sync_user_total on public.points;
 create trigger points_sync_user_total
   after insert or update or delete on public.points
   for each row execute function public.sync_user_total_points();
-
 create or replace function public.admin_delete_match(p_match_id uuid)
 returns void
 language plpgsql
@@ -54,8 +50,6 @@ begin
   end if;
 end;
 $$;
-
 revoke all on function public.admin_delete_match(uuid) from public;
 grant execute on function public.admin_delete_match(uuid) to authenticated;
-
 commit;

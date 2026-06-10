@@ -6,14 +6,12 @@
 -- Updating points_multiplier on those rows re-checks the constraint and fails.
 -- ============================================================================
 begin;
-
 -- Keep the stored knockout flag aligned for cases that can be corrected
 -- without violating the outcome constraint.
 update public.matches
 set is_knockout = false
 where stage = 'GROUP'
   and is_knockout;
-
 -- Backfill the safe cases where the final outcome is obvious from a non-tied
 -- finished score. Tied knockout rows still need an explicit admin outcome.
 update public.matches
@@ -34,7 +32,6 @@ where (is_knockout or stage <> 'GROUP')
   and home_score is not null
   and away_score is not null
   and home_score <> away_score;
-
 update public.matches
 set is_knockout = true
 where stage <> 'GROUP'
@@ -43,7 +40,6 @@ where stage <> 'GROUP'
     status <> 'FINISHED'
     or (winner_team_id is not null and decision_method is not null)
   );
-
 create or replace function public.admin_set_stage_multiplier(
   p_stage match_stage,
   p_multiplier integer
@@ -85,8 +81,6 @@ begin
   return affected;
 end;
 $$;
-
 revoke all on function public.admin_set_stage_multiplier(match_stage, integer) from public;
 grant execute on function public.admin_set_stage_multiplier(match_stage, integer) to authenticated;
-
 commit;

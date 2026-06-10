@@ -2,7 +2,6 @@
 insert into public.stage_multipliers (stage, multiplier)
 values ('ROUND_OF_32', 1)
 on conflict (stage) do nothing;
-
 update public.matches
 set is_knockout = true
 where stage <> 'GROUP'

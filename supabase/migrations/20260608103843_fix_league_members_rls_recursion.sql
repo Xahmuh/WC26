@@ -11,11 +11,9 @@
 -- ============================================================================
 
 begin;
-
 create schema if not exists private;
 revoke all on schema private from public;
 grant usage on schema private to authenticated;
-
 create or replace function private.current_user_is_league_member(p_league_id uuid)
 returns boolean
 language sql
@@ -31,16 +29,13 @@ as $$
         and lm.user_id = (select auth.uid())
     );
 $$;
-
 revoke all on function private.current_user_is_league_member(uuid) from public;
 grant execute on function private.current_user_is_league_member(uuid) to authenticated;
-
 -- Be explicit for projects created after Supabase's table-exposure default
 -- change: RLS decides row access, but GRANT decides whether the Data API can
 -- see these tables at all.
 revoke all on table public.leagues, public.league_members from anon;
 grant select on table public.leagues, public.league_members to authenticated;
-
 drop policy if exists leagues_select on public.leagues;
 create policy leagues_select on public.leagues
   for select to authenticated
@@ -51,7 +46,6 @@ create policy leagues_select on public.leagues
       or public.is_admin()
     )
   );
-
 drop policy if exists league_members_select on public.league_members;
 create policy league_members_select on public.league_members
   for select to authenticated
@@ -59,7 +53,6 @@ create policy league_members_select on public.league_members
     private.current_user_is_league_member(league_members.league_id)
     or public.is_admin()
   );
-
 -- Plain views are security-definer by default in Postgres, so make this view
 -- respect the caller's RLS policies on league_members/users.
 create or replace view public.league_leaderboard
@@ -83,8 +76,6 @@ select
 from public.league_members lm
 join public.leaderboard lb on lb.user_id = lm.user_id
 join public.users u on u.id = lm.user_id;
-
 grant select on public.league_leaderboard to authenticated;
 revoke all on public.league_leaderboard from anon;
-
 commit;

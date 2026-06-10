@@ -15,7 +15,6 @@
 -- ============================================================================
 
 begin;
-
 -- ----------------------------------------------------------------------------
 -- Stage ordering helpers
 -- ----------------------------------------------------------------------------
@@ -35,7 +34,6 @@ as $$
     else 999
   end;
 $$;
-
 create or replace function public.card_stage_is_between(
   p_stage public.match_stage,
   p_from public.match_stage,
@@ -48,7 +46,6 @@ as $$
   select public.card_stage_rank(p_stage) between public.card_stage_rank(p_from)
     and public.card_stage_rank(p_until);
 $$;
-
 -- ----------------------------------------------------------------------------
 -- Admin configurable card definitions
 -- ----------------------------------------------------------------------------
@@ -72,12 +69,10 @@ create table if not exists public.card_definitions (
     and public.card_stage_rank(usable_from_stage) >= public.card_stage_rank(award_stage)
   )
 );
-
 drop trigger if exists card_definitions_set_updated_at on public.card_definitions;
 create trigger card_definitions_set_updated_at
   before update on public.card_definitions
   for each row execute function public.set_updated_at();
-
 -- ----------------------------------------------------------------------------
 -- User-owned card instances. The mutable usage fields are snapshotted from the
 -- definition so admin edits do not rewrite already-earned card power.
@@ -101,92 +96,75 @@ create table if not exists public.user_cards (
   ),
   constraint user_cards_one_definition_per_user unique (user_id, card_definition_id)
 );
-
 create index if not exists idx_user_cards_user on public.user_cards(user_id);
 create index if not exists idx_user_cards_definition on public.user_cards(card_definition_id);
 create index if not exists idx_user_cards_status on public.user_cards(status);
-
 drop trigger if exists user_cards_set_updated_at on public.user_cards;
 create trigger user_cards_set_updated_at
   before update on public.user_cards
   for each row execute function public.set_updated_at();
-
 -- ----------------------------------------------------------------------------
 -- A prediction can spend one card instance.
 -- ----------------------------------------------------------------------------
 alter table public.predictions
   add column if not exists applied_user_card_id uuid references public.user_cards(id) on delete set null;
-
 create index if not exists idx_predictions_applied_user_card
   on public.predictions(applied_user_card_id);
-
 -- ----------------------------------------------------------------------------
 -- RLS + grants
 -- ----------------------------------------------------------------------------
 alter table public.card_definitions enable row level security;
 alter table public.user_cards enable row level security;
-
 grant select, insert, update, delete on public.card_definitions to authenticated;
 grant select on public.user_cards to authenticated;
-
 drop policy if exists "Card definitions are readable by authenticated users" on public.card_definitions;
 create policy "Card definitions are readable by authenticated users"
   on public.card_definitions for select
   to authenticated
   using (true);
-
 drop policy if exists "Admins manage card definitions" on public.card_definitions;
 create policy "Admins manage card definitions"
   on public.card_definitions for all
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
-
 drop policy if exists "Users read own cards" on public.user_cards;
 create policy "Users read own cards"
   on public.user_cards for select
   to authenticated
   using ((select auth.uid()) = user_id);
-
 drop policy if exists "Admins read all user cards" on public.user_cards;
 create policy "Admins read all user cards"
   on public.user_cards for select
   to authenticated
   using (public.is_admin());
-
 -- ----------------------------------------------------------------------------
 -- Storage for card artwork
 -- ----------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('card-images', 'card-images', true)
 on conflict (id) do nothing;
-
 drop policy if exists "Card images are publicly readable" on storage.objects;
 drop policy if exists "Admins upload card images" on storage.objects;
 drop policy if exists "Admins update card images" on storage.objects;
 drop policy if exists "Admins delete card images" on storage.objects;
-
 create policy "Card images are publicly readable"
   on storage.objects for select
   to public
   using (bucket_id = 'card-images');
-
 create policy "Admins upload card images"
   on storage.objects for insert
   to authenticated
   with check (bucket_id = 'card-images' and public.is_admin());
-
 create policy "Admins update card images"
   on storage.objects for update
   to authenticated
   using (bucket_id = 'card-images' and public.is_admin())
   with check (bucket_id = 'card-images' and public.is_admin());
-
 create policy "Admins delete card images"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'card-images' and public.is_admin());
-
 -- ----------------------------------------------------------------------------
 -- Awarding logic
 -- ----------------------------------------------------------------------------
@@ -203,7 +181,6 @@ as $$
     and m.stage = p_stage
     and m.status not in ('POSTPONED', 'CANCELLED');
 $$;
-
 create or replace function public.user_stage_points(p_user_id uuid, p_stage public.match_stage)
 returns numeric
 language sql
@@ -216,7 +193,6 @@ as $$
   where pt.user_id = p_user_id
     and m.stage = p_stage;
 $$;
-
 create or replace function public.award_user_stage_cards(
   p_user_id uuid,
   p_stage public.match_stage
@@ -272,9 +248,7 @@ begin
   return inserted_count;
 end;
 $function$;
-
 revoke execute on function public.award_user_stage_cards(uuid, public.match_stage) from public;
-
 create or replace function public.admin_recalculate_stage_cards(p_stage public.match_stage)
 returns integer
 language plpgsql
@@ -301,10 +275,8 @@ begin
   return total;
 end;
 $function$;
-
 revoke all on function public.admin_recalculate_stage_cards(public.match_stage) from public;
 grant execute on function public.admin_recalculate_stage_cards(public.match_stage) to authenticated;
-
 create or replace function public.tg_points_award_stage_cards()
 returns trigger
 language plpgsql
@@ -329,14 +301,11 @@ begin
   return new;
 end;
 $function$;
-
 revoke execute on function public.tg_points_award_stage_cards() from public;
-
 drop trigger if exists points_award_stage_cards on public.points;
 create trigger points_award_stage_cards
   after insert or update of total_points on public.points
   for each row execute function public.tg_points_award_stage_cards();
-
 -- ----------------------------------------------------------------------------
 -- Card usage validation and accounting
 -- ----------------------------------------------------------------------------
@@ -354,9 +323,7 @@ begin
     and status in ('active', 'used');
 end;
 $function$;
-
 revoke execute on function public.restore_prediction_card_use(uuid) from public;
-
 create or replace function public.tg_predictions_apply_card_usage()
 returns trigger
 language plpgsql
@@ -443,15 +410,12 @@ begin
   return new;
 end;
 $function$;
-
 revoke execute on function public.tg_predictions_apply_card_usage() from public;
-
 drop trigger if exists predictions_apply_card_usage on public.predictions;
 create trigger predictions_apply_card_usage
   before insert or update of user_id, match_id, applied_user_card_id
   on public.predictions
   for each row execute function public.tg_predictions_apply_card_usage();
-
 create or replace function public.tg_predictions_restore_card_usage()
 returns trigger
 language plpgsql
@@ -465,14 +429,11 @@ begin
   return old;
 end;
 $function$;
-
 revoke execute on function public.tg_predictions_restore_card_usage() from public;
-
 drop trigger if exists predictions_restore_card_usage on public.predictions;
 create trigger predictions_restore_card_usage
   after delete on public.predictions
   for each row execute function public.tg_predictions_restore_card_usage();
-
 -- ----------------------------------------------------------------------------
 -- Re-score matches with personal card multiplier bonuses.
 -- ----------------------------------------------------------------------------
@@ -572,7 +533,5 @@ begin
   return affected;
 end;
 $function$;
-
 revoke execute on function public.score_match(uuid) from anon, authenticated;
-
 commit;
