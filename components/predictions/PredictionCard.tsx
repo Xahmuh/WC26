@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     fontSize: ms(12),
     fontWeight: '700',
     lineHeight: ms(16),
-    letterSpacing: -0.3,
+    letterSpacing: 0,
     textAlign: 'center',
   },
   submittedRow: {

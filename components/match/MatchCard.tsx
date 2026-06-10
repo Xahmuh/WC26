@@ -110,7 +110,7 @@ function MatchCardComponent({
 
       {/* Teams row */}
       <View className="flex-row items-center">
-        <View className="flex-1 flex-row items-center gap-2">
+        <View className="min-w-0 flex-1 flex-row items-center gap-2">
           <TeamFlag team={match.home_team} />
           <Text
             numberOfLines={1}
@@ -130,7 +130,7 @@ function MatchCardComponent({
           )}
         </View>
 
-        <View className="flex-1 flex-row items-center justify-end gap-2">
+        <View className="min-w-0 flex-1 flex-row items-center justify-end gap-2">
           <Text
             numberOfLines={1}
             className="flex-shrink text-right text-base font-semibold text-textPrimary"
@@ -142,7 +142,7 @@ function MatchCardComponent({
       </View>
 
       {/* Meta row */}
-      <View className="mt-3 flex-row items-center justify-between border-t border-bgBorder pt-3">
+      <View className="mt-3 min-w-0 flex-row items-center justify-between gap-3 border-t border-bgBorder pt-3">
         {isLive ? (
           <Text className="text-xs font-semibold text-live">In progress</Text>
         ) : isFinished ? (
@@ -154,9 +154,9 @@ function MatchCardComponent({
         )}
 
         {prediction ? (
-          <View className="flex-row items-center gap-1">
+          <View className="min-w-0 flex-row items-center gap-1">
             <Icon name="lock" size={12} color={Theme.colors.accent} />
-            <Text className="text-xs font-medium text-accent">
+            <Text className="min-w-0 flex-shrink text-xs font-medium text-accent" numberOfLines={1}>
               Saved: {prediction.pred_home_score}–{prediction.pred_away_score}
             </Text>
           </View>

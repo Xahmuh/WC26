@@ -1,7 +1,7 @@
 // TeamFlag - renders a national team flag or crest while preserving the old
 // team-based API.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Image, Text, View, Platform } from 'react-native';
 
 import Theme from '@/constants/theme/design-system';
@@ -22,20 +22,44 @@ function isSvg(url: string): boolean {
   return url.toLowerCase().split('?')[0]?.endsWith('.svg') ?? false;
 }
 
+function uniqueUrls(urls: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  urls.forEach((url) => {
+    const trimmed = url?.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    result.push(trimmed);
+  });
+
+  return result;
+}
+
 export function TeamFlag({
   team,
   countryCode,
   size = 28,
   fixed = false,
 }: TeamFlagProps): React.JSX.Element {
-  const [failed, setFailed] = useState(false);
+  const [failedUrls, setFailedUrls] = useState<string[]>([]);
   const dim = fixed ? size : scale(size);
   const width = Math.round(dim * 1.4);
   const height = dim;
   const radius = 6;
-  const sourceUrl = team?.flag_url ?? (countryCode ? getFlagUrl(countryCode) : null);
-  const nativeSvgFallbackUrl =
-    team?.code ? getFlagUrl(team.code) : countryCode ? getFlagUrl(countryCode) : null;
+  const candidateUrls = useMemo(() => {
+    const urls = uniqueUrls([
+      team?.flag_url,
+      team?.code ? getFlagUrl(team.code) : null,
+      team?.short_name ? getFlagUrl(team.short_name) : null,
+      team?.name ? getFlagUrl(team.name) : null,
+      countryCode ? getFlagUrl(countryCode) : null,
+    ]);
+
+    if (Platform.OS === 'web') return urls;
+    return urls.filter((url) => !isSvg(url));
+  }, [countryCode, team?.code, team?.flag_url, team?.name, team?.short_name]);
+  const sourceUrl = candidateUrls.find((url) => !failedUrls.includes(url)) ?? null;
   const label = team?.name ?? countryCode ?? 'team';
 
   const fallback = (
@@ -64,43 +88,7 @@ export function TeamFlag({
     </View>
   );
 
-  if (!sourceUrl || failed) return fallback;
-
-  if (isSvg(sourceUrl)) {
-    if (Platform.OS === 'web') {
-      return (
-        <Image
-          accessibilityLabel={`${label} flag`}
-          source={{ uri: sourceUrl }}
-          style={{
-            width,
-            height,
-            borderRadius: radius,
-            backgroundColor: Theme.colors.bgSurface3,
-          }}
-          resizeMode="cover"
-          onError={() => setFailed(true)}
-        />
-      );
-    }
-
-    if (!nativeSvgFallbackUrl) return fallback;
-
-    return (
-      <Image
-        accessibilityLabel={`${label} flag`}
-        source={{ uri: nativeSvgFallbackUrl }}
-        style={{
-          width,
-          height,
-          borderRadius: radius,
-          backgroundColor: Theme.colors.bgSurface3,
-        }}
-        resizeMode="cover"
-        onError={() => setFailed(true)}
-      />
-    );
-  }
+  if (!sourceUrl) return fallback;
 
   return (
     <Image
@@ -113,7 +101,9 @@ export function TeamFlag({
         backgroundColor: Theme.colors.bgSurface3,
       }}
       resizeMode="cover"
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailedUrls((current) => (current.includes(sourceUrl) ? current : [...current, sourceUrl]));
+      }}
     />
   );
 }

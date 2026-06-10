@@ -1,7 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -31,11 +34,13 @@ import type { CardDefinition, MatchStage, UserCard } from '@/types';
 type CollectionStatus = 'locked' | 'ready' | 'used' | 'revoked';
 
 const CARD_GAP = 12;
-const MIN_CARD_COLUMN_WIDTH = 150;
-const MAX_MOBILE_CARD_COLUMNS = 2;
-const MAX_CARD_COLUMNS = 4;
-const MAX_SINGLE_COLUMN_CARD_WIDTH = 268;
 const MAX_CONTENT_WIDTH = 980;
+const WEB_SHELL_MAX_WIDTH = 480;
+const MIN_CAROUSEL_CARD_WIDTH = 198;
+const MIN_NATIVE_CARD_WIDTH = 320;
+const MAX_NATIVE_CARD_WIDTH = 360;
+const MAX_MOBILE_CAROUSEL_CARD_WIDTH = 304;
+const MAX_LARGE_CAROUSEL_CARD_WIDTH = 340;
 const CARD_ART_ASPECT_RATIO = 1500 / 1080;
 // Name block + footer + progress + gaps + padding. Used as a MIN height so
 // cards in a row share a baseline, while still growing for long titles / large
@@ -88,39 +93,27 @@ function getCardMinHeight(width: number): number {
   return getCardArtHeight(width) + CARD_CHROME_HEIGHT;
 }
 
-function getGridColumnCount(gridWidth: number, maxColumns = MAX_CARD_COLUMNS): number {
-  const columns = Math.floor((gridWidth + CARD_GAP) / (MIN_CARD_COLUMN_WIDTH + CARD_GAP));
-  return Math.max(1, Math.min(maxColumns, columns));
-}
+function getCarouselCardWidth(viewportWidth: number): number {
+  if (viewportWidth <= 0) return 240;
 
-function chunkItems<T>(items: T[], columns: number): T[][] {
-  const rows: T[][] = [];
-  for (let index = 0; index < items.length; index += columns) {
-    rows.push(items.slice(index, index + columns));
+  if (Platform.OS !== 'web') {
+    const sidePeekRatio = viewportWidth >= 700 ? 0.08 : 0.07;
+    const sidePeek = Math.max(18, Math.round(viewportWidth * sidePeekRatio));
+    const targetWidth = viewportWidth - sidePeek * 2;
+
+    return Math.round(
+      Math.min(viewportWidth, Math.max(MIN_CAROUSEL_CARD_WIDTH, targetWidth))
+    );
   }
-  return rows;
-}
 
-function getColumnSpacingStyle(columnIndex: number, columnCount: number): { marginRight: number } | null {
-  return columnIndex < columnCount - 1 ? { marginRight: CARD_GAP } : null;
-}
+  const maxWidth =
+    viewportWidth >= 700 ? MAX_LARGE_CAROUSEL_CARD_WIDTH : MAX_MOBILE_CAROUSEL_CARD_WIDTH;
+  const sidePeek = viewportWidth < 360 ? 26 : viewportWidth >= 700 ? 72 : 38;
+  const targetWidth = viewportWidth - sidePeek * 2;
 
-function renderGridSpacers(
-  count: number,
-  width: number,
-  startColumn: number,
-  columnCount: number
-): React.JSX.Element[] {
-  return Array.from({ length: count }, (_, index) => (
-    <View
-      key={`spacer-${index}`}
-      style={[
-        styles.cardSlotSpacer,
-        { width },
-        getColumnSpacingStyle(startColumn + index, columnCount),
-      ]}
-    />
-  ));
+  return Math.round(
+    Math.min(viewportWidth, Math.min(maxWidth, Math.max(MIN_CAROUSEL_CARD_WIDTH, targetWidth)))
+  );
 }
 
 function buildCollection(input: {
@@ -226,15 +219,13 @@ function CollectionCardTile({
   card,
   selected,
   width,
-  columnIndex,
-  columnCount,
+  fluid = false,
   onPress,
 }: {
   card: CollectionCard;
   selected: boolean;
   width: number;
-  columnIndex: number;
-  columnCount: number;
+  fluid?: boolean;
   onPress: () => void;
 }): React.JSX.Element {
   const imageUrl = card.definition.image_url ?? null;
@@ -242,7 +233,10 @@ function CollectionCardTile({
   const locked = card.status === 'locked';
   const remainingUses = card.userCard?.uses_remaining ?? card.definition.max_uses;
   const maxUses = card.userCard?.max_uses ?? card.definition.max_uses;
-  const artHeight = getCardArtHeight(width);
+  const artHeight = fluid ? undefined : getCardArtHeight(width);
+  const cardHeight = fluid ? undefined : getCardMinHeight(width);
+  const showViewDesignButton = Platform.OS === 'web' || fluid || width >= 220;
+  const cardSizeStyle = fluid ? { width } : { width, height: cardHeight };
 
   return (
     <Pressable
@@ -251,8 +245,8 @@ function CollectionCardTile({
       accessibilityLabel={`${card.definition.name}. ${getStatusLabel(card.status)} card. Boost plus ${card.definition.multiplier_bonus}. Uses ${remainingUses} of ${maxUses}.`}
       style={({ pressed }) => [
         styles.gameCard,
-        { width, minHeight: getCardMinHeight(width) },
-        getColumnSpacingStyle(columnIndex, columnCount),
+        fluid && styles.gameCardFluid,
+        cardSizeStyle,
         selected && styles.gameCardSelected,
         locked && styles.gameCardLocked,
         pressed && styles.gameCardPressed,
@@ -267,7 +261,7 @@ function CollectionCardTile({
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={[styles.gameArtFrame, { height: artHeight }]}>
+      <View style={[styles.gameArtFrame, fluid ? styles.gameArtFrameFluid : { height: artHeight }]}>
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} resizeMode="contain" style={styles.gameArtImage} />
         ) : (
@@ -295,9 +289,11 @@ function CollectionCardTile({
           </Text>
         </View>
 
-        <View style={styles.viewDesignButton} pointerEvents="none">
-          <Icon name="eye" size={14} color={Colors.text.primary} fixed />
-        </View>
+        {showViewDesignButton ? (
+          <View style={styles.viewDesignButton} pointerEvents="none">
+            <Icon name="eye" size={14} color={Colors.text.primary} fixed />
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.gameNameBlock}>
@@ -311,12 +307,20 @@ function CollectionCardTile({
 
       <View style={styles.gameCardFooter}>
         <View style={styles.gameStat}>
-          <Text style={styles.gameStatLabel}>Boost</Text>
-          <Text style={styles.gameStatValue}>+{card.definition.multiplier_bonus}</Text>
+          <Text style={styles.gameStatLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+            Boost
+          </Text>
+          <Text style={styles.gameStatValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+            +{card.definition.multiplier_bonus}
+          </Text>
         </View>
         <View style={styles.gameStat}>
-          <Text style={styles.gameStatLabel}>Uses</Text>
-          <Text style={styles.gameStatValue}>{remainingUses}/{maxUses}</Text>
+          <Text style={styles.gameStatLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+            Uses
+          </Text>
+          <Text style={styles.gameStatValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+            {remainingUses}/{maxUses}
+          </Text>
         </View>
       </View>
 
@@ -470,28 +474,39 @@ function CardDesignPreviewModal({
 
 function CardSkeleton({
   width,
-  columnIndex,
-  columnCount,
+  fluid = false,
 }: {
   width: number;
-  columnIndex: number;
-  columnCount: number;
+  fluid?: boolean;
 }): React.JSX.Element {
-  const artHeight = getCardArtHeight(width);
+  const artHeight = fluid ? undefined : getCardArtHeight(width);
+  const cardHeight = fluid ? undefined : getCardMinHeight(width);
+  const cardSizeStyle = fluid ? { width } : { width, height: cardHeight };
 
   return (
     <View
       style={[
         styles.gameCard,
-        { width, minHeight: getCardMinHeight(width) },
-        getColumnSpacingStyle(columnIndex, columnCount),
+        fluid && styles.gameCardFluid,
+        cardSizeStyle,
       ]}
     >
-      <SkeletonBox width="100%" height={artHeight} borderRadius={18} />
-      <SkeletonBox width="82%" height={38} borderRadius={12} />
+      {fluid ? (
+        <View style={styles.gameArtFrameFluid}>
+          <SkeletonBox
+            width="100%"
+            height={1}
+            borderRadius={18}
+            style={styles.fluidSkeletonFill}
+          />
+        </View>
+      ) : (
+        <SkeletonBox width="100%" height={artHeight} borderRadius={18} />
+      )}
+      <SkeletonBox width="100%" height={56} borderRadius={12} />
       <View style={styles.gameCardFooter}>
-        <SkeletonBox width="46%" height={34} borderRadius={12} />
-        <SkeletonBox width="46%" height={34} borderRadius={12} />
+        <SkeletonBox width="46%" height={40} borderRadius={12} />
+        <SkeletonBox width="46%" height={40} borderRadius={12} />
       </View>
       <SkeletonBox width="100%" height={5} borderRadius={999} />
     </View>
@@ -529,9 +544,11 @@ function SummaryMetric({
 export default function CardsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { width } = useResponsive();
-  const contentHorizontalPadding = width < 360 ? 14 : width >= 768 ? 24 : 20;
-  const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
-  const fallbackGridWidth = Math.max(0, contentWidth - contentHorizontalPadding * 2);
+  const carouselRef = useRef<ScrollView>(null);
+  const layoutWidth = Platform.OS === 'web' ? Math.min(width, WEB_SHELL_MAX_WIDTH) : width;
+  const contentHorizontalPadding = layoutWidth < 360 ? 14 : layoutWidth >= 768 ? 24 : 20;
+  const contentWidth = Math.min(layoutWidth, MAX_CONTENT_WIDTH);
+  const fallbackCarouselWidth = Math.max(0, contentWidth - contentHorizontalPadding * 2);
   const catalogQuery = useCardCatalog();
   const cardsQuery = useMyCards();
   const matchesQuery = useMatches();
@@ -542,16 +559,17 @@ export default function CardsScreen(): React.JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [previewCard, setPreviewCard] = useState<CollectionCard | null>(null);
-  const [measuredGridWidth, setMeasuredGridWidth] = useState(0);
-  const gridWidth = measuredGridWidth || fallbackGridWidth;
-  const maxGridColumns = width >= 768 ? MAX_CARD_COLUMNS : MAX_MOBILE_CARD_COLUMNS;
-  const gridColumnCount = getGridColumnCount(gridWidth, maxGridColumns);
-  const cardWidth = Math.max(
-    0,
-    gridColumnCount === 1
-      ? Math.min(gridWidth, MAX_SINGLE_COLUMN_CARD_WIDTH)
-      : Math.floor((gridWidth - CARD_GAP * (gridColumnCount - 1)) / gridColumnCount)
-  );
+  const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
+  const [measuredCarouselWidth, setMeasuredCarouselWidth] = useState(0);
+  const carouselWidth = Math.max(measuredCarouselWidth, fallbackCarouselWidth);
+  const nativeCardWidth =
+    fallbackCarouselWidth >= MIN_NATIVE_CARD_WIDTH
+      ? Math.min(MAX_NATIVE_CARD_WIDTH, fallbackCarouselWidth)
+      : Math.max(0, fallbackCarouselWidth);
+  const cardWidth = Platform.OS === 'web' ? getCarouselCardWidth(carouselWidth) : nativeCardWidth;
+  const carouselSidePadding = Math.max(0, Math.floor((carouselWidth - cardWidth) / 2));
+  const carouselContentSidePadding = Platform.OS === 'web' ? carouselSidePadding : 0;
+  const carouselSnapInterval = Platform.OS === 'web' ? cardWidth + CARD_GAP : carouselWidth;
   const refetchCatalog = catalogQuery.refetch;
   const refetchCards = cardsQuery.refetch;
   const refetchMatches = matchesQuery.refetch;
@@ -565,12 +583,15 @@ export default function CardsScreen(): React.JSX.Element {
     setPreviewCard(card);
   }, []);
 
-  const handleGridLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextWidth = Math.floor(event.nativeEvent.layout.width);
-    setMeasuredGridWidth((currentWidth) =>
+  const handleCarouselLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = Math.max(
+      Math.floor(event.nativeEvent.layout.width),
+      fallbackCarouselWidth
+    );
+    setMeasuredCarouselWidth((currentWidth) =>
       Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth
     );
-  }, []);
+  }, [fallbackCarouselWidth]);
 
   const refetchCardsPage = useCallback(async () => {
     await Promise.all([
@@ -630,13 +651,6 @@ export default function CardsScreen(): React.JSX.Element {
       scoringRulesQuery.data?.winnerPoints,
     ]
   );
-  const cardRows = useMemo(() => {
-    return chunkItems(collection, gridColumnCount);
-  }, [collection, gridColumnCount]);
-  const skeletonRows = useMemo(() => {
-    return chunkItems(CARD_SKELETON_ITEMS, gridColumnCount);
-  }, [gridColumnCount]);
-
   const loading =
     catalogQuery.isLoading ||
     cardsQuery.isLoading ||
@@ -653,6 +667,52 @@ export default function CardsScreen(): React.JSX.Element {
     collection.find((card) => card.status === 'ready') ??
     collection[0] ??
     null;
+
+  useEffect(() => {
+    if (collection.length === 0) {
+      setActiveCarouselIndex(0);
+      if (selectedCardId !== null) setSelectedCardId(null);
+      return;
+    }
+
+    const selectedIndex = selectedCardId
+      ? collection.findIndex((card) => card.definition.id === selectedCardId)
+      : -1;
+
+    if (selectedIndex >= 0) {
+      setActiveCarouselIndex(selectedIndex);
+      return;
+    }
+
+    setActiveCarouselIndex(0);
+    setSelectedCardId(collection[0]?.definition.id ?? null);
+  }, [collection, selectedCardId]);
+
+  const selectCarouselCard = useCallback((index: number, shouldScroll = false) => {
+    if (collection.length === 0) return;
+
+    const nextIndex = Math.max(0, Math.min(collection.length - 1, index));
+    const nextCard = collection[nextIndex];
+    if (!nextCard) return;
+
+    setActiveCarouselIndex(nextIndex);
+    setSelectedCardId(nextCard.definition.id);
+
+    if (shouldScroll) {
+      carouselRef.current?.scrollTo({
+        x: nextIndex * carouselSnapInterval,
+        animated: true,
+      });
+    }
+  }, [carouselSnapInterval, collection]);
+
+  const handleCarouselMomentumEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (carouselSnapInterval <= 0 || collection.length === 0) return;
+
+    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / carouselSnapInterval);
+    selectCarouselCard(nextIndex);
+  }, [carouselSnapInterval, collection.length, selectCarouselCard]);
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <TabPageHeader
@@ -667,7 +727,7 @@ export default function CardsScreen(): React.JSX.Element {
           {
             maxWidth: MAX_CONTENT_WIDTH,
             paddingHorizontal: contentHorizontalPadding,
-            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 150,
+            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 8,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -716,48 +776,90 @@ export default function CardsScreen(): React.JSX.Element {
         </View>
 
         {loading ? (
-          <View style={styles.cardsGrid} onLayout={handleGridLayout}>
-            {skeletonRows.map((row) => (
-              <View
-                key={row.join('-')}
-                style={[styles.cardsRow, gridColumnCount === 1 && styles.cardsRowSingle]}
+          <View style={styles.cardsCarouselViewport} onLayout={handleCarouselLayout}>
+            {Platform.OS === 'web' ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                scrollEnabled={false}
+                contentContainerStyle={[
+                  styles.cardsCarouselContent,
+                  { paddingHorizontal: carouselContentSidePadding },
+                ]}
               >
-                {row.map((item, columnIndex) => (
-                  <CardSkeleton
-                    key={item}
-                    width={cardWidth}
-                    columnIndex={columnIndex}
-                    columnCount={gridColumnCount}
-                  />
+                {CARD_SKELETON_ITEMS.map((item) => (
+                  <CardSkeleton key={item} width={cardWidth} />
                 ))}
-                {renderGridSpacers(gridColumnCount - row.length, cardWidth, row.length, gridColumnCount)}
+              </ScrollView>
+            ) : (
+              <View style={styles.nativeShowcase}>
+                <CardSkeleton width={cardWidth} fluid />
               </View>
-            ))}
+            )}
           </View>
         ) : (
-          <View style={styles.cardsGrid} onLayout={handleGridLayout}>
-            {cardRows.map((row) => (
-              <View
-                key={row.map((card) => card.definition.id).join('-')}
-                style={[styles.cardsRow, gridColumnCount === 1 && styles.cardsRowSingle]}
+          <View style={styles.cardsCarouselViewport} onLayout={handleCarouselLayout}>
+            {Platform.OS === 'web' ? (
+              <ScrollView
+                ref={carouselRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                disableIntervalMomentum
+                snapToAlignment="start"
+                snapToInterval={carouselSnapInterval}
+                scrollEventThrottle={16}
+                onMomentumScrollEnd={handleCarouselMomentumEnd}
+                scrollEnabled={collection.length > 1}
+                contentContainerStyle={[
+                  styles.cardsCarouselContent,
+                  { paddingHorizontal: carouselContentSidePadding },
+                ]}
               >
-                {row.map((card, columnIndex) => {
+                {collection.map((card) => {
                   const isSelected = selectedCard?.definition.id === card.definition.id;
+
                   return (
-                    <CollectionCardTile
-                      key={card.definition.id}
-                      card={card}
-                      selected={isSelected}
-                      width={cardWidth}
-                      columnIndex={columnIndex}
-                      columnCount={gridColumnCount}
-                      onPress={() => openCardPreview(card)}
-                    />
+                    <View key={card.definition.id}>
+                      <CollectionCardTile
+                        card={card}
+                        selected={isSelected}
+                        width={cardWidth}
+                        onPress={() => openCardPreview(card)}
+                      />
+                    </View>
                   );
                 })}
-                {renderGridSpacers(gridColumnCount - row.length, cardWidth, row.length, gridColumnCount)}
+              </ScrollView>
+            ) : selectedCard ? (
+              <View style={styles.nativeShowcase}>
+                <CollectionCardTile
+                  card={selectedCard}
+                  selected
+                  width={cardWidth}
+                  fluid
+                  onPress={() => openCardPreview(selectedCard)}
+                />
               </View>
-            ))}
+            ) : null}
+
+            {collection.length > 1 ? (
+              <View style={styles.carouselDots}>
+                {collection.map((card, index) => (
+                  <Pressable
+                    key={card.definition.id}
+                    onPress={() => selectCarouselCard(index, Platform.OS === 'web')}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Show ${card.definition.name}`}
+                    hitSlop={8}
+                    style={[
+                      styles.carouselDot,
+                      index === activeCarouselIndex ? styles.carouselDotActive : styles.carouselDotInactive,
+                    ]}
+                  />
+                ))}
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -921,25 +1023,44 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weight.bold,
     textTransform: 'uppercase',
   },
-  cardsGrid: {
+  cardsCarouselViewport: {
     width: '100%',
+    alignSelf: 'stretch',
   },
-  cardsRow: {
+  cardsCarouselContent: {
+    alignItems: 'flex-start',
+    gap: CARD_GAP,
+    paddingVertical: 2,
+  },
+  nativeShowcase: {
     width: '100%',
-    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'flex-start',
-    alignItems: 'stretch',
-    marginBottom: CARD_GAP,
+    paddingTop: 2,
   },
-  cardsRowSingle: {
+  carouselDots: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 7,
+    marginTop: 12,
   },
-  cardSlotSpacer: {
-    flexShrink: 0,
+  carouselDot: {
+    height: 8,
+    borderRadius: 999,
+  },
+  carouselDotActive: {
+    width: 24,
+    backgroundColor: Colors.accent.lime,
+  },
+  carouselDotInactive: {
+    width: 8,
+    backgroundColor: 'rgba(255,255,255,0.24)',
   },
   gameCard: {
     position: 'relative',
-    alignSelf: 'stretch',
+    alignSelf: 'flex-start',
     flexShrink: 0,
     overflow: 'hidden',
     borderRadius: 18,
@@ -948,7 +1069,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background.card,
     padding: 9,
     gap: 8,
-    ...(Shadows.card ?? {}),
+    ...(Platform.OS === 'android' ? {} : Shadows.card ?? {}),
+  },
+  gameCardFluid: {
+    alignSelf: 'center',
+    padding: 10,
+    gap: 9,
   },
   gameCardSelected: {
     borderColor: Colors.accent.limeBorder,
@@ -970,10 +1096,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(0,0,0,0.28)',
   },
+  gameArtFrameFluid: {
+    aspectRatio: 1080 / 1500,
+  },
   gameArtImage: {
-    width: '96%',
-    height: '96%',
+    width: '100%',
+    height: '100%',
     resizeMode: 'contain',
+  },
+  fluidSkeletonFill: {
+    width: '100%',
+    height: '100%',
   },
   gameArtFallback: {
     flex: 1,

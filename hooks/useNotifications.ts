@@ -1,20 +1,17 @@
 // ============================================================================
-// Notifications: realtime feed + unread count + mark-as-read, with an in-app
-// sound when a new one arrives. Subscribes to the user's own notification rows
-// (RLS scopes the realtime stream).
+// Notifications: feed + unread count + mark-as-read. Realtime invalidation and
+// sound live in useNotificationRealtime(), mounted once at the app root.
 // ============================================================================
 
-import { useEffect } from 'react';
 import {
   useMutation,
   useQuery,
-  useQueryClient,
   type UseQueryResult,
+  useQueryClient,
 } from '@tanstack/react-query';
 
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth.store';
-import { playNotificationSound } from '@/lib/sound';
+import { notificationKeys } from '@/hooks/notificationKeys';
 import {
   fetchNotifications,
   markAllNotificationsRead,
@@ -22,16 +19,11 @@ import {
   type AppNotification,
 } from '@/services/notifications.service';
 
-export const notificationKeys = {
-  all: ['notifications'] as const,
-};
-
 export type UseNotificationsResult = UseQueryResult<AppNotification[], Error> & {
   unreadCount: number;
 };
 
 export function useNotifications(): UseNotificationsResult {
-  const queryClient = useQueryClient();
   const userId = useAuthStore((s) => s.session?.user.id);
 
   const query = useQuery({
@@ -40,31 +32,6 @@ export function useNotifications(): UseNotificationsResult {
     enabled: Boolean(userId),
     staleTime: 30_000,
   });
-
-  useEffect(() => {
-    if (!userId) return;
-    const id = Math.random().toString(36).slice(2, 9);
-    const channel = supabase
-      .channel(`notifications-rt-${id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        (payload) => {
-          queryClient.invalidateQueries({ queryKey: notificationKeys.all });
-          const n = payload.new as AppNotification;
-          void playNotificationSound(n.title, n.body ?? undefined, n.data);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        () => queryClient.invalidateQueries({ queryKey: notificationKeys.all })
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [userId, queryClient]);
 
   const unreadCount = (query.data ?? []).reduce(
     (acc, n) => (n.is_read ? acc : acc + 1),

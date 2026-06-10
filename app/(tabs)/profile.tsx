@@ -205,7 +205,7 @@ export default function ProfileScreen(): React.JSX.Element {
   }, [leaderboardQuery, pointsQuery, predictionsQuery, refetchTeams, refreshProfile]);
 
   return (
-    <SafeAreaView className="flex-1" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <TabPageHeader title="Profile" subtitle="Account, teams, and stats" />
       <ScrollView
         className="flex-1"

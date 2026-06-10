@@ -95,14 +95,14 @@ export default function LeaderboardScreen(): React.JSX.Element {
   );
 
   return (
-    <SafeAreaView className="flex-1" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <TabPageHeader title="Leaderboard" subtitle="Top players and ranks" />
       {query.isLoading ? (
         <LoadingSpinner fullScreen label="Loading leaderboard…" />
       ) : query.isError ? (
         <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />
       ) : (
-        <View style={{ flex: 1 }}>
+        <View className="flex-1 bg-bgDeep">
           <FlatList
             data={list}
             keyExtractor={(item) => item.user_id}
@@ -296,7 +296,7 @@ function LeaderboardRow({ entry, rank, isCurrentUser, teams, onPress }: Leaderbo
       </View>
 
       {/* Identity + supported teams + stats */}
-      <View className="flex-1 gap-1">
+      <View className="min-w-0 flex-1 gap-1">
         <Text numberOfLines={1} className="text-sm font-bold text-textPrimary">
           {entry.display_name}
           {isCurrentUser ? ' (you)' : ''}

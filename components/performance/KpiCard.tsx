@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   value: {
     flexShrink: 1,
     fontWeight: '900',
-    letterSpacing: -0.8,
+    letterSpacing: 0,
     lineHeight: 34,
     minWidth: 0,
   },

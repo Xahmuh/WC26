@@ -138,7 +138,7 @@ export default function LeagueDetailsScreen(): React.JSX.Element {
   );
 
   return (
-    <SafeAreaView className="flex-1" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <Container nested className="px-6 pb-2 pt-6">
@@ -311,7 +311,7 @@ function LeagueLeaderboardRow({
         />
       </View>
 
-      <View className="flex-1 gap-0.5">
+      <View className="min-w-0 flex-1 gap-0.5">
         <Text numberOfLines={1} className="text-sm font-bold text-textPrimary">
           {entry.display_name}{isCurrentUser ? ' (you)' : ''}
         </Text>

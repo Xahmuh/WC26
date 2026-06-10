@@ -17,5 +17,5 @@
     "expo-env.d.ts",
     "nativewind-env.d.ts"
   ],
-  "exclude": ["node_modules", "supabase/functions", "app kit", "ui kit", "dist", "**/*.test.ts"]
+  "exclude": ["node_modules", "supabase/functions", "app kit", "ui kit", "dist", "tmp*/**", "**/*.test.ts"]
 }

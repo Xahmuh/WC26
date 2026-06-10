@@ -182,9 +182,9 @@ export default function MatchesScreen(): React.JSX.Element {
   const heroBackgroundColor = matchesHeroQuery.data?.background_color ?? '#13214a';
 
   return (
-    <SafeAreaView className="flex-1" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <TabPageHeader title="Matches" subtitle="Fixtures, filters, and predictions" />
-      <View className="flex-1">
+      <View className="flex-1 bg-bgDeep">
         <Container nested className="px-6 pb-2 pt-4">
         <View
           style={{

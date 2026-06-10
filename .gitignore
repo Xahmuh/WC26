@@ -12,6 +12,7 @@ tmp-*/
 android/.gradle/
 android/.kotlin/
 android/.cxx/
+android/app/.cxx/
 android/build/
 android/app/build/
 android/app/src/main/java/inline/

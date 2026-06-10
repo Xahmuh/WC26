@@ -98,6 +98,6 @@ const styles = StyleSheet.create({
   },
   pointsText: {
     fontWeight: '900',
-    letterSpacing: -0.8,
+    letterSpacing: 0,
   },
 });

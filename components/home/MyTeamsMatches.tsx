@@ -1,6 +1,5 @@
-import { useMemo, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useCallback } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { Card, ScrollArrowButton, SectionHeader, SkeletonBox, MatchCard } from '@/components/ui';
@@ -11,6 +10,9 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatShortMatchTime } from '@/components/home/homeUtils';
 import type { Match, Team } from '@/types';
 import { useResponsive } from '@/lib/responsive';
+
+const CARD_GAP = 10;
+const MOBILE_VISIBLE_CARD_COUNT = 1.75;
 
 function buildCardTeam(team: Team | undefined): { name: string; team: Team } {
   const safeTeam =
@@ -45,10 +47,26 @@ export function MyTeamsMatches({
   const matchesQuery = useMatches();
   const teamsQuery = useTeams();
   const responsive = useResponsive();
+  const [carouselWidth, setCarouselWidth] = useState(0);
   const favoriteTeamIds = useMemo(() => profile?.supported_teams ?? [], [profile?.supported_teams]);
-  const cardWidth = responsive.isSmall ? 160 : responsive.isLarge ? 180 : 170;
+  const useMobilePager = responsive.isMobile;
+  const fallbackPagerWidth = Math.max(0, responsive.width - 56);
+  const mobileViewportWidth = carouselWidth || fallbackPagerWidth;
+  const mobileCardWidth = Math.max(
+    164,
+    Math.floor((mobileViewportWidth - CARD_GAP) / MOBILE_VISIBLE_CARD_COUNT)
+  );
+  const cardWidth = useMobilePager
+    ? mobileCardWidth
+    : responsive.isLarge
+      ? 180
+      : 170;
   const refetchMatches = matchesQuery.refetch;
   const refetchTeams = teamsQuery.refetch;
+  const handleCarouselLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = Math.floor(event.nativeEvent.layout.width);
+    setCarouselWidth((currentWidth) => (Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth));
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,8 +95,8 @@ export function MyTeamsMatches({
             </Pressable>
           }
         />
-        <View style={styles.loadingRow}>
-          {[0, 1].map((index) => (
+        <View style={styles.loadingRow} onLayout={handleCarouselLayout}>
+          {Array.from({ length: 2 }).map((_, index) => (
             <View key={index} style={[styles.loadingCard, { width: cardWidth }]}>
               <SkeletonBox width="60%" height={12} />
               <SkeletonBox width="85%" height={16} style={{ marginTop: 10 }} />
@@ -113,7 +131,15 @@ export function MyTeamsMatches({
           ref={scrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          decelerationRate="fast"
+          disableIntervalMomentum={useMobilePager}
+          snapToInterval={useMobilePager ? cardWidth + CARD_GAP : undefined}
+          scrollEventThrottle={16}
+          onLayout={handleCarouselLayout}
+          contentContainerStyle={[
+            styles.scrollContent,
+            useMobilePager && styles.scrollContentPager,
+          ]}
         >
           {favoriteMatches.map((match, index) => {
             const typedMatch = match as Match;
@@ -137,11 +163,13 @@ export function MyTeamsMatches({
             );
           })}
 
-          <ScrollArrowButton
-            onPress={() => {
-              scrollRef.current?.scrollToEnd({ animated: true });
-            }}
-          />
+          {!useMobilePager ? (
+            <ScrollArrowButton
+              onPress={() => {
+                scrollRef.current?.scrollToEnd({ animated: true });
+              }}
+            />
+          ) : null}
         </ScrollView>
       ) : (
         <View style={styles.emptyState}>
@@ -171,9 +199,12 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weight.medium,
   },
   scrollContent: {
-    gap: 10,
+    gap: CARD_GAP,
     paddingRight: 8,
     alignItems: 'stretch',
+  },
+  scrollContentPager: {
+    paddingRight: 0,
   },
   helper: {
     color: Colors.text.secondary,

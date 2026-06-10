@@ -22,6 +22,7 @@ import { queryClient } from '@/lib/queryClient';
 import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/services/auth.service';
 import { addNotificationResponseListener, configureNotifications } from '@/lib/sound';
+import { useNotificationRealtime } from '@/hooks/useNotificationRealtime';
 import { useAuthStore } from '@/stores/auth.store';
 
 const APP_BACKGROUND_COLOR = Theme.gradients.carbonApp[0] ?? '#000000';
@@ -102,6 +103,7 @@ function RootNavigator(): React.JSX.Element {
 
   useOAuthDeepLink();
   useNotificationDeepLink();
+  useNotificationRealtime();
   const routeReady = useProtectedRoute();
 
   if (!routeReady && !initializing) {

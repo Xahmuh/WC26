@@ -46,7 +46,6 @@ import { PlayerProfileModal } from '@/components/ui/PlayerProfileModal';
 export default function HomeScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isSmall } = useResponsive();
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
@@ -175,7 +174,7 @@ export default function HomeScreen(): React.JSX.Element {
         stickyHeaderIndices={[0]}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE },
+          { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 8 },
         ]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={Colors.accent.lime} />
@@ -205,16 +204,15 @@ export default function HomeScreen(): React.JSX.Element {
         <HomeBannerCollections position="after_pending_predictions" />
 
         <TodayMatchesSection />
+        <TournamentPredictionsSection />
         <HomeBannerCollections position="after_today_matches" />
 
-        <View style={[styles.doubleRow, isSmall ? styles.doubleRowCompact : null]}>
+        <View style={styles.doubleRow}>
           <PerformancePreview style={styles.splitCard} />
           <MiniLeaderboard style={styles.splitCard} />
         </View>
         <HomeBannerCollections position="after_performance" />
-
         <HomeBannerCollections position="before_tournament_questions" />
-        <TournamentPredictionsSection />
       </ScrollView>
 
       {teamPickerVisible ? (
@@ -658,9 +656,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     alignItems: 'stretch',
-  },
-  doubleRowCompact: {
-    gap: 8,
   },
   splitCard: {
     flex: 1,

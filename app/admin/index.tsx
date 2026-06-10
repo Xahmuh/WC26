@@ -2176,7 +2176,7 @@ export default function AdminDashboard(): React.JSX.Element {
 
   if (!isAdmin) {
     return (
-      <SafeAreaView className="flex-1 justify-center items-center px-6">
+      <SafeAreaView className="flex-1 justify-center items-center bg-bgDeep px-6">
         <Icon name="ban" size={40} color={Theme.colors.live} />
         <Text className="text-xl font-bold text-textPrimary mt-4">Access Denied</Text>
         <Text className="text-sm text-textSecondary text-center mt-2">
@@ -2527,7 +2527,7 @@ export default function AdminDashboard(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
       {/* Header */}
       <View className="px-4 py-3 flex-row items-center justify-between border-b border-bgBorder">
         <View className="flex-row items-center gap-3">

@@ -17,6 +17,7 @@ import {
   Keyboard,
   Text,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -73,7 +74,7 @@ const NAV = {
 // Vertical space the floating pill occupies above the screen's safe-area bottom.
 // Screens add this (plus insets.bottom) as scroll padding so the last row never
 // hides behind the pill or the system navigation bar.
-export const TAB_BAR_CLEARANCE = 96;
+export const TAB_BAR_CLEARANCE = 132;
 
 function NavItem({
   routeName,
@@ -85,6 +86,7 @@ function NavItem({
   label,
   isCenter = false,
   pulse = false,
+  compact = false,
 }: {
   routeName: string;
   isActive: boolean;
@@ -95,6 +97,7 @@ function NavItem({
   label: string;
   isCenter?: boolean;
   pulse?: boolean;
+  compact?: boolean;
 }): React.JSX.Element {
   const scale = useRef(new Animated.Value(1)).current;
   const pulseValue = useRef(new Animated.Value(1)).current;
@@ -191,7 +194,12 @@ function NavItem({
       onPress={onPress}
       onLongPress={onLongPress}
       activeOpacity={1}
-      style={[styles.navItem, isCenter && styles.navItemCenter]}
+      style={[
+        styles.navItem,
+        compact && styles.navItemCompact,
+        isCenter && styles.navItemCenter,
+        isCenter && compact && styles.navItemCenterCompact,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? routeName}
       accessibilityState={{ selected: isActive }}
@@ -207,6 +215,7 @@ function NavItem({
           <Animated.View
             style={[
               styles.ballFabWrap,
+              compact && styles.ballFabWrapCompact,
               {
                 transform: [
                   { translateY: ballTranslateY },
@@ -216,9 +225,9 @@ function NavItem({
               },
             ]}
           >
-            <View style={[styles.ballGlow, isActive && styles.ballGlowActive]} />
-            <View style={styles.ballFrame}>
-              <Image source={WORLD_CUP_BALL_SOURCE} style={styles.ballImage} resizeMode="contain" />
+            <View style={[styles.ballGlow, compact && styles.ballGlowCompact, isActive && styles.ballGlowActive]} />
+            <View style={[styles.ballFrame, compact && styles.ballFrameCompact]}>
+              <Image source={WORLD_CUP_BALL_SOURCE} style={[styles.ballImage, compact && styles.ballImageCompact]} resizeMode="contain" />
               <Animated.View
                 pointerEvents="none"
                 style={[styles.ballShine, { transform: [{ translateX: shineTranslate }, { rotateZ: '18deg' }] }]}
@@ -226,7 +235,7 @@ function NavItem({
             </View>
           </Animated.View>
         ) : (
-          <View style={[styles.iconPlate, isActive && styles.iconPlateActive]}>
+          <View style={[styles.iconPlate, compact && styles.iconPlateCompact, isActive && styles.iconPlateActive]}>
             <Icon
               name={isActive ? icons.active : icons.base}
               size={NAV.iconSize}
@@ -236,13 +245,14 @@ function NavItem({
         )}
 
         {isCenter ? (
-          <Text style={styles.centerLabel} numberOfLines={1}>
+          <Text style={[styles.centerLabel, compact && styles.centerLabelCompact]} numberOfLines={1}>
             {label}
           </Text>
         ) : (
           <Text
             style={[
               styles.label,
+              compact && styles.labelCompact,
               { color: isActive ? NAV.iconActive : NAV.iconInactive, opacity: isActive ? 1 : 0.62 },
             ]}
             numberOfLines={1}
@@ -270,8 +280,13 @@ function useUnreadBadge(): number {
 export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps): React.JSX.Element | null {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const unreadBadge = useUnreadBadge();
+  const compactWeb = Platform.OS === 'web' && width < 768;
+  const sideInset = width < 360 ? 10 : compactWeb ? 14 : 18;
+  const navPaddingHorizontal = width < 360 ? 6 : compactWeb ? 8 : NAV.paddingHorizontal;
+  const navBottomOffset = compactWeb ? 6 : NAV.bottomOffset;
 
   // Hide the floating pill while the keyboard is up so it never overlaps inputs.
   useEffect(() => {
@@ -288,8 +303,19 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
   if (keyboardOpen) return null;
 
   return (
-    <View style={[styles.container, { bottom: insets.bottom + NAV.bottomOffset, pointerEvents: 'box-none' }]}>
-      <View style={styles.nav}>
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.container,
+        Platform.OS === 'web' && styles.containerWeb,
+        {
+          left: sideInset,
+          right: sideInset,
+          bottom: insets.bottom + navBottomOffset,
+        },
+      ]}
+    >
+      <View style={[styles.nav, compactWeb && styles.navCompact, { paddingHorizontal: navPaddingHorizontal }]}>
         {state.routes.map((route, index) => {
           const options = descriptors[route.key]?.options;
           const isActive = state.index === index;
@@ -324,6 +350,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
               badgeCount={route.name === 'profile' ? unreadBadge : undefined}
               isCenter={isCenter}
               pulse={isCenter}
+              compact={compactWeb}
             />
           );
         })}
@@ -335,10 +362,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 18,
-    right: 18,
     alignItems: 'center',
     zIndex: 100,
+  },
+  containerWeb: {
+    position: 'fixed' as 'absolute',
   },
   nav: {
     flexDirection: 'row',
@@ -365,6 +393,10 @@ const styles = StyleSheet.create({
       android: { elevation: 20 },
     }),
   },
+  navCompact: {
+    borderRadius: 18,
+    paddingVertical: 6,
+  },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -374,10 +406,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 3,
   },
+  navItemCompact: {
+    height: 46,
+  },
   navItemCenter: {
     height: 64,
     marginTop: -24,
     flex: 1.18,
+  },
+  navItemCenterCompact: {
+    height: 54,
+    marginTop: -14,
   },
   navItemInner: {
     alignItems: 'center',
@@ -396,6 +435,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconPlateCompact: {
+    width: 32,
+    height: 26,
+  },
   iconPlateActive: {
     backgroundColor: 'rgba(201,223,106,0.1)',
   },
@@ -407,6 +450,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0,
   },
+  labelCompact: {
+    fontSize: 8,
+    lineHeight: 9,
+  },
   centerLabel: {
     color: Colors.accent.lime,
     fontSize: 8.5,
@@ -415,12 +462,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textTransform: 'uppercase',
   },
+  centerLabelCompact: {
+    fontSize: 8,
+    lineHeight: 9,
+  },
   ballFabWrap: {
     width: 58,
     height: 54,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
+  },
+  ballFabWrapCompact: {
+    width: 48,
+    height: 44,
   },
   ballGlow: {
     position: 'absolute',
@@ -442,6 +497,13 @@ const styles = StyleSheet.create({
       },
       android: { elevation: 10 },
     }),
+  },
+  ballGlowCompact: {
+    top: 2,
+    left: 5,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
   },
   ballGlowActive: {
     backgroundColor: 'transparent',
@@ -465,9 +527,18 @@ const styles = StyleSheet.create({
       android: { elevation: 6 },
     }),
   },
+  ballFrameCompact: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
   ballImage: {
     width: 46,
     height: 46,
+  },
+  ballImageCompact: {
+    width: 38,
+    height: 38,
   },
   ballShine: {
     position: 'absolute',

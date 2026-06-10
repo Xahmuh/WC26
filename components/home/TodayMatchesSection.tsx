@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { Card, MatchCard, SectionHeader, SkeletonBox } from '@/components/ui';
@@ -11,15 +10,35 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatShortMatchTime, isTodayLocal } from '@/components/home/homeUtils';
 import { Icon } from '@/components/ui/Icon';
 
+const CARD_GAP = 10;
+const MOBILE_VISIBLE_CARD_COUNT = 1.75;
+
 export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean }): React.JSX.Element {
   const router = useRouter();
   const profile = useAuthStore((s) => s.profile);
   const matchesQuery = useMatches();
   const responsive = useResponsive();
+  const [carouselWidth, setCarouselWidth] = useState(0);
   const refetchMatches = matchesQuery.refetch;
   const openTodayMatches = useCallback(() => {
     router.push('/(tabs)/matches?filter=TODAY' as never);
   }, [router]);
+  const useMobilePager = responsive.isMobile;
+  const fallbackPagerWidth = Math.max(0, responsive.width - 56);
+  const mobileViewportWidth = carouselWidth || fallbackPagerWidth;
+  const mobileCardWidth = Math.max(
+    164,
+    Math.floor((mobileViewportWidth - CARD_GAP) / MOBILE_VISIBLE_CARD_COUNT)
+  );
+  const cardWidth = useMobilePager
+    ? mobileCardWidth
+    : responsive.isLarge
+      ? 176
+      : 168;
+  const handleCarouselLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = Math.floor(event.nativeEvent.layout.width);
+    setCarouselWidth((currentWidth) => (Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth));
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -34,15 +53,25 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
   }, [matchesQuery.data]);
 
   const loading = isLoading || matchesQuery.isLoading;
-  const cardWidth = responsive.isSmall ? 160 : responsive.isLarge ? 176 : 168;
 
   if (loading) {
     return (
       <Card style={styles.card} padding={14}>
         <SectionHeader title="TODAY'S MATCHES" onViewAll={openTodayMatches} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          {[0, 1, 2].map((index) => (
-            <View key={index} style={[styles.loadingCard, { width: cardWidth + 48 }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          disableIntervalMomentum={useMobilePager}
+          snapToInterval={useMobilePager ? cardWidth + CARD_GAP : undefined}
+          onLayout={handleCarouselLayout}
+          contentContainerStyle={[
+            styles.scrollContent,
+            useMobilePager && styles.scrollContentPager,
+          ]}
+        >
+          {Array.from({ length: useMobilePager ? 2 : 3 }).map((_, index) => (
+            <View key={index} style={[styles.loadingCard, { width: cardWidth }]}>
               <SkeletonBox width="100%" height={18} />
               <SkeletonBox width="70%" height={12} style={{ marginTop: 12 }} />
               <SkeletonBox width="55%" height={10} style={{ marginTop: 18 }} />
@@ -75,7 +104,18 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
         onViewAll={openTodayMatches}
       />
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        disableIntervalMomentum={useMobilePager}
+        snapToInterval={useMobilePager ? cardWidth + CARD_GAP : undefined}
+        onLayout={handleCarouselLayout}
+        contentContainerStyle={[
+          styles.scrollContent,
+          useMobilePager && styles.scrollContentPager,
+        ]}
+      >
         {rows.map((match) => {
           const goldenMatch = match as typeof match & {
             is_golden?: boolean;
@@ -113,8 +153,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.border.default,
   },
   scrollContent: {
-    gap: 10,
+    gap: CARD_GAP,
     paddingRight: 8,
+  },
+  scrollContentPager: {
+    paddingRight: 0,
   },
   loadingCard: {
     width: 216,

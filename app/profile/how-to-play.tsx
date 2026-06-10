@@ -4,11 +4,14 @@ import {
   Easing,
   type LayoutChangeEvent,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  type StyleProp,
   Text,
   View,
+  type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
@@ -29,6 +32,7 @@ type GuideTab = 'basics' | 'points' | 'cards' | 'stages';
 const WORLD_CUP_BALL_SOURCE = require('@/assets/worldcup_ball_trionda_fab.png');
 const GUIDE_GRID_GAP = 12;
 const COMPACT_WIDTH = 340;
+const GUIDE_NAV_COMPACT_WIDTH = 430;
 const TABLET_WIDTH = 720;
 
 const TABS: Array<{ key: GuideTab; label: string; icon: IconName }> = [
@@ -64,12 +68,67 @@ function chunkItems<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-function useGuideColumns(maxColumns = 2): number {
+function useMeasuredColumns(maxColumns = 2): number {
   const { width } = useResponsive();
 
   if (width < COMPACT_WIDTH) return 1;
   if (maxColumns >= 3 && width >= TABLET_WIDTH) return 3;
   return Math.min(maxColumns, 2);
+}
+
+function ResponsiveGuideGrid<T>({
+  items,
+  maxColumns = 2,
+  minItemWidth = 156,
+  style,
+  keyExtractor,
+  renderItem,
+}: {
+  items: T[];
+  maxColumns?: number;
+  minItemWidth?: number;
+  style?: StyleProp<ViewStyle>;
+  keyExtractor: (item: T) => string;
+  renderItem: (item: T, info: { compact: boolean; columns: number; width: number }) => React.JSX.Element;
+}): React.JSX.Element {
+  const baseColumns = useMeasuredColumns(maxColumns);
+  const [gridWidth, setGridWidth] = useState(0);
+  const columns = useMemo(() => {
+    if (gridWidth <= 0) return baseColumns;
+
+    const columnsByWidth = Math.floor((gridWidth + GUIDE_GRID_GAP) / (minItemWidth + GUIDE_GRID_GAP));
+    return Math.max(1, Math.min(baseColumns, maxColumns, columnsByWidth || 1));
+  }, [baseColumns, gridWidth, maxColumns, minItemWidth]);
+  const estimatedCellWidth =
+    gridWidth > 0
+      ? Math.floor((gridWidth - GUIDE_GRID_GAP * (columns - 1)) / columns)
+      : 0;
+  const rows = useMemo(() => chunkItems(items, columns), [columns, items]);
+
+  return (
+    <View
+      style={[styles.responsiveGrid, style]}
+      onLayout={(event) => {
+        const nextWidth = Math.floor(event.nativeEvent.layout.width);
+        setGridWidth((currentWidth) => (Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth));
+      }}
+    >
+      {rows.map((row) => (
+        <View key={row.map(keyExtractor).join('-')} style={styles.responsiveGridRow}>
+          {row.map((item) => (
+            <View key={keyExtractor(item)} style={styles.responsiveGridCell}>
+              {renderItem(item, { compact: columns === 1, columns, width: estimatedCellWidth })}
+            </View>
+          ))}
+          {columns > 1 && row.length < columns
+            ? Array.from({ length: columns - row.length }, (_, index) => (
+                <View key={`placeholder-${index}`} style={styles.responsiveGridCell} />
+              ))
+            : null}
+        </View>
+      ))}
+    </View>
+  );
 }
 
 const FEATURE_COPY: Record<
@@ -118,13 +177,13 @@ function useLoopedValue(duration: number, delay = 0): Animated.Value {
           toValue: 1,
           duration,
           easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(value, {
           toValue: 0,
           duration,
           easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ])
     );
@@ -141,9 +200,11 @@ function formatStage(stage: MatchStage): string {
 }
 
 function AnimatedGuideHero(): React.JSX.Element {
+  const { width } = useResponsive();
   const ball = useLoopedValue(1700);
   const card = useLoopedValue(2200, 150);
   const glow = useLoopedValue(1900, 250);
+  const compactHero = width < 390;
 
   const ballTranslate = ball.interpolate({
     inputRange: [0, 1],
@@ -167,7 +228,7 @@ function AnimatedGuideHero(): React.JSX.Element {
   });
 
   return (
-    <View style={styles.hero}>
+    <View style={[styles.hero, compactHero && styles.heroCompact]}>
       <LinearGradient
         colors={['rgba(215,217,94,0.18)', 'rgba(34,34,34,0.96)', 'rgba(0,0,0,0.98)']}
         start={{ x: 0, y: 0 }}
@@ -192,10 +253,12 @@ function AnimatedGuideHero(): React.JSX.Element {
         </Animated.View>
       </View>
 
-      <View style={styles.heroContent}>
+      <View style={[styles.heroContent, compactHero && styles.heroContentCompact]}>
         <View style={styles.heroCopy}>
           <Text style={styles.eyebrow}>How to play</Text>
-          <Text style={styles.heroTitle}>World Cup predictions, cards, and points</Text>
+          <Text style={[styles.heroTitle, compactHero && styles.heroTitleCompact]}>
+            World Cup predictions, cards, and points
+          </Text>
           <Text style={styles.heroBody}>
             A quick animated guide for every core feature in the app.
           </Text>
@@ -204,13 +267,18 @@ function AnimatedGuideHero(): React.JSX.Element {
         <Animated.View
           style={[
             styles.heroBallBadge,
+            compactHero && styles.heroBallBadgeCompact,
             {
               transform: [{ translateY: cardTranslate }, { rotateZ: cardRotate }],
             },
           ]}
         >
-          <View style={styles.heroBallBadgeGlow} />
-          <Image source={WORLD_CUP_BALL_SOURCE} style={styles.heroBallImage} resizeMode="contain" />
+          <View style={[styles.heroBallBadgeGlow, compactHero && styles.heroBallBadgeGlowCompact]} />
+          <Image
+            source={WORLD_CUP_BALL_SOURCE}
+            style={[styles.heroBallImage, compactHero && styles.heroBallImageCompact]}
+            resizeMode="contain"
+          />
         </Animated.View>
       </View>
     </View>
@@ -224,64 +292,76 @@ function GuideNavCards({
   activeTab: GuideTab;
   onSelect: (tab: GuideTab) => void;
 }): React.JSX.Element {
-  const columns = useGuideColumns();
-  const rows = useMemo(() => chunkItems(TABS, columns), [columns]);
+  const [hoveredTab, setHoveredTab] = useState<GuideTab | null>(null);
+  const hoverProps =
+    Platform.OS === 'web'
+      ? {
+          onHoverOut: () => setHoveredTab(null),
+        }
+      : {};
 
   return (
-    <View style={styles.guideNavGrid}>
-      {rows.map((row, rowIndex) => (
-        <View
-          key={row.map((tab) => tab.key).join('-')}
-          style={[styles.gridRow, rowIndex < rows.length - 1 && styles.gridRowSpaced]}
-        >
-          {row.map((tab) => {
-            const active = activeTab === tab.key;
-            const copy = FEATURE_COPY[tab.key];
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => onSelect(tab.key)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                style={({ pressed }) => [
-                  styles.guideNavCard,
-                  active && styles.guideNavCardActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <View style={styles.guideCardContent}>
-                  <View style={[styles.guideNavIcon, active && styles.guideNavIconActive]}>
-                    <Icon
-                      name={tab.icon}
-                      size={18}
-                      color={active ? Theme.colors.accentDark : Theme.colors.accent}
-                      fixed
-                    />
-                  </View>
-                  <Text
-                    numberOfLines={2}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.78}
-                    style={[styles.guideNavLabel, active && styles.guideNavLabelActive]}
-                  >
-                    {tab.label}
-                  </Text>
-                  <Text
-                    numberOfLines={3}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.86}
-                    style={[styles.guideNavTitle, active && styles.guideNavTitleActive]}
-                  >
-                    {copy.title}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-          {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
-        </View>
-      ))}
-    </View>
+    <ResponsiveGuideGrid
+      items={TABS}
+      maxColumns={2}
+      minItemWidth={GUIDE_NAV_COMPACT_WIDTH / 2}
+      style={styles.guideNavGrid}
+      keyExtractor={(tab) => tab.key}
+      renderItem={(tab, { compact }) => {
+        const active = activeTab === tab.key;
+        const copy = FEATURE_COPY[tab.key];
+        const hovered = hoveredTab === tab.key;
+
+        return (
+          <Pressable
+            onPress={() => onSelect(tab.key)}
+            {...hoverProps}
+            onHoverIn={Platform.OS === 'web' ? () => setHoveredTab(tab.key) : undefined}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={({ pressed }) => [
+              styles.guideNavCard,
+              compact && styles.guideNavCardCompact,
+              active && styles.guideNavCardActive,
+              hovered && (active ? styles.guideNavCardActiveHovered : styles.guideNavCardHovered),
+              pressed && styles.pressed,
+            ]}
+          >
+            <View
+              style={[
+                styles.guideCardContent,
+                compact && styles.guideCardContentCompact,
+              ]}
+            >
+              <View style={[styles.guideNavIcon, active && styles.guideNavIconActive]}>
+                <Icon
+                  name={tab.icon}
+                  size={18}
+                  color={active ? Theme.colors.accentDark : Theme.colors.accent}
+                  fixed
+                />
+              </View>
+              <View style={[styles.guideNavText, !compact && styles.guideNavTextStack]}>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.guideNavLabel, active && styles.guideNavLabelActive]}
+                >
+                  {tab.label}
+                </Text>
+                <Text
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.84}
+                  style={[styles.guideNavTitle, active && styles.guideNavTitleActive]}
+                >
+                  {copy.title}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+        );
+      }}
+    />
   );
 }
 
@@ -343,7 +423,6 @@ function PointsBreakdown({
   exactBonusPoints: number | null;
   multiplierPreview: number;
 }): React.JSX.Element {
-  const columns = useGuideColumns();
   const hasScoringRules = winnerPoints !== null && exactBonusPoints !== null;
   const totalBase = hasScoringRules ? winnerPoints + exactBonusPoints : null;
   const previewTotal = totalBase !== null ? totalBase * multiplierPreview : null;
@@ -356,29 +435,24 @@ function PointsBreakdown({
     ],
     [exactBonusPoints, multiplierPreview, previewTotal, totalBase, winnerPoints]
   );
-  const pointRows = useMemo(() => chunkItems(pointTiles, columns), [columns, pointTiles]);
 
   return (
     <View style={styles.sectionBlock}>
       <Text style={styles.sectionTitle}>How points are calculated</Text>
-      <View style={styles.pointsGrid}>
-        {pointRows.map((row, rowIndex) => (
-          <View
-            key={row.map((tile) => tile.label).join('-')}
-            style={[styles.gridRow, rowIndex < pointRows.length - 1 && styles.gridRowSpaced]}
-          >
-            {row.map((tile) => (
-              <PointTile
-                key={tile.label}
-                label={tile.label}
-                value={tile.value}
-                icon={tile.icon}
-              />
-            ))}
-            {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
-          </View>
-        ))}
-      </View>
+      <ResponsiveGuideGrid
+        items={pointTiles}
+        maxColumns={2}
+        minItemWidth={150}
+        style={styles.pointsGrid}
+        keyExtractor={(tile) => tile.label}
+        renderItem={(tile) => (
+          <PointTile
+            label={tile.label}
+            value={tile.value}
+            icon={tile.icon}
+          />
+        )}
+      />
       <Text style={styles.noteText}>
         Outcome means correct winner, draw, or the correct qualifying team in knockout matches.
         Exact score is based on the predicted match scoreline.
@@ -494,9 +568,6 @@ function StageGuide({
   rows: Array<{ stage: MatchStage; expectedMatches: number; multiplier: number }>;
   compact: boolean;
 }): React.JSX.Element {
-  const columns = useGuideColumns();
-  const stageRows = useMemo(() => chunkItems(rows, columns), [columns, rows]);
-
   return (
     <View style={styles.sectionBlock}>
       <Text style={styles.sectionTitle}>Tournament stages</Text>
@@ -520,29 +591,26 @@ function StageGuide({
           ))}
         </View>
       ) : (
-        <View style={styles.stageGrid}>
-          {stageRows.map((row, rowIndex) => (
-            <View
-              key={row.map((stageRow) => stageRow.stage).join('-')}
-              style={[styles.gridRow, rowIndex < stageRows.length - 1 && styles.gridRowSpaced]}
-            >
-              {row.map((stageRow) => (
-                <View key={stageRow.stage} style={styles.stageTile}>
-                  <View style={styles.stageNameWrap}>
-                    <Text style={styles.stageName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                      {formatStage(stageRow.stage)}
-                    </Text>
-                    <Text style={styles.stageMeta}>{stageRow.expectedMatches} matches</Text>
-                  </View>
-                  <View style={styles.stageMultiplier}>
-                    <Text style={styles.stageMultiplierText}>X{stageRow.multiplier}</Text>
-                  </View>
-                </View>
-              ))}
-              {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
+        <ResponsiveGuideGrid
+          items={rows}
+          maxColumns={2}
+          minItemWidth={190}
+          style={styles.stageGrid}
+          keyExtractor={(stageRow) => stageRow.stage}
+          renderItem={(stageRow) => (
+            <View style={styles.stageTile}>
+              <View style={styles.stageNameWrap}>
+                <Text style={styles.stageName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                  {formatStage(stageRow.stage)}
+                </Text>
+                <Text style={styles.stageMeta}>{stageRow.expectedMatches} matches</Text>
+              </View>
+              <View style={styles.stageMultiplier}>
+                <Text style={styles.stageMultiplierText}>X{stageRow.multiplier}</Text>
+              </View>
             </View>
-          ))}
-        </View>
+          )}
+        />
       )}
     </View>
   );
@@ -582,31 +650,25 @@ const APP_FEATURES: Array<{
 
 function AppFeaturesSection(): React.JSX.Element {
   const router = useRouter();
-  const columns = useGuideColumns();
-  const rows = useMemo(() => chunkItems(APP_FEATURES, columns), [columns]);
 
   return (
     <View style={styles.sectionBlock}>
       <Text style={styles.sectionTitle}>Where everything lives</Text>
-      <View style={styles.featureGrid}>
-        {rows.map((row, rowIndex) => (
-          <View
-            key={row.map((feature) => feature.route).join('-')}
-            style={[styles.gridRow, rowIndex < rows.length - 1 && styles.gridRowSpaced]}
-          >
-            {row.map((feature) => (
-              <MiniFeature
-                key={feature.route}
-                icon={feature.icon}
-                title={feature.title}
-                body={feature.body}
-                onPress={() => router.push(feature.route as never)}
-              />
-            ))}
-            {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
-          </View>
-        ))}
-      </View>
+      <ResponsiveGuideGrid
+        items={APP_FEATURES}
+        maxColumns={2}
+        minItemWidth={180}
+        style={styles.featureGrid}
+        keyExtractor={(feature) => feature.route}
+        renderItem={(feature) => (
+          <MiniFeature
+            icon={feature.icon}
+            title={feature.title}
+            body={feature.body}
+            onPress={() => router.push(feature.route as never)}
+          />
+        )}
+      />
     </View>
   );
 }
@@ -622,22 +684,27 @@ function MiniFeature({
   body: string;
   onPress: () => void;
 }): React.JSX.Element {
+  const [hovered, setHovered] = useState(false);
+
   return (
     <Pressable
       onPress={onPress}
+      onHoverIn={Platform.OS === 'web' ? () => setHovered(true) : undefined}
+      onHoverOut={Platform.OS === 'web' ? () => setHovered(false) : undefined}
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.miniFeature,
+        hovered && styles.miniFeatureHovered,
         pressed && styles.pressed,
       ]}
     >
       <View style={styles.guideCardContent}>
-        <View style={styles.miniFeatureIcon}>
+        <View style={[styles.miniFeatureIcon, hovered && styles.miniFeatureIconHovered]}>
           <Icon name={icon} size={16} color={Theme.colors.accent} fixed />
         </View>
         <Text style={styles.miniFeatureTitle}>{title}</Text>
         <Text style={styles.miniFeatureBody}>{body}</Text>
-        <View style={styles.miniFeatureAction}>
+        <View style={[styles.miniFeatureAction, hovered && styles.miniFeatureActionHovered]}>
           <Icon name="forward" size={14} color={Theme.colors.accent} fixed />
         </View>
       </View>
@@ -761,6 +828,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.bgSurface2,
     ...Theme.shadows.md,
   },
+  heroCompact: {
+    minHeight: 232,
+    borderRadius: 22,
+  },
   pitch: {
     position: 'absolute',
     top: 16,
@@ -812,6 +883,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 14,
   },
+  heroContentCompact: {
+    paddingHorizontal: 16,
+    paddingBottom: 18,
+    gap: 10,
+  },
   heroCopy: {
     flex: 1,
     minWidth: 0,
@@ -832,6 +908,10 @@ const styles = StyleSheet.create({
     lineHeight: 31,
     letterSpacing: 0,
   },
+  heroTitleCompact: {
+    fontSize: 22,
+    lineHeight: 27,
+  },
   heroBody: {
     marginTop: 8,
     color: Theme.colors.textSecondary,
@@ -848,6 +928,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'visible',
   },
+  heroBallBadgeCompact: {
+    width: 82,
+    height: 82,
+  },
   heroBallBadgeGlow: {
     position: 'absolute',
     width: 88,
@@ -857,49 +941,80 @@ const styles = StyleSheet.create({
     borderColor: Theme.colors.accent,
     backgroundColor: 'rgba(215,217,94,0.14)',
   },
+  heroBallBadgeGlowCompact: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+  },
   heroBallImage: {
     width: 92,
     height: 92,
   },
-  guideNavGrid: {
-    width: '100%',
+  heroBallImageCompact: {
+    width: 74,
+    height: 74,
   },
-  gridRow: {
+  responsiveGrid: {
+    width: '100%',
+    alignSelf: 'stretch',
+    gap: GUIDE_GRID_GAP,
+  },
+  responsiveGridRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: GUIDE_GRID_GAP,
   },
-  gridRowSpaced: {
-    marginBottom: GUIDE_GRID_GAP,
-  },
-  gridCell: {
-    flex: 1,
-    minWidth: 0,
-  },
-  guideNavCard: {
-    position: 'relative',
-    minHeight: 128,
+  responsiveGridCell: {
     flex: 1,
     minWidth: 0,
     alignSelf: 'stretch',
-    flexShrink: 0,
+  },
+  guideNavGrid: {
+    width: '100%',
+  },
+  guideNavCard: {
+    position: 'relative',
+    width: '100%',
+    minHeight: 128,
+    minWidth: 0,
     overflow: 'hidden',
-    justifyContent: 'space-between',
     padding: 14,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.colors.bgBorder,
     backgroundColor: Theme.colors.bgSurface2,
   },
+  guideNavCardCompact: {
+    minHeight: 82,
+    padding: 12,
+    borderRadius: 14,
+  },
   guideNavCardActive: {
     borderColor: Theme.colors.accent,
     backgroundColor: Theme.colors.accent,
     ...Theme.shadows.accentGlow,
   },
+  guideNavCardHovered: {
+    borderColor: Theme.colors.accent,
+    backgroundColor: 'rgba(215,217,94,0.16)',
+    transform: [{ translateY: -2 }],
+    ...Theme.shadows.accentGlow,
+  },
+  guideNavCardActiveHovered: {
+    borderColor: Theme.colors.textPrimary,
+    backgroundColor: '#e4e765',
+    transform: [{ translateY: -2 }],
+    ...Theme.shadows.accentGlow,
+  },
   guideCardContent: {
     flex: 1,
     zIndex: 1,
+  },
+  guideCardContentCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   guideNavIcon: {
     width: 34,
@@ -912,8 +1027,14 @@ const styles = StyleSheet.create({
   guideNavIconActive: {
     backgroundColor: 'rgba(0,0,0,0.14)',
   },
-  guideNavLabel: {
+  guideNavText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  guideNavTextStack: {
     marginTop: 10,
+  },
+  guideNavLabel: {
     color: Theme.colors.accent,
     fontSize: 11,
     fontWeight: '900',
@@ -929,7 +1050,7 @@ const styles = StyleSheet.create({
     color: Theme.colors.textPrimary,
     fontSize: 13,
     fontWeight: '900',
-    lineHeight: 16,
+    lineHeight: 17,
     letterSpacing: 0,
   },
   guideNavTitleActive: {
@@ -1080,10 +1201,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   pointTile: {
+    width: '100%',
     minHeight: 120,
-    flex: 1,
     minWidth: 0,
-    flexShrink: 0,
     justifyContent: 'space-between',
     padding: 14,
     borderRadius: 16,
@@ -1208,10 +1328,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.bgSurface2,
   },
   stageTile: {
+    width: '100%',
     minHeight: 84,
-    flex: 1,
     minWidth: 0,
-    flexShrink: 0,
     justifyContent: 'space-between',
     gap: 10,
     padding: 12,
@@ -1260,11 +1379,9 @@ const styles = StyleSheet.create({
   },
   miniFeature: {
     position: 'relative',
+    width: '100%',
     minHeight: 142,
-    flex: 1,
     minWidth: 0,
-    alignSelf: 'stretch',
-    flexShrink: 0,
     overflow: 'hidden',
     padding: 13,
     paddingBottom: 34,
@@ -1274,6 +1391,12 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.bgSurface2,
     ...Theme.shadows.sm,
   },
+  miniFeatureHovered: {
+    borderColor: Theme.colors.accent,
+    backgroundColor: 'rgba(215,217,94,0.13)',
+    transform: [{ translateY: -2 }],
+    ...Theme.shadows.accentGlow,
+  },
   miniFeatureIcon: {
     width: 32,
     height: 32,
@@ -1281,6 +1404,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 16,
     backgroundColor: Theme.colors.accentDim,
+  },
+  miniFeatureIconHovered: {
+    backgroundColor: 'rgba(215,217,94,0.24)',
   },
   miniFeatureTitle: {
     marginTop: 10,
@@ -1308,5 +1434,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 13,
     backgroundColor: Theme.colors.accentDim,
+  },
+  miniFeatureActionHovered: {
+    backgroundColor: 'rgba(215,217,94,0.24)',
+    transform: [{ translateX: 2 }],
   },
 });
