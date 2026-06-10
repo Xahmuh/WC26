@@ -708,7 +708,9 @@ const styles = StyleSheet.create({
   },
   statTile: {
     width: '100%',
-    height: 116,
+    // Min height only: content (icon row + value line) is ~128px tall, a fixed
+    // 116px clipped the value's descenders at the bottom.
+    minHeight: 116,
     overflow: 'hidden',
     borderRadius: 18,
     borderWidth: 1,

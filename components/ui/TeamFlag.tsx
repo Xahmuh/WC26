@@ -3,7 +3,6 @@
 
 import { useState } from 'react';
 import { Image, Text, View, Platform } from 'react-native';
-import { SvgUri } from 'react-native-svg';
 
 import Theme from '@/constants/theme/design-system';
 import { getFlagUrl } from '@/constants';
@@ -35,6 +34,8 @@ export function TeamFlag({
   const height = dim;
   const radius = 6;
   const sourceUrl = team?.flag_url ?? (countryCode ? getFlagUrl(countryCode) : null);
+  const nativeSvgFallbackUrl =
+    team?.code ? getFlagUrl(team.code) : countryCode ? getFlagUrl(countryCode) : null;
   const label = team?.name ?? countryCode ?? 'team';
 
   const fallback = (
@@ -83,27 +84,21 @@ export function TeamFlag({
       );
     }
 
+    if (!nativeSvgFallbackUrl) return fallback;
+
     return (
-      <View
+      <Image
         accessibilityLabel={`${label} flag`}
+        source={{ uri: nativeSvgFallbackUrl }}
         style={{
           width,
           height,
           borderRadius: radius,
-          overflow: 'hidden',
           backgroundColor: Theme.colors.bgSurface3,
-          alignItems: 'center',
-          justifyContent: 'center',
         }}
-      >
-        <SvgUri
-          uri={sourceUrl}
-          width="100%"
-          height="100%"
-          preserveAspectRatio="xMidYMid slice"
-          onError={() => setFailed(true)}
-        />
-      </View>
+        resizeMode="cover"
+        onError={() => setFailed(true)}
+      />
     );
   }
 

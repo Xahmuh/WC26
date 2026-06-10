@@ -25,9 +25,16 @@ export interface AppNotification {
 }
 
 export async function fetchNotifications(limit = 50): Promise<AppNotification[]> {
+  // RLS already scopes rows to the signed-in user; filtering here too is
+  // defense-in-depth so a policy regression can never leak other users' rows.
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user.id;
+  if (!userId) return [];
+
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
 

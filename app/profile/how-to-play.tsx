@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  type DimensionValue,
   Easing,
   type LayoutChangeEvent,
   Image,
@@ -10,7 +9,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
@@ -22,6 +20,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import Theme from '@/constants/theme/design-system';
 import { useScoringRules, useStageCardSettings, useStageMultipliers } from '@/hooks/useAdmin';
 import { STAGE_LABELS } from '@/lib/constants';
+import { useResponsive } from '@/lib/responsive';
 import { DEFAULT_STAGE_MATCH_COUNTS, STAGE_ORDER } from '@/lib/stages';
 import type { MatchStage } from '@/types';
 
@@ -29,7 +28,8 @@ type GuideTab = 'basics' | 'points' | 'cards' | 'stages';
 
 const WORLD_CUP_BALL_SOURCE = require('@/assets/worldcup_ball_trionda_fab.png');
 const GUIDE_GRID_GAP = 12;
-const TWO_COLUMN_MIN_WIDTH = 560;
+const COMPACT_WIDTH = 340;
+const TABLET_WIDTH = 720;
 
 const TABS: Array<{ key: GuideTab; label: string; icon: IconName }> = [
   { key: 'basics', label: 'Matches', icon: 'football' },
@@ -64,30 +64,12 @@ function chunkItems<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-function getCardWidth(columns: number, cellWidth: number): DimensionValue {
-  return columns === 1 ? '100%' : cellWidth;
-}
+function useGuideColumns(maxColumns = 2): number {
+  const { width } = useResponsive();
 
-function useTwoColumnCells(): {
-  cellWidth: number;
-  columns: number;
-  handleGridLayout: (event: LayoutChangeEvent) => void;
-} {
-  const { width } = useWindowDimensions();
-  const [measuredGridWidth, setMeasuredGridWidth] = useState(0);
-  const fallbackGridWidth = Math.max(0, width - 40);
-  const gridWidth = measuredGridWidth || fallbackGridWidth;
-  const columns = gridWidth < TWO_COLUMN_MIN_WIDTH ? 1 : 2;
-  const cellWidth = Math.max(0, Math.floor((gridWidth - GUIDE_GRID_GAP * (columns - 1)) / columns));
-
-  const handleGridLayout = (event: LayoutChangeEvent): void => {
-    const nextWidth = Math.floor(event.nativeEvent.layout.width);
-    setMeasuredGridWidth((currentWidth) =>
-      Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth
-    );
-  };
-
-  return { cellWidth, columns, handleGridLayout };
+  if (width < COMPACT_WIDTH) return 1;
+  if (maxColumns >= 3 && width >= TABLET_WIDTH) return 3;
+  return Math.min(maxColumns, 2);
 }
 
 const FEATURE_COPY: Record<
@@ -242,16 +224,15 @@ function GuideNavCards({
   activeTab: GuideTab;
   onSelect: (tab: GuideTab) => void;
 }): React.JSX.Element {
-  const { cellWidth, columns, handleGridLayout } = useTwoColumnCells();
+  const columns = useGuideColumns();
   const rows = useMemo(() => chunkItems(TABS, columns), [columns]);
-  const cardWidth = getCardWidth(columns, cellWidth);
 
   return (
-    <View style={styles.guideNavGrid} onLayout={handleGridLayout}>
+    <View style={styles.guideNavGrid}>
       {rows.map((row, rowIndex) => (
         <View
           key={row.map((tab) => tab.key).join('-')}
-          style={[styles.twoColumnRow, rowIndex < rows.length - 1 && styles.twoColumnRowSpaced]}
+          style={[styles.gridRow, rowIndex < rows.length - 1 && styles.gridRowSpaced]}
         >
           {row.map((tab) => {
             const active = activeTab === tab.key;
@@ -264,31 +245,40 @@ function GuideNavCards({
                 accessibilityState={{ selected: active }}
                 style={({ pressed }) => [
                   styles.guideNavCard,
-                  { width: cardWidth },
                   active && styles.guideNavCardActive,
                   pressed && styles.pressed,
                 ]}
               >
                 <View style={styles.guideCardContent}>
-                  <View style={styles.guideNavIcon}>
-                    <Icon name={tab.icon} size={18} color={Theme.colors.accent} fixed />
+                  <View style={[styles.guideNavIcon, active && styles.guideNavIconActive]}>
+                    <Icon
+                      name={tab.icon}
+                      size={18}
+                      color={active ? Theme.colors.accentDark : Theme.colors.accent}
+                      fixed
+                    />
                   </View>
                   <Text
-                    numberOfLines={1}
+                    numberOfLines={2}
                     adjustsFontSizeToFit
                     minimumFontScale={0.78}
-                    style={styles.guideNavLabel}
+                    style={[styles.guideNavLabel, active && styles.guideNavLabelActive]}
                   >
                     {tab.label}
                   </Text>
-                  <Text numberOfLines={2} style={styles.guideNavTitle}>
+                  <Text
+                    numberOfLines={3}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.86}
+                    style={[styles.guideNavTitle, active && styles.guideNavTitleActive]}
+                  >
                     {copy.title}
                   </Text>
                 </View>
               </Pressable>
             );
           })}
-          {columns > 1 && row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+          {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
         </View>
       ))}
     </View>
@@ -311,7 +301,7 @@ function FeatureSpotlight({ activeTab }: { activeTab: GuideTab }): React.JSX.Ele
         <Text style={styles.spotlightBody}>{copy.body}</Text>
       </View>
       <Animated.View style={[styles.spotlightIcon, { transform: [{ scale }] }]}>
-        <Icon name={copy.icon} size={24} color={Theme.colors.accent} fixed />
+        <Icon name={copy.icon} size={24} color={Theme.colors.accentDark} fixed />
       </Animated.View>
     </View>
   );
@@ -353,7 +343,7 @@ function PointsBreakdown({
   exactBonusPoints: number | null;
   multiplierPreview: number;
 }): React.JSX.Element {
-  const { cellWidth, columns, handleGridLayout } = useTwoColumnCells();
+  const columns = useGuideColumns();
   const hasScoringRules = winnerPoints !== null && exactBonusPoints !== null;
   const totalBase = hasScoringRules ? winnerPoints + exactBonusPoints : null;
   const previewTotal = totalBase !== null ? totalBase * multiplierPreview : null;
@@ -367,16 +357,15 @@ function PointsBreakdown({
     [exactBonusPoints, multiplierPreview, previewTotal, totalBase, winnerPoints]
   );
   const pointRows = useMemo(() => chunkItems(pointTiles, columns), [columns, pointTiles]);
-  const pointWidth = getCardWidth(columns, cellWidth);
 
   return (
     <View style={styles.sectionBlock}>
       <Text style={styles.sectionTitle}>How points are calculated</Text>
-      <View style={styles.pointsGrid} onLayout={handleGridLayout}>
+      <View style={styles.pointsGrid}>
         {pointRows.map((row, rowIndex) => (
           <View
             key={row.map((tile) => tile.label).join('-')}
-            style={[styles.twoColumnRow, rowIndex < pointRows.length - 1 && styles.twoColumnRowSpaced]}
+            style={[styles.gridRow, rowIndex < pointRows.length - 1 && styles.gridRowSpaced]}
           >
             {row.map((tile) => (
               <PointTile
@@ -384,10 +373,9 @@ function PointsBreakdown({
                 label={tile.label}
                 value={tile.value}
                 icon={tile.icon}
-                width={pointWidth}
               />
             ))}
-            {columns > 1 && row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+            {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
           </View>
         ))}
       </View>
@@ -403,15 +391,13 @@ function PointTile({
   label,
   value,
   icon,
-  width,
 }: {
   label: string;
   value: string;
   icon: IconName;
-  width: DimensionValue;
 }): React.JSX.Element {
   return (
-    <View style={[styles.pointTile, { width }]}>
+    <View style={styles.pointTile}>
       <View style={styles.pointIcon}>
         <Icon name={icon} size={17} color={Theme.colors.accent} fixed />
       </View>
@@ -508,8 +494,8 @@ function StageGuide({
   rows: Array<{ stage: MatchStage; expectedMatches: number; multiplier: number }>;
   compact: boolean;
 }): React.JSX.Element {
-  const { cellWidth, handleGridLayout } = useTwoColumnCells();
-  const stageRows = useMemo(() => chunkItems(rows, 2), [rows]);
+  const columns = useGuideColumns();
+  const stageRows = useMemo(() => chunkItems(rows, columns), [columns, rows]);
 
   return (
     <View style={styles.sectionBlock}>
@@ -534,14 +520,14 @@ function StageGuide({
           ))}
         </View>
       ) : (
-        <View style={styles.stageGrid} onLayout={handleGridLayout}>
+        <View style={styles.stageGrid}>
           {stageRows.map((row, rowIndex) => (
             <View
               key={row.map((stageRow) => stageRow.stage).join('-')}
-              style={[styles.twoColumnRow, rowIndex < stageRows.length - 1 && styles.twoColumnRowSpaced]}
+              style={[styles.gridRow, rowIndex < stageRows.length - 1 && styles.gridRowSpaced]}
             >
               {row.map((stageRow) => (
-                <View key={stageRow.stage} style={[styles.stageTile, { width: cellWidth }]}>
+                <View key={stageRow.stage} style={styles.stageTile}>
                   <View style={styles.stageNameWrap}>
                     <Text style={styles.stageName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                       {formatStage(stageRow.stage)}
@@ -553,7 +539,7 @@ function StageGuide({
                   </View>
                 </View>
               ))}
-              {row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+              {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
             </View>
           ))}
         </View>
@@ -596,18 +582,17 @@ const APP_FEATURES: Array<{
 
 function AppFeaturesSection(): React.JSX.Element {
   const router = useRouter();
-  const { cellWidth, columns, handleGridLayout } = useTwoColumnCells();
+  const columns = useGuideColumns();
   const rows = useMemo(() => chunkItems(APP_FEATURES, columns), [columns]);
-  const cardWidth = getCardWidth(columns, cellWidth);
 
   return (
     <View style={styles.sectionBlock}>
       <Text style={styles.sectionTitle}>Where everything lives</Text>
-      <View style={styles.featureGrid} onLayout={handleGridLayout}>
+      <View style={styles.featureGrid}>
         {rows.map((row, rowIndex) => (
           <View
             key={row.map((feature) => feature.route).join('-')}
-            style={[styles.twoColumnRow, rowIndex < rows.length - 1 && styles.twoColumnRowSpaced]}
+            style={[styles.gridRow, rowIndex < rows.length - 1 && styles.gridRowSpaced]}
           >
             {row.map((feature) => (
               <MiniFeature
@@ -615,11 +600,10 @@ function AppFeaturesSection(): React.JSX.Element {
                 icon={feature.icon}
                 title={feature.title}
                 body={feature.body}
-                width={cardWidth}
                 onPress={() => router.push(feature.route as never)}
               />
             ))}
-            {columns > 1 && row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+            {columns > 1 && row.length === 1 ? <View style={styles.gridCell} /> : null}
           </View>
         ))}
       </View>
@@ -631,13 +615,11 @@ function MiniFeature({
   icon,
   title,
   body,
-  width,
   onPress,
 }: {
   icon: IconName;
   title: string;
   body: string;
-  width: DimensionValue;
   onPress: () => void;
 }): React.JSX.Element {
   return (
@@ -646,7 +628,6 @@ function MiniFeature({
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.miniFeature,
-        { width },
         pressed && styles.pressed,
       ]}
     >
@@ -665,7 +646,7 @@ function MiniFeature({
 }
 
 export default function HowToPlayScreen(): React.JSX.Element {
-  const { width } = useWindowDimensions();
+  const { width, isSmall, isTablet } = useResponsive();
   const [activeTab, setActiveTab] = useState<GuideTab>('basics');
   const scrollRef = useRef<ScrollView>(null);
   const sectionYRef = useRef<Partial<Record<GuideTab, number>>>({});
@@ -693,7 +674,7 @@ export default function HowToPlayScreen(): React.JSX.Element {
     [expectedByStage, multiplierByStage]
   );
   const multiplierPreview = Math.max(2, stageRows.find((row) => row.multiplier > 1)?.multiplier ?? 2);
-  const compact = width < TWO_COLUMN_MIN_WIDTH + 40;
+  const compact = width < 560;
   const registerSection = (key: GuideTab) => (event: LayoutChangeEvent): void => {
     sectionYRef.current[key] = event.nativeEvent.layout.y;
   };
@@ -713,7 +694,7 @@ export default function HowToPlayScreen(): React.JSX.Element {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <Container nested style={styles.container}>
+        <Container nested style={[styles.container, isSmall && styles.containerSmall, isTablet && styles.containerWide]}>
           <AnimatedGuideHero />
           <GuideNavCards activeTab={activeTab} onSelect={scrollToSection} />
           <FeatureSpotlight activeTab={activeTab} />
@@ -759,25 +740,32 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 16,
-    paddingBottom: 32,
+    paddingBottom: 44,
   },
   container: {
-    paddingHorizontal: 20,
-    gap: 16,
+    paddingHorizontal: 24,
+    gap: 20,
+  },
+  containerSmall: {
+    paddingHorizontal: 18,
+  },
+  containerWide: {
+    paddingHorizontal: 28,
   },
   hero: {
-    minHeight: 226,
+    minHeight: 246,
     overflow: 'hidden',
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.colors.accentBorder,
     backgroundColor: Theme.colors.bgSurface2,
+    ...Theme.shadows.md,
   },
   pitch: {
     position: 'absolute',
-    top: 18,
-    left: 18,
-    right: 18,
+    top: 16,
+    left: 16,
+    right: 16,
     height: 86,
     alignItems: 'center',
     justifyContent: 'center',
@@ -817,8 +805,8 @@ const styles = StyleSheet.create({
   },
   heroContent: {
     flex: 1,
-    padding: 18,
-    paddingTop: 116,
+    padding: 20,
+    paddingTop: 118,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -839,9 +827,9 @@ const styles = StyleSheet.create({
   heroTitle: {
     marginTop: 5,
     color: Theme.colors.textPrimary,
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '900',
-    lineHeight: 28,
+    lineHeight: 31,
     letterSpacing: 0,
   },
   heroBody: {
@@ -876,30 +864,38 @@ const styles = StyleSheet.create({
   guideNavGrid: {
     width: '100%',
   },
-  twoColumnRow: {
+  gridRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: GUIDE_GRID_GAP,
   },
-  twoColumnRowSpaced: {
+  gridRowSpaced: {
     marginBottom: GUIDE_GRID_GAP,
+  },
+  gridCell: {
+    flex: 1,
+    minWidth: 0,
   },
   guideNavCard: {
     position: 'relative',
-    minHeight: 112,
+    minHeight: 128,
+    flex: 1,
+    minWidth: 0,
     alignSelf: 'stretch',
     flexShrink: 0,
     overflow: 'hidden',
     justifyContent: 'space-between',
-    padding: 13,
+    padding: 14,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.colors.bgBorder,
     backgroundColor: Theme.colors.bgSurface2,
   },
   guideNavCardActive: {
-    borderColor: Theme.colors.accentBorder,
+    borderColor: Theme.colors.accent,
+    backgroundColor: Theme.colors.accent,
+    ...Theme.shadows.accentGlow,
   },
   guideCardContent: {
     flex: 1,
@@ -913,6 +909,9 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: Theme.colors.accentDim,
   },
+  guideNavIconActive: {
+    backgroundColor: 'rgba(0,0,0,0.14)',
+  },
   guideNavLabel: {
     marginTop: 10,
     color: Theme.colors.accent,
@@ -922,6 +921,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textTransform: 'uppercase',
   },
+  guideNavLabelActive: {
+    color: Theme.colors.accentDark,
+  },
   guideNavTitle: {
     marginTop: 4,
     color: Theme.colors.textPrimary,
@@ -930,19 +932,23 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 0,
   },
+  guideNavTitleActive: {
+    color: Theme.colors.accentDark,
+  },
   pressed: {
     opacity: 0.78,
   },
   spotlight: {
-    minHeight: 118,
+    minHeight: 132,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    padding: 16,
+    padding: 18,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Theme.colors.bgBorder,
-    backgroundColor: Theme.colors.bgSurface2,
+    borderColor: Theme.colors.accentDark,
+    backgroundColor: Theme.colors.accent,
+    ...Theme.shadows.accentGlow,
   },
   spotlightCopy: {
     flex: 1,
@@ -950,14 +956,14 @@ const styles = StyleSheet.create({
   },
   spotlightTitle: {
     marginTop: 4,
-    color: Theme.colors.textPrimary,
+    color: Theme.colors.accentDark,
     fontSize: 18,
     fontWeight: '900',
     lineHeight: 22,
     letterSpacing: 0,
   },
   spotlightKicker: {
-    color: Theme.colors.accent,
+    color: Theme.colors.accentDark,
     fontSize: 10,
     fontWeight: '900',
     lineHeight: 12,
@@ -965,7 +971,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   spotlightBody: {
-    color: Theme.colors.textSecondary,
+    color: Theme.colors.accentDark,
     fontSize: 13,
     fontWeight: '500',
     lineHeight: 19,
@@ -979,12 +985,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 28,
     borderWidth: 1,
-    borderColor: Theme.colors.accentBorder,
-    backgroundColor: Theme.colors.accentDim,
+    borderColor: 'rgba(0,0,0,0.18)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
   sectionBlock: {
-    gap: 12,
-    paddingTop: 6,
+    gap: 14,
+    paddingTop: 4,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1028,11 +1034,12 @@ const styles = StyleSheet.create({
   stepRow: {
     flexDirection: 'row',
     gap: 12,
-    padding: 14,
+    padding: 16,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.colors.bgBorder,
     backgroundColor: Theme.colors.bgSurface2,
+    ...Theme.shadows.sm,
   },
   stepIndex: {
     width: 30,
@@ -1073,14 +1080,17 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   pointTile: {
-    minHeight: 114,
+    minHeight: 120,
+    flex: 1,
+    minWidth: 0,
     flexShrink: 0,
     justifyContent: 'space-between',
-    padding: 13,
+    padding: 14,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.colors.bgBorder,
     backgroundColor: Theme.colors.bgSurface2,
+    ...Theme.shadows.sm,
   },
   pointIcon: {
     width: 34,
@@ -1138,6 +1148,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.colors.bgBorder,
     backgroundColor: Theme.colors.bgSurface2,
+    ...Theme.shadows.sm,
   },
   infoIcon: {
     width: 34,
@@ -1198,6 +1209,8 @@ const styles = StyleSheet.create({
   },
   stageTile: {
     minHeight: 84,
+    flex: 1,
+    minWidth: 0,
     flexShrink: 0,
     justifyContent: 'space-between',
     gap: 10,
@@ -1247,7 +1260,9 @@ const styles = StyleSheet.create({
   },
   miniFeature: {
     position: 'relative',
-    minHeight: 130,
+    minHeight: 142,
+    flex: 1,
+    minWidth: 0,
     alignSelf: 'stretch',
     flexShrink: 0,
     overflow: 'hidden',
@@ -1257,6 +1272,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.colors.bgBorder,
     backgroundColor: Theme.colors.bgSurface2,
+    ...Theme.shadows.sm,
   },
   miniFeatureIcon: {
     width: 32,

@@ -208,8 +208,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
       const sessionEmail = session.user?.email ?? null;
-      const isAlwaysAdmin =
-        sessionEmail?.toLowerCase() === 'ahmedelsherbiinii@gmail.com';
 
       set({
         profile: data
@@ -217,7 +215,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               ...data,
               email: sessionEmail,
               last_login: null,
-              role: (data.role === 'admin' || isAlwaysAdmin) ? 'admin' : 'user',
+              // The owner's admin role is enforced server-side (migration 006);
+              // the client only mirrors what the database says.
+              role: data.role === 'admin' ? 'admin' : 'user',
               supported_teams: data.supported_teams as string[] | null,
             }
           : null,

@@ -15,10 +15,10 @@ import { useFocusEffect } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SkeletonBox } from '@/components/ui';
-import { Icon } from '@/components/ui/Icon';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { TabPageHeader } from '@/components/ui/TabPageHeader';
-import { Colors, Layout, Typography } from '@/constants';
+import { Colors, Shadows, Typography } from '@/constants';
 import { useScoringRules, useStageCardSettings, useStageMultipliers } from '@/hooks/useAdmin';
 import { useMatches } from '@/hooks/useMatches';
 import { useMyPoints } from '@/hooks/usePoints';
@@ -32,8 +32,15 @@ type CollectionStatus = 'locked' | 'ready' | 'used' | 'revoked';
 
 const CARD_GAP = 12;
 const MIN_CARD_COLUMN_WIDTH = 150;
-const MIN_THREE_COLUMN_GRID_WIDTH = 720;
+const MAX_MOBILE_CARD_COLUMNS = 2;
+const MAX_CARD_COLUMNS = 4;
+const MAX_SINGLE_COLUMN_CARD_WIDTH = 268;
+const MAX_CONTENT_WIDTH = 980;
 const CARD_ART_ASPECT_RATIO = 1500 / 1080;
+// Name block + footer + progress + gaps + padding. Used as a MIN height so
+// cards in a row share a baseline, while still growing for long titles / large
+// font scales instead of clipping.
+const CARD_CHROME_HEIGHT = 150;
 const CARD_SKELETON_ITEMS = [0, 1, 2, 3];
 
 interface CollectionCard {
@@ -77,19 +84,13 @@ function getCardArtHeight(width: number): number {
   return Math.round(width * CARD_ART_ASPECT_RATIO);
 }
 
-function getCardHeight(width: number): number {
-  return getCardArtHeight(width) + 156;
+function getCardMinHeight(width: number): number {
+  return getCardArtHeight(width) + CARD_CHROME_HEIGHT;
 }
 
-function getGridColumnCount(gridWidth: number): number {
-  const maxColumns = gridWidth >= MIN_THREE_COLUMN_GRID_WIDTH ? 3 : 2;
-
-  for (let columns = maxColumns; columns > 1; columns -= 1) {
-    const candidateWidth = Math.floor((gridWidth - CARD_GAP * (columns - 1)) / columns);
-    if (candidateWidth >= MIN_CARD_COLUMN_WIDTH) return columns;
-  }
-
-  return 1;
+function getGridColumnCount(gridWidth: number, maxColumns = MAX_CARD_COLUMNS): number {
+  const columns = Math.floor((gridWidth + CARD_GAP) / (MIN_CARD_COLUMN_WIDTH + CARD_GAP));
+  return Math.max(1, Math.min(maxColumns, columns));
 }
 
 function chunkItems<T>(items: T[], columns: number): T[][] {
@@ -228,7 +229,6 @@ function CollectionCardTile({
   columnIndex,
   columnCount,
   onPress,
-  onView,
 }: {
   card: CollectionCard;
   selected: boolean;
@@ -236,7 +236,6 @@ function CollectionCardTile({
   columnIndex: number;
   columnCount: number;
   onPress: () => void;
-  onView: () => void;
 }): React.JSX.Element {
   const imageUrl = card.definition.image_url ?? null;
   const tone = getStatusTone(card.status);
@@ -248,9 +247,11 @@ function CollectionCardTile({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${card.definition.name}. ${getStatusLabel(card.status)} card. Boost plus ${card.definition.multiplier_bonus}. Uses ${remainingUses} of ${maxUses}.`}
       style={({ pressed }) => [
         styles.gameCard,
-        { width, height: getCardHeight(width) },
+        { width, minHeight: getCardMinHeight(width) },
         getColumnSpacingStyle(columnIndex, columnCount),
         selected && styles.gameCardSelected,
         locked && styles.gameCardLocked,
@@ -258,7 +259,11 @@ function CollectionCardTile({
       ]}
     >
       <LinearGradient
-        colors={selected ? ['rgba(215,217,94,0.18)', 'rgba(20,20,20,0.98)'] : ['rgba(255,255,255,0.07)', 'rgba(20,20,20,0.98)']}
+        colors={
+          selected
+            ? ['rgba(215,217,94,0.16)', 'rgba(34,34,34,0.98)', 'rgba(20,20,20,1)']
+            : ['rgba(255,255,255,0.07)', 'rgba(34,34,34,0.98)', 'rgba(20,20,20,1)']
+        }
         style={StyleSheet.absoluteFill}
       />
 
@@ -280,30 +285,26 @@ function CollectionCardTile({
         ) : null}
 
         <View style={[styles.statusBadge, styles[`statusBadge_${tone}`]]}>
-          <Text style={[styles.statusBadgeText, styles[`statusBadgeText_${tone}`]]}>
+          <Text
+            style={[styles.statusBadgeText, styles[`statusBadgeText_${tone}`]]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+          >
             {getStatusLabel(card.status)}
           </Text>
         </View>
 
-        <Pressable
-          onPress={(event) => {
-            event.stopPropagation();
-            onView();
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`View ${card.definition.name} card design`}
-          style={({ pressed }) => [styles.viewDesignButton, pressed && styles.viewDesignButtonPressed]}
-        >
-          <Icon name="eye" size={16} color={Colors.text.primary} fixed />
-        </Pressable>
+        <View style={styles.viewDesignButton} pointerEvents="none">
+          <Icon name="eye" size={14} color={Colors.text.primary} fixed />
+        </View>
       </View>
 
       <View style={styles.gameNameBlock}>
-        <Text style={styles.gameCardTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+        <Text style={styles.gameCardTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.76}>
           {card.definition.name}
         </Text>
-        <Text style={styles.gameCardStage} numberOfLines={1}>
+        <Text style={styles.gameCardStage} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
           {STAGE_LABELS[card.definition.award_stage]} card
         </Text>
       </View>
@@ -368,8 +369,14 @@ function CardDesignPreviewModal({
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <SafeAreaView style={styles.previewSafeArea} edges={['top', 'bottom']}>
-        <Pressable style={styles.previewBackdrop} onPress={onClose}>
-          <Pressable style={styles.previewSheet} onPress={(event) => event.stopPropagation()}>
+        <View style={styles.previewBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close card design preview"
+          />
+          <View style={styles.previewSheet}>
             <ScrollView
               bounces={false}
               showsVerticalScrollIndicator={false}
@@ -454,8 +461,8 @@ function CardDesignPreviewModal({
                 </View>
               ) : null}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </SafeAreaView>
     </Modal>
   );
@@ -476,7 +483,7 @@ function CardSkeleton({
     <View
       style={[
         styles.gameCard,
-        { width, height: getCardHeight(width) },
+        { width, minHeight: getCardMinHeight(width) },
         getColumnSpacingStyle(columnIndex, columnCount),
       ]}
     >
@@ -491,11 +498,40 @@ function CardSkeleton({
   );
 }
 
+function SummaryMetric({
+  icon,
+  label,
+  value,
+  muted = false,
+}: {
+  icon: IconName;
+  label: string;
+  value: number;
+  muted?: boolean;
+}): React.JSX.Element {
+  return (
+    <View style={styles.metricPill}>
+      <View style={[styles.metricIcon, muted && styles.metricIconMuted]}>
+        <Icon name={icon} size={15} color={muted ? Colors.text.secondary : Colors.accent.lime} fixed />
+      </View>
+      <View style={styles.metricCopy}>
+        <Text style={styles.metricLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.74}>
+          {label}
+        </Text>
+        <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function CardsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { width } = useResponsive();
-  const contentHorizontalPadding = 16;
-  const fallbackGridWidth = Math.max(0, width - contentHorizontalPadding * 2);
+  const contentHorizontalPadding = width < 360 ? 14 : width >= 768 ? 24 : 20;
+  const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
+  const fallbackGridWidth = Math.max(0, contentWidth - contentHorizontalPadding * 2);
   const catalogQuery = useCardCatalog();
   const cardsQuery = useMyCards();
   const matchesQuery = useMatches();
@@ -508,11 +544,12 @@ export default function CardsScreen(): React.JSX.Element {
   const [previewCard, setPreviewCard] = useState<CollectionCard | null>(null);
   const [measuredGridWidth, setMeasuredGridWidth] = useState(0);
   const gridWidth = measuredGridWidth || fallbackGridWidth;
-  const gridColumnCount = getGridColumnCount(gridWidth);
+  const maxGridColumns = width >= 768 ? MAX_CARD_COLUMNS : MAX_MOBILE_CARD_COLUMNS;
+  const gridColumnCount = getGridColumnCount(gridWidth, maxGridColumns);
   const cardWidth = Math.max(
     0,
     gridColumnCount === 1
-      ? gridWidth
+      ? Math.min(gridWidth, MAX_SINGLE_COLUMN_CARD_WIDTH)
       : Math.floor((gridWidth - CARD_GAP * (gridColumnCount - 1)) / gridColumnCount)
   );
   const refetchCatalog = catalogQuery.refetch;
@@ -627,7 +664,11 @@ export default function CardsScreen(): React.JSX.Element {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 150 },
+          {
+            maxWidth: MAX_CONTENT_WIDTH,
+            paddingHorizontal: contentHorizontalPadding,
+            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 150,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -640,56 +681,32 @@ export default function CardsScreen(): React.JSX.Element {
           />
         }
       >
-        <View style={styles.heroBand}>
+        <View style={styles.collectionPanel}>
           <LinearGradient
-            colors={['rgba(215,217,94,0.16)', 'rgba(255,255,255,0.04)', 'rgba(13,13,13,0)']}
+            colors={['rgba(215,217,94,0.12)', 'rgba(255,255,255,0.035)', 'rgba(20,20,20,0.98)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
 
-          <View style={styles.heroCopy}>
-            <Text style={styles.eyebrow}>Inventory</Text>
-            <Text style={styles.title}>Your game cards</Text>
-            <Text style={styles.subtitle}>
-              Browse your rewards. Ready cards can boost match predictions.
-            </Text>
+          <View style={styles.collectionHeader}>
+            <View style={styles.heroCopy}>
+              <Text style={styles.eyebrow}>Inventory</Text>
+              <Text style={styles.title}>Card collection</Text>
+              <Text style={styles.subtitle}>
+                Ready boosts, locked rewards, and stage progress in one place.
+              </Text>
+            </View>
+            <View style={styles.totalBadge}>
+              <Text style={styles.totalBadgeValue}>{collection.length}</Text>
+              <Text style={styles.totalBadgeLabel}>Total</Text>
+            </View>
           </View>
 
-          <View style={styles.statStrip}>
-            <View style={styles.statPill}>
-              <View style={styles.statPillHeader}>
-                <Icon name="gift" size={14} color={Colors.accent.lime} />
-                <Text style={styles.statPillLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-                  Earned
-                </Text>
-              </View>
-              <Text style={styles.statPillValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-                {earnedCards}
-              </Text>
-            </View>
-            <View style={styles.statPill}>
-              <View style={styles.statPillHeader}>
-                <Icon name="zap" size={14} color={Colors.accent.lime} />
-                <Text style={styles.statPillLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-                  Ready
-                </Text>
-              </View>
-              <Text style={styles.statPillValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-                {readyCards}
-              </Text>
-            </View>
-            <View style={styles.statPill}>
-              <View style={styles.statPillHeader}>
-                <Icon name="lock" size={14} color={Colors.text.tertiary} />
-                <Text style={styles.statPillLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-                  Locked
-                </Text>
-              </View>
-              <Text style={styles.statPillValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-                {lockedCards}
-              </Text>
-            </View>
+          <View style={styles.metricGrid}>
+            <SummaryMetric icon="gift" label="Earned" value={earnedCards} />
+            <SummaryMetric icon="zap" label="Ready" value={readyCards} />
+            <SummaryMetric icon="lock" label="Locked" value={lockedCards} muted />
           </View>
         </View>
 
@@ -701,7 +718,10 @@ export default function CardsScreen(): React.JSX.Element {
         {loading ? (
           <View style={styles.cardsGrid} onLayout={handleGridLayout}>
             {skeletonRows.map((row) => (
-              <View key={row.join('-')} style={styles.cardsRow}>
+              <View
+                key={row.join('-')}
+                style={[styles.cardsRow, gridColumnCount === 1 && styles.cardsRowSingle]}
+              >
                 {row.map((item, columnIndex) => (
                   <CardSkeleton
                     key={item}
@@ -717,7 +737,10 @@ export default function CardsScreen(): React.JSX.Element {
         ) : (
           <View style={styles.cardsGrid} onLayout={handleGridLayout}>
             {cardRows.map((row) => (
-              <View key={row.map((card) => card.definition.id).join('-')} style={styles.cardsRow}>
+              <View
+                key={row.map((card) => card.definition.id).join('-')}
+                style={[styles.cardsRow, gridColumnCount === 1 && styles.cardsRowSingle]}
+              >
                 {row.map((card, columnIndex) => {
                   const isSelected = selectedCard?.definition.id === card.definition.id;
                   return (
@@ -729,7 +752,6 @@ export default function CardsScreen(): React.JSX.Element {
                       columnIndex={columnIndex}
                       columnCount={gridColumnCount}
                       onPress={() => openCardPreview(card)}
-                      onView={() => openCardPreview(card)}
                     />
                   );
                 })}
@@ -764,29 +786,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background.primary,
   },
   content: {
-    paddingHorizontal: 16,
+    width: '100%',
+    alignSelf: 'center',
     paddingTop: 16,
     paddingBottom: 24,
     gap: 16,
-  },
-  heroCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    gap: 14,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  headerCompact: {
-    flexDirection: 'column',
-  },
-  headerCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 6,
   },
   eyebrow: {
     color: Colors.accent.lime,
@@ -806,55 +810,99 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.sm,
     lineHeight: 20,
   },
-  heroBand: {
+  collectionPanel: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border.subtle,
     backgroundColor: Colors.background.card,
     padding: 16,
+    gap: 16,
+    ...(Shadows.card ?? {}),
+  },
+  collectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     gap: 14,
   },
   heroCopy: {
+    flex: 1,
+    minWidth: 0,
     gap: 6,
   },
-  statStrip: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  statPill: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 58,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border.subtle,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  statPillHeader: {
-    minWidth: 0,
-    flexDirection: 'row',
+  totalBadge: {
+    width: 64,
+    minHeight: 64,
+    flexShrink: 0,
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.accent.limeBorder,
+    backgroundColor: Colors.accent.limeLight,
   },
-  statPillLabel: {
-    flex: 1,
-    minWidth: 0,
+  totalBadgeValue: {
+    color: Colors.accent.lime,
+    fontSize: 22,
+    fontWeight: Typography.weight.black,
+    lineHeight: 26,
+  },
+  totalBadgeLabel: {
+    marginTop: 1,
     color: Colors.text.secondary,
     fontSize: 10,
     fontWeight: Typography.weight.bold,
     textTransform: 'uppercase',
   },
-  statPillValue: {
-    alignSelf: 'flex-start',
+  metricGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  metricPill: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border.subtle,
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  metricIcon: {
+    width: 34,
+    height: 34,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: Colors.accent.limeLight,
+  },
+  metricIconMuted: {
+    backgroundColor: 'rgba(255,255,255,0.055)',
+  },
+  metricCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  metricLabel: {
+    color: Colors.text.secondary,
+    fontSize: 10,
+    fontWeight: Typography.weight.bold,
+    lineHeight: 13,
+    textTransform: 'uppercase',
+  },
+  metricValue: {
+    marginTop: 2,
     color: Colors.text.primary,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: Typography.weight.black,
+    lineHeight: 22,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -883,6 +931,9 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     marginBottom: CARD_GAP,
   },
+  cardsRowSingle: {
+    justifyContent: 'center',
+  },
   cardSlotSpacer: {
     flexShrink: 0,
   },
@@ -891,15 +942,16 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     flexShrink: 0,
     overflow: 'hidden',
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.border.subtle,
     backgroundColor: Colors.background.card,
-    padding: 10,
-    gap: 10,
+    padding: 9,
+    gap: 8,
+    ...(Shadows.card ?? {}),
   },
   gameCardSelected: {
-    borderColor: Colors.accent.lime,
+    borderColor: Colors.accent.limeBorder,
   },
   gameCardLocked: {
     opacity: 1,
@@ -913,12 +965,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    borderRadius: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(0,0,0,0.28)',
   },
   gameArtImage: {
-    width: '92%',
-    height: '92%',
+    width: '96%',
+    height: '96%',
     resizeMode: 'contain',
   },
   gameArtFallback: {
@@ -928,43 +982,44 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   gameNameBlock: {
-    minHeight: 48,
+    minHeight: 56,
     justifyContent: 'center',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 7,
   },
   gameCardTitle: {
     color: Colors.text.primary,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: Typography.weight.black,
-    lineHeight: 20,
+    lineHeight: 17,
     textAlign: 'center',
   },
   gameCardStage: {
     marginTop: 3,
     color: Colors.accent.lime,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: Typography.weight.bold,
+    lineHeight: 12,
     textAlign: 'center',
     textTransform: 'uppercase',
   },
   gameCardFooter: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 7,
   },
   gameStat: {
     flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
+    minHeight: 40,
+    borderRadius: 11,
     borderWidth: 1,
     borderColor: Colors.border.subtle,
     backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   gameStatLabel: {
     color: Colors.text.tertiary,
@@ -975,8 +1030,9 @@ const styles = StyleSheet.create({
   gameStatValue: {
     marginTop: 2,
     color: Colors.text.primary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: Typography.weight.black,
+    lineHeight: 15,
   },
   miniProgressTrack: {
     height: 5,
@@ -987,116 +1043,6 @@ const styles = StyleSheet.create({
   miniProgressFill: {
     height: '100%',
     borderRadius: 999,
-  },
-  detailPanel: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Colors.border.subtle,
-    backgroundColor: Colors.background.card,
-    padding: 14,
-    gap: 12,
-  },
-  detailHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  detailTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  detailKicker: {
-    color: Colors.accent.lime,
-    fontSize: 10,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
-  },
-  detailTitle: {
-    marginTop: 3,
-    color: Colors.text.primary,
-    fontSize: 18,
-    fontWeight: Typography.weight.black,
-  },
-  detailStatus: {
-    minHeight: 30,
-    justifyContent: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-  },
-  detailStatusReady: {
-    borderColor: Colors.accent.lime,
-    backgroundColor: Colors.accent.limeLight,
-  },
-  detailStatusLocked: {
-    borderColor: Colors.border.subtle,
-    backgroundColor: 'rgba(0,0,0,0.24)',
-  },
-  detailStatusMuted: {
-    borderColor: Colors.border.subtle,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  detailStatusText: {
-    fontSize: 10,
-    fontWeight: Typography.weight.black,
-    textTransform: 'uppercase',
-  },
-  detailStatusReadyText: {
-    color: Colors.accent.lime,
-  },
-  detailStatusLockedText: {
-    color: Colors.text.secondary,
-  },
-  detailStatusMutedText: {
-    color: Colors.text.tertiary,
-  },
-  detailDescription: {
-    color: Colors.text.secondary,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  detailStatsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  detailStatBox: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border.subtle,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-  },
-  detailStatLabel: {
-    color: Colors.text.tertiary,
-    fontSize: 9,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
-  },
-  detailStatValue: {
-    marginTop: 3,
-    color: Colors.text.primary,
-    fontSize: 15,
-    fontWeight: Typography.weight.black,
-  },
-  detailProgressTrack: {
-    height: 7,
-    overflow: 'hidden',
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  detailProgressFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  detailHint: {
-    color: Colors.text.tertiary,
-    fontSize: 10,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
   },
   previewSafeArea: {
     flex: 1,
@@ -1204,29 +1150,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
-  previewCaption: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    gap: 4,
-  },
-  previewCardName: {
-    color: Colors.text.primary,
-    fontSize: 24,
-    fontWeight: Typography.weight.black,
-  },
-  previewCardStage: {
-    color: Colors.text.secondary,
-    fontSize: 11,
-    fontWeight: Typography.weight.bold,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  previewMetaRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
   previewMetaGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1303,107 +1226,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
   },
-  summaryCard: {
-    minWidth: 118,
-    borderRadius: Layout.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border.default,
-    backgroundColor: 'rgba(13, 13, 13, 0.72)',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryLabel: {
-    color: Colors.text.secondary,
-    fontSize: 12,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  summaryValue: {
-    marginTop: 4,
-    color: Colors.text.primary,
-    fontSize: 40,
-    fontWeight: Typography.weight.black,
-    lineHeight: 46,
-  },
-  summaryHint: {
-    marginTop: 2,
-    color: Colors.text.tertiary,
-    fontSize: 10,
-    fontWeight: Typography.weight.bold,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  typeStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  typeChip: {
-    flexGrow: 1,
-    flexBasis: '31%',
-    minWidth: 92,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border.default,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  typeChipLabel: {
-    flex: 1,
-    color: Colors.text.primary,
-    fontSize: 10,
-    fontWeight: Typography.weight.black,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  typeChipCount: {
-    color: Colors.text.primary,
-    fontSize: 11,
-    fontWeight: Typography.weight.black,
-  },
-  collectionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  cardTile: {
-    backgroundColor: 'rgba(18, 24, 24, 0.94)',
-    overflow: 'hidden',
-  },
-  cardTileSingle: {
-    width: '100%',
-  },
-  cardTileGrid: {
-    flexGrow: 1,
-    flexBasis: '47%',
-    minWidth: 260,
-  },
-  cardTileLocked: {
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  cardArt: {
-    position: 'relative',
-    height: 230,
-    backgroundColor: 'rgba(0,0,0,0.24)',
-  },
-  cardArtImage: {
-    width: '100%',
-    height: '100%',
-  },
-  cardArtFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(201,223,106,0.09)',
-  },
   lockOverlay: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
@@ -1421,21 +1243,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  lockText: {
-    color: Colors.text.primary,
-    fontSize: 12,
-    fontWeight: Typography.weight.black,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   statusBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
+    minHeight: 28,
+    maxWidth: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   statusBadge_ready: {
     borderColor: Colors.accent.lime,
@@ -1450,10 +1269,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   statusBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: Typography.weight.black,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.3,
   },
   statusBadgeText_ready: {
     color: Colors.accent.lime,
@@ -1466,127 +1285,16 @@ const styles = StyleSheet.create({
   },
   viewDesignButton: {
     position: 'absolute',
-    top: 10,
-    left: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    top: 8,
+    left: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.24)',
     backgroundColor: 'rgba(0,0,0,0.52)',
-  },
-  viewDesignButtonPressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.96 }],
-  },
-  artCaption: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 14,
-    gap: 3,
-  },
-  cardTitle: {
-    color: Colors.text.primary,
-    fontSize: 20,
-    fontWeight: Typography.weight.black,
-    letterSpacing: 0.2,
-  },
-  cardSubtitle: {
-    color: Colors.text.secondary,
-    fontSize: 11,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-  },
-  cardBody: {
-    padding: 14,
-    gap: 12,
-  },
-  cardDescription: {
-    color: Colors.text.secondary,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  metaGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  metaChip: {
-    flex: 1,
-    borderRadius: Layout.borderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border.default,
-    backgroundColor: 'rgba(0, 0, 0, 0.16)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  metaLabel: {
-    color: Colors.text.tertiary,
-    fontSize: 9,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  metaValue: {
-    marginTop: 3,
-    color: Colors.text.primary,
-    fontSize: 13,
-    fontWeight: Typography.weight.black,
-  },
-  windowBox: {
-    borderRadius: Layout.borderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border.default,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  windowValue: {
-    marginTop: 3,
-    color: Colors.text.primary,
-    fontSize: 11,
-    fontWeight: Typography.weight.black,
-  },
-  progressBlock: {
-    gap: 6,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  progressLabel: {
-    color: Colors.text.secondary,
-    fontSize: 10,
-    fontWeight: Typography.weight.black,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  progressValue: {
-    color: Colors.text.primary,
-    fontSize: 11,
-    fontWeight: Typography.weight.black,
-  },
-  progressTrack: {
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  progressHint: {
-    color: Colors.text.tertiary,
-    fontSize: 10,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
   },
   empty: {
     alignItems: 'center',

@@ -47,6 +47,7 @@ ui kit/
 /supabase/
 
 # Large unused source/preview assets. Keep referenced runtime assets in place.
+assets/card-seeds/
 assets/splashscreen-compatible.png
 assets/splashscreen.png
 assets/splashscreen-black-lime.png
