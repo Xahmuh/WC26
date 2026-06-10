@@ -4,7 +4,7 @@
 // Free plan: 10 requests/minute — callers must pace themselves.
 // ============================================================================
 
-const BASE_URL = 'https://api.football-data.org/v4';
+import { getActiveApiProvider, getApiProviderToken } from './api-provider.ts';
 
 export type ApiMatchStatus =
   | 'SCHEDULED'
@@ -40,8 +40,6 @@ export class RateLimitError extends Error {
   }
 }
 
-const COMPETITION = 'WC';
-
 /**
  * Fetches ALL finished WC matches in a SINGLE request, instead of polling each
  * match individually. This is the rate-limit-friendly path used by the poller:
@@ -51,11 +49,11 @@ const COMPETITION = 'WC';
  * @throws Error on other non-2xx responses.
  */
 export async function fetchFinishedMatches(): Promise<ApiMatch[]> {
-  const token = Deno.env.get('FOOTBALL_API_TOKEN');
-  if (!token) throw new Error('Missing FOOTBALL_API_TOKEN secret.');
+  const provider = await getActiveApiProvider();
+  const token = getApiProviderToken(provider);
 
   const res = await fetch(
-    `${BASE_URL}/competitions/${COMPETITION}/matches?status=FINISHED`,
+    `${provider.base_url}/competitions/${provider.competition_code}/matches?status=FINISHED`,
     { headers: { 'X-Auth-Token': token } }
   );
 
@@ -79,10 +77,10 @@ export async function fetchFinishedMatches(): Promise<ApiMatch[]> {
  * @throws Error on other non-2xx responses.
  */
 export async function fetchMatch(externalId: number): Promise<ApiMatch> {
-  const token = Deno.env.get('FOOTBALL_API_TOKEN');
-  if (!token) throw new Error('Missing FOOTBALL_API_TOKEN secret.');
+  const provider = await getActiveApiProvider();
+  const token = getApiProviderToken(provider);
 
-  const res = await fetch(`${BASE_URL}/matches/${externalId}`, {
+  const res = await fetch(`${provider.base_url}/matches/${externalId}`, {
     headers: { 'X-Auth-Token': token },
   });
 

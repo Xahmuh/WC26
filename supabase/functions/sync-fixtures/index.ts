@@ -11,8 +11,7 @@
 
 import { createAdminClient } from '../_shared/client.ts';
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
-
-const BASE_URL = 'https://api.football-data.org/v4';
+import { getActiveApiProvider, getApiProviderToken } from '../_shared/api-provider.ts';
 
 type ApiStatus =
   | 'SCHEDULED'
@@ -151,10 +150,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    const token = Deno.env.get('FOOTBALL_API_TOKEN');
-    if (!token) return jsonResponse({ error: 'Missing FOOTBALL_API_TOKEN.' }, 500);
+    const provider = await getActiveApiProvider();
+    const token = getApiProviderToken(provider);
 
-    const res = await fetch(`${BASE_URL}/competitions/WC/matches`, {
+    const res = await fetch(`${provider.base_url}/competitions/${provider.competition_code}/matches`, {
       headers: { 'X-Auth-Token': token },
     });
     if (!res.ok) {
@@ -253,6 +252,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     return jsonResponse({
+      provider: provider.id,
       teams_synced: teamRows.length,
       matches_synced: matchesSynced,
       missing_stages: missingStages,

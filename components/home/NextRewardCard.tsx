@@ -41,7 +41,6 @@ export function NextRewardCard({ isLoading = false }: { isLoading?: boolean }): 
 
       <Text style={styles.rewardName}>Mystery Pack</Text>
       <Text style={styles.subtitle}>Unlocks at {REWARD_THRESHOLD} points</Text>
-      <Text style={styles.todo}>TODO: connect to reward_milestones table</Text>
     </Card>
   );
 }
@@ -98,11 +97,4 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.sm,
     textAlign: 'center',
   },
-  todo: {
-    marginTop: 8,
-    color: Colors.text.tertiary,
-    fontSize: 10,
-    textAlign: 'center',
-  },
 });
-

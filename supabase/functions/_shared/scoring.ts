@@ -1,8 +1,3 @@
-// ============================================================================
-// Deno copy of the scoring engine used by calculate-points.
-// Must stay in sync with lib/scoring.ts (same rules, no framework imports).
-// ============================================================================
-
 export interface Score {
   home: number;
   away: number;
@@ -18,15 +13,16 @@ export interface PointsBreakdown {
   total_points: number;
 }
 
+export interface ScoringRuleValues {
+  winnerPoints: number;
+  exactBonusPoints: number;
+}
+
 export type Outcome = 'HOME' | 'DRAW' | 'AWAY';
 
-export const POINTS = {
-  WINNER: 3,
-  HOME_GOAL: 0,
-  AWAY_GOAL: 0,
-  EXACT_BONUS: 5,
-  MAX_PER_MATCH: 8,
-} as const;
+export function getMaxBasePoints(rules: ScoringRuleValues): number {
+  return rules.winnerPoints + rules.exactBonusPoints;
+}
 
 export function getOutcome(home: number, away: number): Outcome {
   if (home > away) return 'HOME';
@@ -34,23 +30,26 @@ export function getOutcome(home: number, away: number): Outcome {
   return 'DRAW';
 }
 
-export function calculatePoints(actual: Score, predicted: Score): PointsBreakdown {
-  const winner_points =
-    actual.isKnockout
-      ? actual.winnerTeamId !== null &&
-        actual.winnerTeamId !== undefined &&
-        actual.winnerTeamId === predicted.winnerTeamId
-        ? POINTS.WINNER
-        : 0
-      : getOutcome(actual.home, actual.away) === getOutcome(predicted.home, predicted.away)
-        ? POINTS.WINNER
-        : 0;
+export function calculatePoints(
+  actual: Score,
+  predicted: Score,
+  rules: ScoringRuleValues
+): PointsBreakdown {
+  const winner_points = actual.isKnockout
+    ? actual.winnerTeamId !== null &&
+      actual.winnerTeamId !== undefined &&
+      actual.winnerTeamId === predicted.winnerTeamId
+      ? rules.winnerPoints
+      : 0
+    : getOutcome(actual.home, actual.away) === getOutcome(predicted.home, predicted.away)
+      ? rules.winnerPoints
+      : 0;
 
   const home_goal_points = 0;
   const away_goal_points = 0;
 
   const isExact = actual.home === predicted.home && actual.away === predicted.away;
-  const exact_bonus = isExact ? POINTS.EXACT_BONUS : 0;
+  const exact_bonus = isExact ? rules.exactBonusPoints : 0;
 
   return {
     winner_points,

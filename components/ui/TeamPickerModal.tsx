@@ -57,6 +57,7 @@ export function TeamPickerModal({
   const [currentPage, setCurrentPage] = useState(1);
   const [isFocused, setIsFocused] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
+  const wasVisibleRef = useRef(false);
   const insets = useSafeAreaInsets();
   const { height } = useResponsive();
 
@@ -67,7 +68,10 @@ export function TeamPickerModal({
   const normalizedSearch = normalizeSearch(search);
 
   useEffect(() => {
-    if (!visible) return;
+    const justOpened = visible && !wasVisibleRef.current;
+    wasVisibleRef.current = visible;
+
+    if (!justOpened) return;
     setLocalSelected(selectedTeams || []);
   }, [selectedTeams, visible]);
 

@@ -47,6 +47,7 @@ interface AuthState {
   ) => Promise<boolean>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  setSupportedTeams: (teams: string[]) => void;
   clearError: () => void;
 }
 
@@ -180,6 +181,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       queryClient.clear();
     }
   },
+
+  setSupportedTeams: (teams) =>
+    set((state) => ({
+      profile: state.profile ? { ...state.profile, supported_teams: teams } : state.profile,
+    })),
 
   refreshProfile: async () => {
     const session = get().session;

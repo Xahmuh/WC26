@@ -1,26 +1,4 @@
-// ============================================================================
-// Scoring engine — pure, dependency-free functions.
-// ----------------------------------------------------------------------------
-// Shared logic that decides how many points a prediction earns. Kept free of
-// any React Native imports so it can run in the app and in Jest.
-//
-// Scoring rules:
-//   • Correct winner/draw, or knockout qualifier: configurable base (+3 default)
-//   • Exact 90-minute score: configurable bonus (+5 default)
-//   • Home/away partial goal points are retained as 0-valued compatibility fields.
-//   • Otherwise:                          0  (never negative)
-// ============================================================================
-
 import type { Outcome, PointsBreakdown } from '@/types';
-
-export const POINTS = {
-  WINNER: 3,
-  HOME_GOAL: 0,
-  AWAY_GOAL: 0,
-  EXACT_BONUS: 5,
-  /** 3 + 5 */
-  MAX_PER_MATCH: 8,
-} as const;
 
 export interface Score {
   home: number;
@@ -29,10 +7,15 @@ export interface Score {
   isKnockout?: boolean;
 }
 
-/**
- * Returns whether a scoreline is a HOME win, AWAY win, or DRAW.
- * @throws if either score is negative or not an integer.
- */
+export interface ScoringRuleValues {
+  winnerPoints: number;
+  exactBonusPoints: number;
+}
+
+export function getMaxBasePoints(rules: ScoringRuleValues): number {
+  return rules.winnerPoints + rules.exactBonusPoints;
+}
+
 export function getOutcome(home: number, away: number): Outcome {
   assertValidGoals(home, 'home');
   assertValidGoals(away, 'away');
@@ -42,36 +25,33 @@ export function getOutcome(home: number, away: number): Outcome {
   return 'DRAW';
 }
 
-/**
- * Calculates the points breakdown for a single prediction against the
- * actual final score. Pure: same inputs → same output, no side effects.
- */
 export function calculatePoints(
   actual: Score,
-  predicted: Score
+  predicted: Score,
+  rules: ScoringRuleValues
 ): PointsBreakdown {
+  assertValidPoints(rules.winnerPoints, 'winner points');
+  assertValidPoints(rules.exactBonusPoints, 'exact bonus points');
+
   const actualOutcome = getOutcome(actual.home, actual.away);
   const predictedOutcome = getOutcome(predicted.home, predicted.away);
 
-  const winner_points =
-    actual.isKnockout
-      ? actual.winnerTeamId !== null &&
-        actual.winnerTeamId !== undefined &&
-        actual.winnerTeamId === predicted.winnerTeamId
-        ? POINTS.WINNER
-        : 0
-      : actualOutcome === predictedOutcome
-        ? POINTS.WINNER
-        : 0;
+  const winner_points = actual.isKnockout
+    ? actual.winnerTeamId !== null &&
+      actual.winnerTeamId !== undefined &&
+      actual.winnerTeamId === predicted.winnerTeamId
+      ? rules.winnerPoints
+      : 0
+    : actualOutcome === predictedOutcome
+      ? rules.winnerPoints
+      : 0;
 
   const home_goal_points = 0;
   const away_goal_points = 0;
 
   const isExact = actual.home === predicted.home && actual.away === predicted.away;
-  const exact_bonus = isExact ? POINTS.EXACT_BONUS : 0;
-
-  const total_points =
-    winner_points + home_goal_points + away_goal_points + exact_bonus;
+  const exact_bonus = isExact ? rules.exactBonusPoints : 0;
+  const total_points = winner_points + home_goal_points + away_goal_points + exact_bonus;
 
   return {
     winner_points,
@@ -115,6 +95,14 @@ function assertValidGoals(value: number, label: 'home' | 'away'): void {
 }
 
 function assertValidMultiplier(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(
+      `Invalid ${label}: expected a non-negative integer, got ${value}`
+    );
+  }
+}
+
+function assertValidPoints(value: number, label: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new RangeError(
       `Invalid ${label}: expected a non-negative integer, got ${value}`

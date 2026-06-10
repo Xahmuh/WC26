@@ -59,8 +59,7 @@ export async function createSessionFromUrl(url: string): Promise<void> {
 export async function signInWithGoogle(): Promise<void> {
   try {
     const redirectUrl = Linking.createURL('login');
-    console.log('[AuthService] Generated Redirect URL:', redirectUrl);
-    
+
     if (Platform.OS === 'web') {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -90,7 +89,6 @@ export async function signInWithGoogle(): Promise<void> {
 
     if (data?.url) {
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-      console.log('[AuthService] WebBrowser result type:', result.type);
       if (result.type === 'success' && result.url) {
         // Handles both PKCE (?code=) and implicit (#access_token=) redirects.
         await createSessionFromUrl(result.url);
@@ -99,63 +97,6 @@ export async function signInWithGoogle(): Promise<void> {
     }
   } catch (err) {
     console.error('Google Sign-in error:', err);
-    throw err;
-  }
-}
-
-/**
- * Simulates a Google Sign-in for local development and testing.
- * Uses a password-based account under the hood to trigger the exact same Supabase auth hooks.
- */
-export async function simulateGoogleSignIn(
-  email: string,
-  name: string,
-  avatarUrl: string,
-  role: 'user' | 'admin' = 'user'
-): Promise<boolean> {
-  const mockEmail = email.toLowerCase().trim();
-  const mockPassword = 'GoogleMockPassword123!';
-
-  try {
-    // 1. Try to sign in
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: mockEmail,
-      password: mockPassword,
-    });
-
-    if (signInError) {
-      // 2. If user doesn't exist, sign up
-      if (signInError.message.includes('Invalid login credentials')) {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: mockEmail,
-          password: mockPassword,
-          options: {
-            data: {
-              display_name: name,
-              avatar_url: avatarUrl,
-              role: role,
-            },
-          },
-        });
-
-        if (signUpError) throw signUpError;
-        return !!signUpData.session;
-      }
-      throw signInError;
-    }
-
-    // 3. Update metadata to simulate changing Google account properties
-    await supabase.auth.updateUser({
-      data: {
-        display_name: name,
-        avatar_url: avatarUrl,
-        role: role,
-      },
-    });
-
-    return !!signInData.session;
-  } catch (err) {
-    console.error('Simulated Google Sign-in error:', err);
     throw err;
   }
 }

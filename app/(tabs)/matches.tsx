@@ -17,6 +17,7 @@ import { MatchList } from '@/components/match/MatchList';
 import { CalendarModal } from '@/components/ui/CalendarModal';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { Icon } from '@/components/ui/Icon';
+import { TabPageHeader } from '@/components/ui/TabPageHeader';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import Theme from '@/constants/theme/design-system';
 import { Container } from '@/components/ui/Container';
@@ -182,8 +183,9 @@ export default function MatchesScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1" edges={['top']}>
+      <TabPageHeader title="Matches" subtitle="Fixtures, filters, and predictions" />
       <View className="flex-1">
-        <Container nested className="px-6 pb-2 pt-3">
+        <Container nested className="px-6 pb-2 pt-4">
         <View
           style={{
             width: '100%',

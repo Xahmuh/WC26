@@ -5,6 +5,7 @@ node_modules/
 .expo/
 dist/
 web-build/
+builds/
 tmp-*/
 .gradle-cache/
 .android-user-home/

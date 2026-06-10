@@ -4,7 +4,7 @@ import { isRunningInExpoGo } from 'expo';
 let configured = false;
 type NotificationsModule = typeof import('expo-notifications');
 
-const SPORTS_ALERT_CHANNEL_ID = 'sports-alerts-sound-v2';
+const SPORTS_ALERT_CHANNEL_ID = 'sports-alerts-alarm-v1';
 const SPORTS_ALERT_SOUND = 'sound.mp3';
 
 let _Notifications: NotificationsModule | null = null;
@@ -52,9 +52,15 @@ export async function configureNotifications(): Promise<void> {
     }
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(SPORTS_ALERT_CHANNEL_ID, {
-        name: 'Sports Alerts',
-        importance: Notifications.AndroidImportance.HIGH,
+        name: 'Sports Alerts Alarm',
+        importance: Notifications.AndroidImportance.MAX,
         sound: SPORTS_ALERT_SOUND,
+        audioAttributes: {
+          usage: Notifications.AndroidAudioUsage.ALARM,
+          contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+        },
+        enableVibrate: true,
+        vibrationPattern: [0, 350, 180, 350],
       });
     }
     configured = true;

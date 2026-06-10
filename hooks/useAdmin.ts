@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  createAuthQuote,
+  deleteAuthQuote,
+  getAuthQuotes,
+  getAuthScreenSettings,
+  updateAuthQuote,
+  updateAuthScreenSettings,
+  type AuthQuoteInput,
+} from '@/services/auth-content.service';
+import {
   createPredictionQuestion,
   deleteMatch,
   deleteUser,
@@ -21,6 +30,10 @@ import {
   updateHeroSlide,
   deleteHeroSlide,
   reorderHeroSlides,
+  getBannerCollections,
+  createBannerCollection,
+  updateBannerCollection,
+  deleteBannerCollection,
   getHomeCardsTileSettings,
   uploadHomeCardsTileImage,
   updateHomeCardsTileSettings,
@@ -31,16 +44,23 @@ import {
   updateScoringRules,
   getStageMultipliers,
   setStageMultiplier,
+  getStageCardSettings,
+  setStageExpectedMatches,
   getCardDefinitions,
   createCardDefinition,
   updateCardDefinition,
   disableCardDefinition,
+  deleteCardDefinition,
   uploadCardDefinitionImage,
   recalculateStageCards,
+  getApiProviders,
+  upsertApiProvider,
+  setActiveApiProvider,
   type ScoringRules,
   type CardDefinitionInput,
+  type ApiProviderInput,
 } from '@/services/admin.service';
-import type { CardDefinition, MatchDecisionMethod, MatchStage, MatchStatus } from '@/types';
+import type { ApiProvider, AuthQuote, AuthScreenSettings, BannerPlacement, CardDefinition, HomeBannerPosition, MatchDecisionMethod, MatchStage, MatchStatus, StageCardSetting } from '@/types';
 
 export function useSetMatchMultiplier() {
   const queryClient = useQueryClient();
@@ -100,6 +120,27 @@ export function useSetStageMultiplier() {
   });
 }
 
+export function useStageCardSettings() {
+  return useQuery({
+    queryKey: ['admin', 'stage-card-settings'],
+    queryFn: getStageCardSettings,
+  });
+}
+
+export function useSetStageExpectedMatches() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ stage, expectedMatches }: { stage: MatchStage; expectedMatches: number }) =>
+      setStageExpectedMatches(stage, expectedMatches),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'stage-card-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['cardDefinitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['userCards'] });
+    },
+  });
+}
+
 // ----------------------------------------------------------------------------
 // Stage reward cards (admin-configurable My Cards)
 // ----------------------------------------------------------------------------
@@ -149,6 +190,19 @@ export function useDisableCardDefinition() {
   });
 }
 
+export function useDeleteCardDefinition() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (cardId: string) => deleteCardDefinition(cardId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'card-definitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['cardDefinitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['userCards'] });
+    },
+  });
+}
+
 export function useUploadCardDefinitionImage() {
   return useMutation({
     mutationFn: (input: { localUri: string; fileName?: string | null; mimeType?: string | null; webFile?: Blob | null }) =>
@@ -168,6 +222,110 @@ export function useRecalculateStageCards() {
 }
 
 export type { CardDefinition, CardDefinitionInput };
+
+// ----------------------------------------------------------------------------
+// API providers
+// ----------------------------------------------------------------------------
+
+export function useApiProviders() {
+  return useQuery({
+    queryKey: ['admin', 'api-providers'],
+    queryFn: getApiProviders,
+  });
+}
+
+export function useUpsertApiProvider() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ApiProviderInput) => upsertApiProvider(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'api-providers'] });
+    },
+  });
+}
+
+export function useSetActiveApiProvider() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (providerId: string) => setActiveApiProvider(providerId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'api-providers'] });
+    },
+  });
+}
+
+export type { ApiProvider, ApiProviderInput, StageCardSetting };
+
+// ----------------------------------------------------------------------------
+// Auth screen content (login/register quotes + developer credit)
+// ----------------------------------------------------------------------------
+
+export function useAuthQuotesAdmin() {
+  return useQuery({
+    queryKey: ['admin', 'auth-quotes'],
+    queryFn: () => getAuthQuotes({ includeInactive: true }),
+  });
+}
+
+export function useAuthScreenSettingsAdmin() {
+  return useQuery({
+    queryKey: ['admin', 'auth-screen-settings'],
+    queryFn: getAuthScreenSettings,
+  });
+}
+
+export function useCreateAuthQuote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: AuthQuoteInput) => createAuthQuote(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'auth-quotes'] });
+      void queryClient.invalidateQueries({ queryKey: ['authContent'] });
+    },
+  });
+}
+
+export function useUpdateAuthQuote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ quoteId, input }: { quoteId: string; input: AuthQuoteInput }) =>
+      updateAuthQuote(quoteId, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'auth-quotes'] });
+      void queryClient.invalidateQueries({ queryKey: ['authContent'] });
+    },
+  });
+}
+
+export function useDeleteAuthQuote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (quoteId: string) => deleteAuthQuote(quoteId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'auth-quotes'] });
+      void queryClient.invalidateQueries({ queryKey: ['authContent'] });
+    },
+  });
+}
+
+export function useUpdateAuthScreenSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { developerName: string }) => updateAuthScreenSettings(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'auth-screen-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['authContent'] });
+    },
+  });
+}
+
+export type { AuthQuote, AuthQuoteInput, AuthScreenSettings };
 
 export function useCreatePredictionQuestion() {
   const queryClient = useQueryClient();
@@ -384,10 +542,58 @@ export function useDeleteMatch() {
 // Hero banner (home screen carousel) management
 // ============================================================================
 
-export function useHeroSlides() {
+export function useHeroSlides(placement?: BannerPlacement, collectionId?: string | null) {
   return useQuery({
-    queryKey: ['heroSlides'],
-    queryFn: getHeroSlides,
+    queryKey: ['heroSlides', placement ?? 'all', collectionId ?? 'none'],
+    queryFn: () => getHeroSlides({ placement, ...(collectionId !== undefined ? { collectionId } : {}) }),
+  });
+}
+
+export function useBannerCollections() {
+  return useQuery({
+    queryKey: ['bannerCollections'],
+    queryFn: getBannerCollections,
+  });
+}
+
+export function useCreateBannerCollection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { title: string; sortOrder: number; homePosition: HomeBannerPosition; isActive: boolean }) =>
+      createBannerCollection(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bannerCollections'] });
+    },
+  });
+}
+
+export function useUpdateBannerCollection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      collectionId,
+      updates,
+    }: {
+      collectionId: string;
+      updates: { title?: string; sortOrder?: number; homePosition?: HomeBannerPosition; isActive?: boolean };
+    }) => updateBannerCollection(collectionId, updates),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bannerCollections'] });
+    },
+  });
+}
+
+export function useDeleteBannerCollection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (collectionId: string) => deleteBannerCollection(collectionId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bannerCollections'] });
+      void queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
+    },
   });
 }
 
@@ -410,6 +616,8 @@ export function useCreateHeroSlide() {
       linkUrl: string | null;
       sortOrder: number;
       isActive: boolean;
+      placement?: BannerPlacement;
+      collectionId?: string | null;
     }) => createHeroSlide(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
@@ -434,6 +642,8 @@ export function useUpdateHeroSlide() {
         linkUrl?: string | null;
         sortOrder?: number;
         isActive?: boolean;
+        placement?: BannerPlacement;
+        collectionId?: string | null;
       };
     }) => updateHeroSlide(slideId, updates),
     onSuccess: () => {

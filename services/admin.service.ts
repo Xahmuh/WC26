@@ -6,12 +6,18 @@ import type {
   MatchStage,
   MatchStatus,
   MatchDecisionMethod,
+  BannerCollection,
+  BannerPlacement,
   HeroSlide,
   HomeCardsTileSettings,
   MatchesHeroSettings,
   CardDefinition,
+  StageCardSetting,
+  ApiProvider,
   Database,
 } from '@/types';
+import { DEFAULT_STAGE_MATCH_COUNTS, STAGE_ORDER } from '@/lib/stages';
+import { DEFAULT_HOME_BANNER_POSITION, type HomeBannerPosition } from '@/lib/bannerPositions';
 
 function normalizeAdminError(message: string): string {
   if (message.includes('matches_finished_knockout_has_outcome')) {
@@ -176,6 +182,20 @@ export interface StageMultiplier {
   multiplier: number;
 }
 
+export interface StageCardSettingInput {
+  stage: MatchStage;
+  expectedMatches: number;
+}
+
+function getDefaultStageCardSettings(): StageCardSetting[] {
+  return STAGE_ORDER.map((stage) => ({
+    stage,
+    expected_matches: DEFAULT_STAGE_MATCH_COUNTS[stage],
+    updated_by: null,
+    updated_at: new Date(0).toISOString(),
+  }));
+}
+
 /** Fetches the per-stage default multiplier presets. */
 export async function getStageMultipliers(): Promise<StageMultiplier[]> {
   const { data, error } = await supabase
@@ -188,6 +208,48 @@ export async function getStageMultipliers(): Promise<StageMultiplier[]> {
   }
 
   return (data ?? []).map((row) => ({ stage: row.stage as MatchStage, multiplier: row.multiplier }));
+}
+
+export async function getStageCardSettings(): Promise<StageCardSetting[]> {
+  const { data, error } = await (supabase as any)
+    .from('stage_card_settings')
+    .select('stage, expected_matches, updated_by, updated_at');
+
+  if (error) {
+    if (error.code === '42P01') return getDefaultStageCardSettings();
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []) as StageCardSetting[];
+  const byStage = new Map<MatchStage, StageCardSetting>(
+    rows.map((row) => [row.stage, row])
+  );
+
+  return STAGE_ORDER.map<StageCardSetting>((stage) => (
+    byStage.get(stage) ?? {
+      stage,
+      expected_matches: DEFAULT_STAGE_MATCH_COUNTS[stage],
+      updated_by: null,
+      updated_at: new Date(0).toISOString(),
+    }
+  ));
+}
+
+export async function setStageExpectedMatches(
+  stage: MatchStage,
+  expectedMatches: number
+): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_stage_expected_matches' as any, {
+    p_stage: stage,
+    p_expected_matches: expectedMatches,
+  });
+
+  if (error) {
+    if (error.code === '42883') {
+      throw new Error('Please apply the stage card settings migration, then try again.');
+    }
+    throw new Error(error.message);
+  }
 }
 
 /**
@@ -335,6 +397,28 @@ export async function disableCardDefinition(cardId: string): Promise<void> {
     .eq('id', cardId);
 
   if (error) throw new Error(error.message);
+}
+
+export async function deleteCardDefinition(cardId: string): Promise<void> {
+  const { data: card, error: fetchError } = await (supabase as any)
+    .from('card_definitions')
+    .select('image_path')
+    .eq('id', cardId)
+    .maybeSingle();
+
+  if (fetchError) throw new Error(fetchError.message);
+
+  const { error: deleteError, count } = await (supabase as any)
+    .from('card_definitions')
+    .delete({ count: 'exact' })
+    .eq('id', cardId);
+
+  if (deleteError) throw new Error(deleteError.message);
+  if (count === 0) throw new Error('Card was not deleted. It may already be missing or your account does not have permission.');
+
+  if (card?.image_path) {
+    await supabase.storage.from(CARD_IMAGES_BUCKET).remove([card.image_path]).catch(() => undefined);
+  }
 }
 
 export async function recalculateStageCards(stage: MatchStage): Promise<number> {
@@ -728,6 +812,93 @@ export async function deleteMatch(matchId: string): Promise<void> {
 }
 
 // ============================================================================
+// API providers
+// ============================================================================
+
+export interface ApiProviderInput {
+  id: string;
+  name: string;
+  adapter: string;
+  baseUrl: string;
+  competitionCode: string;
+  tokenSecretName: string;
+  isActive: boolean;
+  rateLimitPerMinute: number | null;
+  supportsFixtures: boolean;
+  supportsResults: boolean;
+  notes: string | null;
+}
+
+const DEFAULT_API_PROVIDER: ApiProvider = {
+  id: 'football-data',
+  name: 'football-data.org',
+  adapter: 'football_data_v4',
+  base_url: 'https://api.football-data.org/v4',
+  competition_code: 'WC',
+  token_secret_name: 'FOOTBALL_API_TOKEN',
+  is_active: true,
+  rate_limit_per_minute: 10,
+  supports_fixtures: true,
+  supports_results: true,
+  notes: 'Current World Cup fixture/result provider.',
+  updated_by: null,
+  updated_at: new Date(0).toISOString(),
+};
+
+export async function getApiProviders(): Promise<ApiProvider[]> {
+  const { data, error } = await (supabase as any)
+    .from('api_providers')
+    .select(
+      'id, name, adapter, base_url, competition_code, token_secret_name, is_active, rate_limit_per_minute, supports_fixtures, supports_results, notes, updated_by, updated_at'
+    )
+    .order('is_active', { ascending: false })
+    .order('name', { ascending: true });
+
+  if (error) {
+    if (error.code === '42P01') return [DEFAULT_API_PROVIDER];
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as ApiProvider[];
+}
+
+export async function upsertApiProvider(input: ApiProviderInput): Promise<void> {
+  const { error } = await supabase.rpc('admin_upsert_api_provider' as any, {
+    p_id: input.id,
+    p_name: input.name,
+    p_adapter: input.adapter,
+    p_base_url: input.baseUrl,
+    p_competition_code: input.competitionCode,
+    p_token_secret_name: input.tokenSecretName,
+    p_is_active: input.isActive,
+    p_rate_limit_per_minute: input.rateLimitPerMinute,
+    p_supports_fixtures: input.supportsFixtures,
+    p_supports_results: input.supportsResults,
+    p_notes: input.notes,
+  });
+
+  if (error) {
+    if (error.code === '42883') {
+      throw new Error('Please apply the API providers migration, then try again.');
+    }
+    throw new Error(error.message);
+  }
+}
+
+export async function setActiveApiProvider(providerId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_active_api_provider' as any, {
+    p_id: providerId,
+  });
+
+  if (error) {
+    if (error.code === '42883') {
+      throw new Error('Please apply the API providers migration, then try again.');
+    }
+    throw new Error(error.message);
+  }
+}
+
+// ============================================================================
 // Hero banner (home screen carousel) management
 // ============================================================================
 
@@ -748,17 +919,130 @@ export function getHeroSlideImageUrl(imagePath: string): string {
 /**
  * Fetches all hero slides ordered for display in the admin dashboard.
  */
-export async function getHeroSlides(): Promise<HeroSlide[]> {
-  const { data, error } = await supabase
+export async function getHeroSlides(filter?: {
+  placement?: BannerPlacement;
+  collectionId?: string | null;
+}): Promise<HeroSlide[]> {
+  let query = supabase
     .from('hero_slides')
     .select('*')
     .order('sort_order', { ascending: true });
+
+  if (filter?.placement) {
+    query = query.eq('placement', filter.placement);
+  }
+  if (filter && 'collectionId' in filter) {
+    if (filter.collectionId === null) {
+      query = query.is('collection_id', null);
+    } else if (filter.collectionId !== undefined) {
+      query = query.eq('collection_id', filter.collectionId);
+    }
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data || []) as HeroSlide[];
+  return (data || []).map((row: any) => ({
+    ...row,
+    placement: (row.placement ?? 'top') as BannerPlacement,
+    collection_id: row.collection_id ?? null,
+  })) as HeroSlide[];
+}
+
+export async function getBannerCollections(): Promise<BannerCollection[]> {
+  const { data, error } = await (supabase as any)
+    .from('banner_collections')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).map((row: any) => ({
+    ...row,
+    home_position: (row.home_position ?? DEFAULT_HOME_BANNER_POSITION) as HomeBannerPosition,
+  })) as BannerCollection[];
+}
+
+export async function createBannerCollection(input: {
+  title: string;
+  sortOrder: number;
+  homePosition: HomeBannerPosition;
+  isActive: boolean;
+}): Promise<BannerCollection> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await (supabase as any)
+    .from('banner_collections')
+    .insert({
+      title: input.title,
+      sort_order: input.sortOrder,
+      home_position: input.homePosition,
+      is_active: input.isActive,
+      created_by: user?.id ?? null,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as BannerCollection;
+}
+
+export async function updateBannerCollection(
+  collectionId: string,
+  updates: { title?: string; sortOrder?: number; homePosition?: HomeBannerPosition; isActive?: boolean }
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (updates.title !== undefined) payload.title = updates.title;
+  if (updates.sortOrder !== undefined) payload.sort_order = updates.sortOrder;
+  if (updates.homePosition !== undefined) payload.home_position = updates.homePosition;
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+
+  const { error } = await (supabase as any)
+    .from('banner_collections')
+    .update(payload)
+    .eq('id', collectionId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteBannerCollection(collectionId: string): Promise<void> {
+  const { data: slides, error: fetchError } = await supabase
+    .from('hero_slides')
+    .select('image_path')
+    .eq('collection_id', collectionId);
+
+  if (fetchError) {
+    throw new Error(fetchError.message);
+  }
+
+  const { error, count } = await (supabase as any)
+    .from('banner_collections')
+    .delete({ count: 'exact' })
+    .eq('id', collectionId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (count === 0) {
+    throw new Error('Banner group was not deleted. It may already be missing or your account does not have permission.');
+  }
+
+  const paths = (slides ?? []).map((slide) => slide.image_path).filter(Boolean);
+  if (paths.length > 0) {
+    await supabase.storage.from(HERO_BANNERS_BUCKET).remove(paths).catch(() => undefined);
+  }
 }
 
 /**
@@ -789,6 +1073,8 @@ export async function createHeroSlide(input: {
   title: string | null;
   subtitle: string | null;
   linkUrl: string | null;
+  placement?: BannerPlacement;
+  collectionId?: string | null;
   sortOrder: number;
   isActive: boolean;
 }): Promise<HeroSlide> {
@@ -802,6 +1088,8 @@ export async function createHeroSlide(input: {
       title: input.title,
       subtitle: input.subtitle,
       link_url: input.linkUrl,
+      placement: input.placement ?? 'top',
+      collection_id: input.collectionId ?? null,
       sort_order: input.sortOrder,
       is_active: input.isActive,
       created_by: user?.id || null,
@@ -827,6 +1115,8 @@ export async function updateHeroSlide(
     title?: string | null;
     subtitle?: string | null;
     linkUrl?: string | null;
+    placement?: BannerPlacement;
+    collectionId?: string | null;
     sortOrder?: number;
     isActive?: boolean;
   }
@@ -837,6 +1127,8 @@ export async function updateHeroSlide(
   if (updates.title !== undefined) payload.title = updates.title;
   if (updates.subtitle !== undefined) payload.subtitle = updates.subtitle;
   if (updates.linkUrl !== undefined) payload.link_url = updates.linkUrl;
+  if (updates.placement !== undefined) payload.placement = updates.placement;
+  if (updates.collectionId !== undefined) payload.collection_id = updates.collectionId;
   if (updates.sortOrder !== undefined) payload.sort_order = updates.sortOrder;
   if (updates.isActive !== undefined) payload.is_active = updates.isActive;
 
@@ -854,13 +1146,31 @@ export async function updateHeroSlide(
  * Permanently deletes a hero slide.
  */
 export async function deleteHeroSlide(slideId: string): Promise<void> {
-  const { error } = await supabase
+  const { data: slide, error: fetchError } = await supabase
     .from('hero_slides')
-    .delete()
+    .select('image_path')
+    .eq('id', slideId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw new Error(fetchError.message);
+  }
+
+  const { error, count } = await supabase
+    .from('hero_slides')
+    .delete({ count: 'exact' })
     .eq('id', slideId);
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  if (count === 0) {
+    throw new Error('Hero slide was not deleted. It may already be missing or your account does not have permission.');
+  }
+
+  if (slide?.image_path) {
+    await supabase.storage.from(HERO_BANNERS_BUCKET).remove([slide.image_path]).catch(() => undefined);
   }
 }
 

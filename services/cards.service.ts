@@ -1,30 +1,18 @@
 import { supabase } from '@/lib/supabase';
+import { STAGE_ORDER, getStageRank } from '@/lib/stages';
 import type { CardDefinition, MatchStage, UserCard } from '@/types';
 
 const CARD_IMAGES_BUCKET = 'card-images';
 
-export const CARD_STAGE_ORDER: MatchStage[] = [
-  'GROUP',
-  'ROUND_OF_32',
-  'ROUND_OF_16',
-  'QUARTER_FINAL',
-  'SEMI_FINAL',
-  'THIRD_PLACE',
-  'FINAL',
-];
-
-function stageRank(stage: MatchStage): number {
-  const index = CARD_STAGE_ORDER.indexOf(stage);
-  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-}
+export const CARD_STAGE_ORDER = STAGE_ORDER;
 
 export function isStageInCardWindow(
   stage: MatchStage,
   fromStage: MatchStage,
   untilStage: MatchStage
 ): boolean {
-  const rank = stageRank(stage);
-  return rank >= stageRank(fromStage) && rank <= stageRank(untilStage);
+  const rank = getStageRank(stage);
+  return rank >= getStageRank(fromStage) && rank <= getStageRank(untilStage);
 }
 
 export function isUserCardUsableForStage(card: UserCard, stage: MatchStage): boolean {
@@ -75,7 +63,7 @@ export async function getCardDefinitions(): Promise<CardDefinition[]> {
   return (data ?? [])
     .map(mapCardDefinition)
     .sort((a: CardDefinition, b: CardDefinition) => {
-      const stageDiff = stageRank(a.award_stage) - stageRank(b.award_stage);
+      const stageDiff = getStageRank(a.award_stage) - getStageRank(b.award_stage);
       if (stageDiff !== 0) return stageDiff;
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });

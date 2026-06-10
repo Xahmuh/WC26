@@ -1,0 +1,1296 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  type DimensionValue,
+  Easing,
+  type LayoutChangeEvent,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Stack, useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { Container } from '@/components/ui/Container';
+import { Icon, type IconName } from '@/components/ui/Icon';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import Theme from '@/constants/theme/design-system';
+import { useScoringRules, useStageCardSettings, useStageMultipliers } from '@/hooks/useAdmin';
+import { STAGE_LABELS } from '@/lib/constants';
+import { DEFAULT_STAGE_MATCH_COUNTS, STAGE_ORDER } from '@/lib/stages';
+import type { MatchStage } from '@/types';
+
+type GuideTab = 'basics' | 'points' | 'cards' | 'stages';
+
+const WORLD_CUP_BALL_SOURCE = require('@/assets/worldcup_ball_trionda_fab.png');
+const GUIDE_GRID_GAP = 12;
+const TWO_COLUMN_MIN_WIDTH = 560;
+
+const TABS: Array<{ key: GuideTab; label: string; icon: IconName }> = [
+  { key: 'basics', label: 'Matches', icon: 'football' },
+  { key: 'points', label: 'Points', icon: 'star' },
+  { key: 'cards', label: 'Cards', icon: 'gift' },
+  { key: 'stages', label: 'Stages', icon: 'trophy' },
+];
+
+const BASICS = [
+  {
+    title: 'Open a match',
+    body: 'Choose any match that has not started yet. Once kickoff arrives, the prediction window closes.',
+    icon: 'calendar' as IconName,
+  },
+  {
+    title: 'Predict the score',
+    body: 'Submit the 90-minute scoreline. In knockout matches, a draw also asks you to pick the qualifying team.',
+    icon: 'target' as IconName,
+  },
+  {
+    title: 'Track the result',
+    body: 'When the match result is saved from the API or manually by admin, your prediction is scored automatically.',
+    icon: 'checkCircle' as IconName,
+  },
+];
+
+function chunkItems<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    rows.push(items.slice(index, index + size));
+  }
+  return rows;
+}
+
+function getCardWidth(columns: number, cellWidth: number): DimensionValue {
+  return columns === 1 ? '100%' : cellWidth;
+}
+
+function useTwoColumnCells(): {
+  cellWidth: number;
+  columns: number;
+  handleGridLayout: (event: LayoutChangeEvent) => void;
+} {
+  const { width } = useWindowDimensions();
+  const [measuredGridWidth, setMeasuredGridWidth] = useState(0);
+  const fallbackGridWidth = Math.max(0, width - 40);
+  const gridWidth = measuredGridWidth || fallbackGridWidth;
+  const columns = gridWidth < TWO_COLUMN_MIN_WIDTH ? 1 : 2;
+  const cellWidth = Math.max(0, Math.floor((gridWidth - GUIDE_GRID_GAP * (columns - 1)) / columns));
+
+  const handleGridLayout = (event: LayoutChangeEvent): void => {
+    const nextWidth = Math.floor(event.nativeEvent.layout.width);
+    setMeasuredGridWidth((currentWidth) =>
+      Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth
+    );
+  };
+
+  return { cellWidth, columns, handleGridLayout };
+}
+
+const FEATURE_COPY: Record<
+  GuideTab,
+  {
+    title: string;
+    body: string;
+    stat: string;
+    icon: IconName;
+  }
+> = {
+  basics: {
+    title: 'Predict before kickoff',
+    body: 'Scores lock when the match starts. You can review saved, pending, finished, and missed picks from My Predictions.',
+    stat: '90 min',
+    icon: 'lock',
+  },
+  points: {
+    title: 'Score, then multiply',
+    body: 'Base points are calculated first, then the match multiplier and any selected wild card boost are applied.',
+    stat: 'X',
+    icon: 'star',
+  },
+  cards: {
+    title: 'Earn wild cards',
+    body: 'Cards unlock when you reach their required percentage of the points available in a tournament stage.',
+    stat: '+',
+    icon: 'gift',
+  },
+  stages: {
+    title: 'Every stage can change',
+    body: 'Admin controls expected match counts and stage multipliers, so later World Cup rounds stay accurate.',
+    stat: '32',
+    icon: 'trophy',
+  },
+};
+
+function useLoopedValue(duration: number, delay = 0): Animated.Value {
+  const value = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(value, {
+          toValue: 1,
+          duration,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(value, {
+          toValue: 0,
+          duration,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [delay, duration, value]);
+
+  return value;
+}
+
+function formatStage(stage: MatchStage): string {
+  return STAGE_LABELS[stage] ?? stage.replace(/_/g, ' ');
+}
+
+function AnimatedGuideHero(): React.JSX.Element {
+  const ball = useLoopedValue(1700);
+  const card = useLoopedValue(2200, 150);
+  const glow = useLoopedValue(1900, 250);
+
+  const ballTranslate = ball.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-74, 74],
+  });
+  const cardTranslate = card.interpolate({
+    inputRange: [0, 1],
+    outputRange: [4, -9],
+  });
+  const cardRotate = card.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-5deg', '5deg'],
+  });
+  const glowScale = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.92, 1.14],
+  });
+  const glowOpacity = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.22, 0.48],
+  });
+
+  return (
+    <View style={styles.hero}>
+      <LinearGradient
+        colors={['rgba(215,217,94,0.18)', 'rgba(34,34,34,0.96)', 'rgba(0,0,0,0.98)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.pitch}>
+        <View style={styles.pitchLine} />
+        <View style={styles.pitchCircle} />
+        <Animated.View
+          style={[
+            styles.heroGlow,
+            {
+              opacity: glowOpacity,
+              transform: [{ scale: glowScale }],
+            },
+          ]}
+        />
+        <Animated.View style={[styles.ball, { transform: [{ translateX: ballTranslate }] }]}>
+          <Icon name="football" size={18} color={Theme.colors.accentDark} fixed />
+        </Animated.View>
+      </View>
+
+      <View style={styles.heroContent}>
+        <View style={styles.heroCopy}>
+          <Text style={styles.eyebrow}>How to play</Text>
+          <Text style={styles.heroTitle}>World Cup predictions, cards, and points</Text>
+          <Text style={styles.heroBody}>
+            A quick animated guide for every core feature in the app.
+          </Text>
+        </View>
+
+        <Animated.View
+          style={[
+            styles.heroBallBadge,
+            {
+              transform: [{ translateY: cardTranslate }, { rotateZ: cardRotate }],
+            },
+          ]}
+        >
+          <View style={styles.heroBallBadgeGlow} />
+          <Image source={WORLD_CUP_BALL_SOURCE} style={styles.heroBallImage} resizeMode="contain" />
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+function GuideNavCards({
+  activeTab,
+  onSelect,
+}: {
+  activeTab: GuideTab;
+  onSelect: (tab: GuideTab) => void;
+}): React.JSX.Element {
+  const { cellWidth, columns, handleGridLayout } = useTwoColumnCells();
+  const rows = useMemo(() => chunkItems(TABS, columns), [columns]);
+  const cardWidth = getCardWidth(columns, cellWidth);
+
+  return (
+    <View style={styles.guideNavGrid} onLayout={handleGridLayout}>
+      {rows.map((row, rowIndex) => (
+        <View
+          key={row.map((tab) => tab.key).join('-')}
+          style={[styles.twoColumnRow, rowIndex < rows.length - 1 && styles.twoColumnRowSpaced]}
+        >
+          {row.map((tab) => {
+            const active = activeTab === tab.key;
+            const copy = FEATURE_COPY[tab.key];
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => onSelect(tab.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={({ pressed }) => [
+                  styles.guideNavCard,
+                  { width: cardWidth },
+                  active && styles.guideNavCardActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.guideCardContent}>
+                  <View style={styles.guideNavIcon}>
+                    <Icon name={tab.icon} size={18} color={Theme.colors.accent} fixed />
+                  </View>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.78}
+                    style={styles.guideNavLabel}
+                  >
+                    {tab.label}
+                  </Text>
+                  <Text numberOfLines={2} style={styles.guideNavTitle}>
+                    {copy.title}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+          {columns > 1 && row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function FeatureSpotlight({ activeTab }: { activeTab: GuideTab }): React.JSX.Element {
+  const pulse = useLoopedValue(1300);
+  const copy = FEATURE_COPY[activeTab];
+  const scale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+
+  return (
+    <View style={styles.spotlight}>
+      <View style={styles.spotlightCopy}>
+        <Text style={styles.spotlightKicker}>Selected guide</Text>
+        <Text style={styles.spotlightTitle}>{copy.title}</Text>
+        <Text style={styles.spotlightBody}>{copy.body}</Text>
+      </View>
+      <Animated.View style={[styles.spotlightIcon, { transform: [{ scale }] }]}>
+        <Icon name={copy.icon} size={24} color={Theme.colors.accent} fixed />
+      </Animated.View>
+    </View>
+  );
+}
+
+function GuideStep({
+  index,
+  title,
+  body,
+  icon,
+}: {
+  index: number;
+  title: string;
+  body: string;
+  icon: IconName;
+}): React.JSX.Element {
+  return (
+    <View style={styles.stepRow}>
+      <View style={styles.stepIndex}>
+        <Text style={styles.stepIndexText}>{index}</Text>
+      </View>
+      <View style={styles.stepContent}>
+        <View style={styles.stepHeader}>
+          <Icon name={icon} size={17} color={Theme.colors.accent} fixed />
+          <Text style={styles.stepTitle}>{title}</Text>
+        </View>
+        <Text style={styles.bodyText}>{body}</Text>
+      </View>
+    </View>
+  );
+}
+
+function PointsBreakdown({
+  winnerPoints,
+  exactBonusPoints,
+  multiplierPreview,
+}: {
+  winnerPoints: number | null;
+  exactBonusPoints: number | null;
+  multiplierPreview: number;
+}): React.JSX.Element {
+  const { cellWidth, columns, handleGridLayout } = useTwoColumnCells();
+  const hasScoringRules = winnerPoints !== null && exactBonusPoints !== null;
+  const totalBase = hasScoringRules ? winnerPoints + exactBonusPoints : null;
+  const previewTotal = totalBase !== null ? totalBase * multiplierPreview : null;
+  const pointTiles = useMemo(
+    () => [
+      { label: 'Correct outcome', value: winnerPoints !== null ? `+${winnerPoints}` : 'Admin', icon: 'checkCircle' as IconName },
+      { label: 'Exact score bonus', value: exactBonusPoints !== null ? `+${exactBonusPoints}` : 'Admin', icon: 'target' as IconName },
+      { label: 'Base max', value: totalBase !== null ? `${totalBase}` : 'Admin', icon: 'star' as IconName },
+      { label: `${multiplierPreview}x example`, value: previewTotal !== null ? `${previewTotal}` : 'Admin', icon: 'zap' as IconName },
+    ],
+    [exactBonusPoints, multiplierPreview, previewTotal, totalBase, winnerPoints]
+  );
+  const pointRows = useMemo(() => chunkItems(pointTiles, columns), [columns, pointTiles]);
+  const pointWidth = getCardWidth(columns, cellWidth);
+
+  return (
+    <View style={styles.sectionBlock}>
+      <Text style={styles.sectionTitle}>How points are calculated</Text>
+      <View style={styles.pointsGrid} onLayout={handleGridLayout}>
+        {pointRows.map((row, rowIndex) => (
+          <View
+            key={row.map((tile) => tile.label).join('-')}
+            style={[styles.twoColumnRow, rowIndex < pointRows.length - 1 && styles.twoColumnRowSpaced]}
+          >
+            {row.map((tile) => (
+              <PointTile
+                key={tile.label}
+                label={tile.label}
+                value={tile.value}
+                icon={tile.icon}
+                width={pointWidth}
+              />
+            ))}
+            {columns > 1 && row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+          </View>
+        ))}
+      </View>
+      <Text style={styles.noteText}>
+        Outcome means correct winner, draw, or the correct qualifying team in knockout matches.
+        Exact score is based on the predicted match scoreline.
+      </Text>
+    </View>
+  );
+}
+
+function PointTile({
+  label,
+  value,
+  icon,
+  width,
+}: {
+  label: string;
+  value: string;
+  icon: IconName;
+  width: DimensionValue;
+}): React.JSX.Element {
+  return (
+    <View style={[styles.pointTile, { width }]}>
+      <View style={styles.pointIcon}>
+        <Icon name={icon} size={17} color={Theme.colors.accent} fixed />
+      </View>
+      <Text style={styles.pointValue}>{value}</Text>
+      <Text style={styles.pointLabel} numberOfLines={2}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function CardSystemSection(): React.JSX.Element {
+  const float = useLoopedValue(1600);
+  const translateY = float.interpolate({
+    inputRange: [0, 1],
+    outputRange: [3, -8],
+  });
+  const rotateZ = float.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-4deg', '4deg'],
+  });
+
+  return (
+    <View style={styles.sectionBlock}>
+      <View style={styles.sectionHeaderRow}>
+        <View style={styles.sectionHeaderText}>
+          <Text style={styles.sectionKicker}>Wild cards</Text>
+          <Text style={styles.sectionTitle}>Earn boosts by playing well</Text>
+        </View>
+        <Animated.View style={[styles.wildCard, { transform: [{ translateY }, { rotateZ }] }]}>
+          <LinearGradient
+            colors={['rgba(215,217,94,0.32)', 'rgba(26,26,26,0.98)']}
+            style={StyleSheet.absoluteFill}
+          />
+          <Icon name="sparkles" size={19} color={Theme.colors.accent} fixed />
+          <Text style={styles.wildCardText}>WILD</Text>
+        </Animated.View>
+      </View>
+
+      <View style={styles.infoRows}>
+        <InfoRow
+          icon="barChart"
+          title="Unlock"
+          body="Each card has a stage, a required percentage, and a points target based on that stage's possible points."
+        />
+        <InfoRow
+          icon="time"
+          title="Use window"
+          body="A card can only be selected during its configured usable stage range."
+        />
+        <InfoRow
+          icon="zap"
+          title="Boost"
+          body="Pick one active card on a match to add its bonus to the match multiplier."
+        />
+      </View>
+
+      <View style={styles.catalogPill}>
+        <Icon name="gift" size={15} color={Theme.colors.accent} fixed />
+        <Text style={styles.catalogText}>
+          Wild card designs and unlock rules are controlled from admin and can change by stage.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function InfoRow({
+  icon,
+  title,
+  body,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+}): React.JSX.Element {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoIcon}>
+        <Icon name={icon} size={16} color={Theme.colors.accent} fixed />
+      </View>
+      <View style={styles.infoCopy}>
+        <Text style={styles.infoTitle}>{title}</Text>
+        <Text style={styles.bodyText}>{body}</Text>
+      </View>
+    </View>
+  );
+}
+
+function StageGuide({
+  rows,
+  compact,
+}: {
+  rows: Array<{ stage: MatchStage; expectedMatches: number; multiplier: number }>;
+  compact: boolean;
+}): React.JSX.Element {
+  const { cellWidth, handleGridLayout } = useTwoColumnCells();
+  const stageRows = useMemo(() => chunkItems(rows, 2), [rows]);
+
+  return (
+    <View style={styles.sectionBlock}>
+      <Text style={styles.sectionTitle}>Tournament stages</Text>
+      <Text style={styles.bodyText}>
+        These values follow the current admin setup, including expected matches and default multipliers.
+      </Text>
+      {compact ? (
+        <View style={styles.stageList}>
+          {rows.map((row) => (
+            <View key={row.stage} style={styles.stageRow}>
+              <View style={styles.stageNameWrap}>
+                <Text style={styles.stageName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                  {formatStage(row.stage)}
+                </Text>
+                <Text style={styles.stageMeta}>{row.expectedMatches} matches</Text>
+              </View>
+              <View style={styles.stageMultiplier}>
+                <Text style={styles.stageMultiplierText}>X{row.multiplier}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.stageGrid} onLayout={handleGridLayout}>
+          {stageRows.map((row, rowIndex) => (
+            <View
+              key={row.map((stageRow) => stageRow.stage).join('-')}
+              style={[styles.twoColumnRow, rowIndex < stageRows.length - 1 && styles.twoColumnRowSpaced]}
+            >
+              {row.map((stageRow) => (
+                <View key={stageRow.stage} style={[styles.stageTile, { width: cellWidth }]}>
+                  <View style={styles.stageNameWrap}>
+                    <Text style={styles.stageName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                      {formatStage(stageRow.stage)}
+                    </Text>
+                    <Text style={styles.stageMeta}>{stageRow.expectedMatches} matches</Text>
+                  </View>
+                  <View style={styles.stageMultiplier}>
+                    <Text style={styles.stageMultiplierText}>X{stageRow.multiplier}</Text>
+                  </View>
+                </View>
+              ))}
+              {row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const APP_FEATURES: Array<{
+  icon: IconName;
+  title: string;
+  body: string;
+  route: string;
+}> = [
+  {
+    icon: 'home',
+    title: 'Home',
+    body: 'Next match, pending predictions, your cards, and favorite-team matches.',
+    route: '/(tabs)/home',
+  },
+  {
+    icon: 'matches',
+    title: 'Matches',
+    body: 'Browse fixtures, filter by teams and stages, then open a match to predict.',
+    route: '/(tabs)/matches',
+  },
+  {
+    icon: 'gift',
+    title: 'Cards',
+    body: 'See locked, ready, used, and revoked wild cards with progress.',
+    route: '/(tabs)/cards',
+  },
+  {
+    icon: 'leaderboard',
+    title: 'Leaderboard',
+    body: 'Compare total points, exact picks, and mini league rankings.',
+    route: '/(tabs)/leaderboard',
+  },
+];
+
+function AppFeaturesSection(): React.JSX.Element {
+  const router = useRouter();
+  const { cellWidth, columns, handleGridLayout } = useTwoColumnCells();
+  const rows = useMemo(() => chunkItems(APP_FEATURES, columns), [columns]);
+  const cardWidth = getCardWidth(columns, cellWidth);
+
+  return (
+    <View style={styles.sectionBlock}>
+      <Text style={styles.sectionTitle}>Where everything lives</Text>
+      <View style={styles.featureGrid} onLayout={handleGridLayout}>
+        {rows.map((row, rowIndex) => (
+          <View
+            key={row.map((feature) => feature.route).join('-')}
+            style={[styles.twoColumnRow, rowIndex < rows.length - 1 && styles.twoColumnRowSpaced]}
+          >
+            {row.map((feature) => (
+              <MiniFeature
+                key={feature.route}
+                icon={feature.icon}
+                title={feature.title}
+                body={feature.body}
+                width={cardWidth}
+                onPress={() => router.push(feature.route as never)}
+              />
+            ))}
+            {columns > 1 && row.length === 1 ? <View style={{ width: cellWidth }} /> : null}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function MiniFeature({
+  icon,
+  title,
+  body,
+  width,
+  onPress,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+  width: DimensionValue;
+  onPress: () => void;
+}): React.JSX.Element {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.miniFeature,
+        { width },
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.guideCardContent}>
+        <View style={styles.miniFeatureIcon}>
+          <Icon name={icon} size={16} color={Theme.colors.accent} fixed />
+        </View>
+        <Text style={styles.miniFeatureTitle}>{title}</Text>
+        <Text style={styles.miniFeatureBody}>{body}</Text>
+        <View style={styles.miniFeatureAction}>
+          <Icon name="forward" size={14} color={Theme.colors.accent} fixed />
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+export default function HowToPlayScreen(): React.JSX.Element {
+  const { width } = useWindowDimensions();
+  const [activeTab, setActiveTab] = useState<GuideTab>('basics');
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionYRef = useRef<Partial<Record<GuideTab, number>>>({});
+  const scoringRulesQuery = useScoringRules();
+  const stageMultipliersQuery = useStageMultipliers();
+  const stageSettingsQuery = useStageCardSettings();
+
+  const winnerPoints = scoringRulesQuery.data?.winnerPoints ?? null;
+  const exactBonusPoints = scoringRulesQuery.data?.exactBonusPoints ?? null;
+  const multiplierByStage = useMemo(
+    () => new Map((stageMultipliersQuery.data ?? []).map((row) => [row.stage, row.multiplier])),
+    [stageMultipliersQuery.data]
+  );
+  const expectedByStage = useMemo(
+    () => new Map((stageSettingsQuery.data ?? []).map((row) => [row.stage, row.expected_matches])),
+    [stageSettingsQuery.data]
+  );
+  const stageRows = useMemo(
+    () =>
+      STAGE_ORDER.map((stage) => ({
+        stage,
+        expectedMatches: expectedByStage.get(stage) ?? DEFAULT_STAGE_MATCH_COUNTS[stage],
+        multiplier: multiplierByStage.get(stage) ?? 1,
+      })),
+    [expectedByStage, multiplierByStage]
+  );
+  const multiplierPreview = Math.max(2, stageRows.find((row) => row.multiplier > 1)?.multiplier ?? 2);
+  const compact = width < TWO_COLUMN_MIN_WIDTH + 40;
+  const registerSection = (key: GuideTab) => (event: LayoutChangeEvent): void => {
+    sectionYRef.current[key] = event.nativeEvent.layout.y;
+  };
+  const scrollToSection = (key: GuideTab): void => {
+    setActiveTab(key);
+    const y = sectionYRef.current[key] ?? 0;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+  };
+
+  return (
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScreenHeader title="How to Play" subtitle="Predictions, points, and wild cards" fallback="/(tabs)/profile" />
+
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <Container nested style={styles.container}>
+          <AnimatedGuideHero />
+          <GuideNavCards activeTab={activeTab} onSelect={scrollToSection} />
+          <FeatureSpotlight activeTab={activeTab} />
+
+          <View style={styles.sectionBlock} onLayout={registerSection('basics')}>
+            <Text style={styles.sectionTitle}>The basic flow</Text>
+            {BASICS.map((step, index) => (
+              <GuideStep
+                key={step.title}
+                index={index + 1}
+                title={step.title}
+                body={step.body}
+                icon={step.icon}
+              />
+            ))}
+          </View>
+
+          <View onLayout={registerSection('points')}>
+            <PointsBreakdown
+              winnerPoints={winnerPoints}
+              exactBonusPoints={exactBonusPoints}
+              multiplierPreview={multiplierPreview}
+            />
+          </View>
+
+          <View onLayout={registerSection('cards')}>
+            <CardSystemSection />
+          </View>
+          <View onLayout={registerSection('stages')}>
+            <StageGuide rows={stageRows} compact={compact} />
+          </View>
+          <AppFeaturesSection />
+        </Container>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: Theme.colors.bgDeep,
+  },
+  scrollContent: {
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  container: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  hero: {
+    minHeight: 226,
+    overflow: 'hidden',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.colors.accentBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  pitch: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    right: 18,
+    height: 86,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
+  },
+  pitchLine: {
+    position: 'absolute',
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  pitchCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.13)',
+  },
+  heroGlow: {
+    position: 'absolute',
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  ball: {
+    position: 'absolute',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.colors.accent,
+  },
+  heroContent: {
+    flex: 1,
+    padding: 18,
+    paddingTop: 116,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  heroCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  eyebrow: {
+    color: Theme.colors.accent,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 14,
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    marginTop: 5,
+    color: Theme.colors.textPrimary,
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 28,
+    letterSpacing: 0,
+  },
+  heroBody: {
+    marginTop: 8,
+    color: Theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 19,
+    letterSpacing: 0,
+  },
+  heroBallBadge: {
+    width: 108,
+    height: 108,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  heroBallBadgeGlow: {
+    position: 'absolute',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 2,
+    borderColor: Theme.colors.accent,
+    backgroundColor: 'rgba(215,217,94,0.14)',
+  },
+  heroBallImage: {
+    width: 92,
+    height: 92,
+  },
+  guideNavGrid: {
+    width: '100%',
+  },
+  twoColumnRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: GUIDE_GRID_GAP,
+  },
+  twoColumnRowSpaced: {
+    marginBottom: GUIDE_GRID_GAP,
+  },
+  guideNavCard: {
+    position: 'relative',
+    minHeight: 112,
+    alignSelf: 'stretch',
+    flexShrink: 0,
+    overflow: 'hidden',
+    justifyContent: 'space-between',
+    padding: 13,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  guideNavCardActive: {
+    borderColor: Theme.colors.accentBorder,
+  },
+  guideCardContent: {
+    flex: 1,
+    zIndex: 1,
+  },
+  guideNavIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  guideNavLabel: {
+    marginTop: 10,
+    color: Theme.colors.accent,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 13,
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  guideNavTitle: {
+    marginTop: 4,
+    color: Theme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 16,
+    letterSpacing: 0,
+  },
+  pressed: {
+    opacity: 0.78,
+  },
+  spotlight: {
+    minHeight: 118,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  spotlightCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  spotlightTitle: {
+    marginTop: 4,
+    color: Theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
+  spotlightKicker: {
+    color: Theme.colors.accent,
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12,
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  spotlightBody: {
+    color: Theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 19,
+    letterSpacing: 0,
+  },
+  spotlightIcon: {
+    width: 56,
+    height: 56,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: Theme.colors.accentBorder,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  sectionBlock: {
+    gap: 12,
+    paddingTop: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  sectionHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sectionKicker: {
+    color: Theme.colors.accent,
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12,
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  sectionTitle: {
+    color: Theme.colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '900',
+    lineHeight: 24,
+    letterSpacing: 0,
+  },
+  bodyText: {
+    color: Theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 19,
+    letterSpacing: 0,
+  },
+  noteText: {
+    color: Theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
+    letterSpacing: 0,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  stepIndex: {
+    width: 30,
+    height: 30,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: Theme.colors.accent,
+  },
+  stepIndexText: {
+    color: Theme.colors.accentDark,
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 15,
+    letterSpacing: 0,
+  },
+  stepContent: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  stepTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: Theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 18,
+    letterSpacing: 0,
+  },
+  pointsGrid: {
+    width: '100%',
+  },
+  pointTile: {
+    minHeight: 114,
+    flexShrink: 0,
+    justifyContent: 'space-between',
+    padding: 13,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  pointIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  pointValue: {
+    color: Theme.colors.textPrimary,
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 30,
+    letterSpacing: 0,
+  },
+  pointLabel: {
+    color: Theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 14,
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  wildCard: {
+    width: 66,
+    height: 86,
+    flexShrink: 0,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: Theme.colors.accentBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  wildCardText: {
+    color: Theme.colors.textPrimary,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 13,
+    letterSpacing: 0,
+  },
+  infoRows: {
+    gap: 10,
+  },
+  infoRow: {
+    minHeight: 78,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 13,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  infoIcon: {
+    width: 34,
+    height: 34,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  infoCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  infoTitle: {
+    color: Theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 17,
+    letterSpacing: 0,
+  },
+  catalogPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.colors.accentBorder,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  catalogText: {
+    flex: 1,
+    color: Theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+    letterSpacing: 0,
+  },
+  stageList: {
+    gap: 8,
+  },
+  stageGrid: {
+    width: '100%',
+  },
+  stageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    padding: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  stageTile: {
+    minHeight: 84,
+    flexShrink: 0,
+    justifyContent: 'space-between',
+    gap: 10,
+    padding: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  stageNameWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  stageName: {
+    color: Theme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 16,
+    letterSpacing: 0,
+  },
+  stageMeta: {
+    marginTop: 3,
+    color: Theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+    letterSpacing: 0,
+  },
+  stageMultiplier: {
+    minWidth: 44,
+    height: 32,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: Theme.colors.accent,
+  },
+  stageMultiplierText: {
+    color: Theme.colors.accentDark,
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 15,
+    letterSpacing: 0,
+  },
+  featureGrid: {
+    width: '100%',
+  },
+  miniFeature: {
+    position: 'relative',
+    minHeight: 130,
+    alignSelf: 'stretch',
+    flexShrink: 0,
+    overflow: 'hidden',
+    padding: 13,
+    paddingBottom: 34,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface2,
+  },
+  miniFeatureIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: Theme.colors.accentDim,
+  },
+  miniFeatureTitle: {
+    marginTop: 10,
+    color: Theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 17,
+    letterSpacing: 0,
+  },
+  miniFeatureBody: {
+    marginTop: 5,
+    color: Theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 16,
+    letterSpacing: 0,
+  },
+  miniFeatureAction: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+    backgroundColor: Theme.colors.accentDim,
+  },
+});

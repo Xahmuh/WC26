@@ -25,6 +25,7 @@ import { Container } from '@/components/ui/Container';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
+import { TabPageHeader } from '@/components/ui/TabPageHeader';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { TeamPickerModal } from '@/components/ui/TeamPickerModal';
 import { useResponsive } from '@/lib/responsive';
@@ -35,6 +36,7 @@ import { useMyPredictions } from '@/hooks/usePredictions';
 import { useAuthStore } from '@/stores/auth.store';
 import { supabase } from '@/lib/supabase';
 import { compressLocalImage } from '@/lib/imageUpload';
+import { updateSupportedTeams } from '@/lib/profileMutations';
 
 export default function ProfileScreen(): React.JSX.Element {
   const router = useRouter();
@@ -46,6 +48,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const email = useAuthStore((s) => s.session?.user.email);
   const signOut = useAuthStore((s) => s.signOut);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
+  const setSupportedTeams = useAuthStore((s) => s.setSupportedTeams);
 
   const { data: teams = [], refetch: refetchTeams } = useTeams();
   const [showPicker, setShowPicker] = useState(false);
@@ -123,7 +126,6 @@ export default function ProfileScreen(): React.JSX.Element {
       await refreshProfile();
       Alert.alert('Success', 'Avatar updated successfully!');
     } catch (err: any) {
-      console.log('Avatar upload failed after compression:', err.message);
       Alert.alert('Error', err.message || 'Failed to update avatar.');
     } finally {
       setUploadingAvatar(false);
@@ -134,12 +136,8 @@ export default function ProfileScreen(): React.JSX.Element {
     if (!userId) return;
     setSavingTeams(true);
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ supported_teams: teamsList })
-        .eq('id', userId);
-
-      if (error) throw error;
+      const savedTeams = await updateSupportedTeams(userId, teamsList);
+      setSupportedTeams(savedTeams);
       await refreshProfile();
       setShowPicker(false);
     } catch (err: any) {
@@ -208,6 +206,7 @@ export default function ProfileScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1" edges={['top']}>
+      <TabPageHeader title="Profile" subtitle="Account, teams, and stats" />
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
@@ -227,13 +226,8 @@ export default function ProfileScreen(): React.JSX.Element {
           />
         }
       >
-        <Container nested className="px-6 pt-6 gap-6">
+        <Container nested className="px-6 pt-4 gap-6">
         <View className="gap-6">
-        <View className="flex-row items-center gap-2.5">
-          <View style={{ width: 5, height: 24, borderRadius: 2, backgroundColor: Theme.colors.accent }} />
-          <Text className="text-2xl font-extrabold uppercase tracking-tight text-textPrimary">Profile</Text>
-        </View>
-
         {/* Avatar Card — centered, full-width bands so nothing can overflow */}
         <LinearGradient
           colors={['#1C1C1E', '#151516', '#0D0D0D']}
@@ -271,7 +265,7 @@ export default function ProfileScreen(): React.JSX.Element {
             {/* Name + inline edit */}
             {editingName ? (
               <LinearGradient
-                colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.055)', 'rgba(201,223,106,0.08)']}
+                colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.02)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{
@@ -279,24 +273,19 @@ export default function ProfileScreen(): React.JSX.Element {
                   marginTop: 16,
                   borderRadius: 18,
                   borderWidth: 1,
-                  borderColor: 'rgba(201,223,106,0.28)',
+                  borderColor: 'rgba(255,255,255,0.1)',
                   overflow: 'hidden',
                 }}
               >
                 <BlurView intensity={24} tint="dark" style={{ padding: 14 }}>
                   <View className="flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-2">
-                      <View className="h-7 w-7 items-center justify-center rounded-full bg-accentDim border border-accentBorder">
-                        <Icon name="sparkles" size={13} color={Theme.colors.accent} />
-                      </View>
-                      <View>
-                        <Text className="text-[10px] font-extrabold uppercase tracking-[2px] text-accent">
-                          Display name
-                        </Text>
-                        <Text className="text-[10px] font-semibold text-[#8F8F8F]">
-                          This is what players see
-                        </Text>
-                      </View>
+                    <View>
+                      <Text className="text-[10px] font-extrabold uppercase tracking-[1.7px] text-accent">
+                        Display name
+                      </Text>
+                      <Text className="text-[10px] font-semibold text-[#8F8F8F]">
+                        Shown on leaderboard and predictions
+                      </Text>
                     </View>
                     <Text className="text-[10px] font-bold text-[#777777]">
                       {trimmedEditName.length}/32
@@ -306,7 +295,7 @@ export default function ProfileScreen(): React.JSX.Element {
                   <TextInput
                     value={editNameValue}
                     onChangeText={setEditNameValue}
-                    className="mt-3 text-[22px] font-black text-white tracking-tight"
+                    className="mt-3 text-[22px] font-black text-white"
                     style={{
                       width: '100%',
                       textAlign: 'center',
@@ -361,7 +350,7 @@ export default function ProfileScreen(): React.JSX.Element {
               </LinearGradient>
             ) : (
               <LinearGradient
-                colors={['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.045)', 'rgba(201,223,106,0.07)']}
+                colors={['rgba(255,255,255,0.095)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.018)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{
@@ -373,22 +362,19 @@ export default function ProfileScreen(): React.JSX.Element {
                   overflow: 'hidden',
                 }}
               >
-                <BlurView intensity={18} tint="dark" style={{ paddingHorizontal: 14, paddingVertical: 13 }}>
+                <BlurView intensity={16} tint="dark" style={{ paddingHorizontal: 14, paddingVertical: 14 }}>
                   <View className="flex-row items-center gap-3">
-                    <View className="h-10 w-10 items-center justify-center rounded-2xl bg-accentDim border border-accentBorder">
+                    <View className="h-10 w-10 items-center justify-center rounded-full bg-accentDim border border-accentBorder">
                       <Text className="text-sm font-black text-accent">{initials}</Text>
                     </View>
 
                     <View className="min-w-0 flex-1">
-                      <View className="flex-row items-center gap-1.5">
-                        <Icon name="sparkles" size={11} color={Theme.colors.accent} />
-                        <Text className="text-[9px] font-extrabold uppercase tracking-[2px] text-accent">
-                          Profile name
-                        </Text>
-                      </View>
+                      <Text className="text-[9px] font-extrabold uppercase tracking-[1.7px] text-accent">
+                        Profile name
+                      </Text>
                       <Text
                         numberOfLines={1}
-                        style={{ fontSize: rs(23), fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.8 }}
+                        style={{ fontSize: rs(23), fontWeight: '900', color: '#FFFFFF' }}
                       >
                         {primaryName}
                       </Text>
@@ -398,7 +384,7 @@ export default function ProfileScreen(): React.JSX.Element {
                         </Text>
                       ) : (
                         <Text numberOfLines={1} className="text-[11px] font-semibold text-[#8F8F8F]">
-                          Tap edit to keep it sharp
+                          Visible to other players
                         </Text>
                       )}
                     </View>
@@ -492,6 +478,11 @@ export default function ProfileScreen(): React.JSX.Element {
             label="Notifications"
             icon="bell"
             onPress={() => router.push('/notifications' as any)}
+          />
+          <ProfileOption
+            label="How to Play"
+            icon="info"
+            onPress={() => router.push('/profile/how-to-play' as any)}
           />
           {isAdmin && (
             <ProfileOption

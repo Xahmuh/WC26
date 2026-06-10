@@ -2,9 +2,20 @@ import {
   applyPointsMultiplier,
   calculateEffectiveMultiplier,
   calculatePoints,
+  getMaxBasePoints,
   getOutcome,
-  POINTS,
+  type Score,
 } from '@/lib/scoring';
+
+const TEST_SCORING_RULES = {
+  winnerPoints: 4,
+  exactBonusPoints: 6,
+} as const;
+const TEST_MAX_BASE_POINTS = getMaxBasePoints(TEST_SCORING_RULES);
+
+function calculateTestPoints(actual: Score, predicted: Score) {
+  return calculatePoints(actual, predicted, TEST_SCORING_RULES);
+}
 
 describe('getOutcome', () => {
   it('detects a home win', () => {
@@ -34,40 +45,40 @@ describe('getOutcome', () => {
 
 describe('calculatePoints', () => {
   it('awards max points for an exact home-win prediction', () => {
-    const result = calculatePoints({ home: 2, away: 1 }, { home: 2, away: 1 });
+    const result = calculateTestPoints({ home: 2, away: 1 }, { home: 2, away: 1 });
     expect(result).toEqual({
-      winner_points: POINTS.WINNER,
+      winner_points: TEST_SCORING_RULES.winnerPoints,
       home_goal_points: 0,
       away_goal_points: 0,
-      exact_bonus: POINTS.EXACT_BONUS,
-      total_points: POINTS.MAX_PER_MATCH,
+      exact_bonus: TEST_SCORING_RULES.exactBonusPoints,
+      total_points: TEST_MAX_BASE_POINTS,
     });
   });
 
   it('awards max points for an exact draw prediction', () => {
-    const result = calculatePoints({ home: 1, away: 1 }, { home: 1, away: 1 });
-    expect(result.total_points).toBe(POINTS.MAX_PER_MATCH);
-    expect(result.exact_bonus).toBe(POINTS.EXACT_BONUS);
+    const result = calculateTestPoints({ home: 1, away: 1 }, { home: 1, away: 1 });
+    expect(result.total_points).toBe(TEST_MAX_BASE_POINTS);
+    expect(result.exact_bonus).toBe(TEST_SCORING_RULES.exactBonusPoints);
   });
 
   it('awards max points for an exact 0-0 draw prediction', () => {
-    const result = calculatePoints({ home: 0, away: 0 }, { home: 0, away: 0 });
-    expect(result.total_points).toBe(POINTS.MAX_PER_MATCH);
+    const result = calculateTestPoints({ home: 0, away: 0 }, { home: 0, away: 0 });
+    expect(result.total_points).toBe(TEST_MAX_BASE_POINTS);
   });
 
   it('awards winner points for correct winner but no exact score', () => {
     // Actual 3-0 home win, predicted 1-0 home win → winner only.
-    const result = calculatePoints({ home: 3, away: 0 }, { home: 1, away: 0 });
-    expect(result.winner_points).toBe(POINTS.WINNER);
+    const result = calculateTestPoints({ home: 3, away: 0 }, { home: 1, away: 0 });
+    expect(result.winner_points).toBe(TEST_SCORING_RULES.winnerPoints);
     expect(result.away_goal_points).toBe(0);
     expect(result.home_goal_points).toBe(0);
     expect(result.exact_bonus).toBe(0);
-    expect(result.total_points).toBe(POINTS.WINNER);
+    expect(result.total_points).toBe(TEST_SCORING_RULES.winnerPoints);
   });
 
   it('does not award partial home-goal points when winner is wrong', () => {
     // Actual 2-3 away win, predicted 2-1 home win.
-    const result = calculatePoints({ home: 2, away: 3 }, { home: 2, away: 1 });
+    const result = calculateTestPoints({ home: 2, away: 3 }, { home: 2, away: 1 });
     expect(result.winner_points).toBe(0);
     expect(result.home_goal_points).toBe(0);
     expect(result.away_goal_points).toBe(0);
@@ -77,7 +88,7 @@ describe('calculatePoints', () => {
 
   it('does not award partial away-goal points when winner is wrong', () => {
     // Actual 1-1 draw, predicted 0-1 away win.
-    const result = calculatePoints({ home: 1, away: 1 }, { home: 0, away: 1 });
+    const result = calculateTestPoints({ home: 1, away: 1 }, { home: 0, away: 1 });
     expect(result.winner_points).toBe(0);
     expect(result.home_goal_points).toBe(0);
     expect(result.away_goal_points).toBe(0);
@@ -86,17 +97,17 @@ describe('calculatePoints', () => {
 
   it('awards correct winner only when one goal matches but score is not exact', () => {
     // Actual 2-1 home win, predicted 2-0 home win.
-    const result = calculatePoints({ home: 2, away: 1 }, { home: 2, away: 0 });
-    expect(result.winner_points).toBe(POINTS.WINNER);
+    const result = calculateTestPoints({ home: 2, away: 1 }, { home: 2, away: 0 });
+    expect(result.winner_points).toBe(TEST_SCORING_RULES.winnerPoints);
     expect(result.home_goal_points).toBe(0);
     expect(result.away_goal_points).toBe(0);
     expect(result.exact_bonus).toBe(0);
-    expect(result.total_points).toBe(POINTS.WINNER);
+    expect(result.total_points).toBe(TEST_SCORING_RULES.winnerPoints);
   });
 
   it('awards 0 for a completely wrong prediction', () => {
     // Actual 0-2 away win, predicted 3-0 home win.
-    const result = calculatePoints({ home: 0, away: 2 }, { home: 3, away: 0 });
+    const result = calculateTestPoints({ home: 0, away: 2 }, { home: 3, away: 0 });
     expect(result).toEqual({
       winner_points: 0,
       home_goal_points: 0,
@@ -107,42 +118,42 @@ describe('calculatePoints', () => {
   });
 
   it('uses explicit qualifying team for knockout winner points', () => {
-    const result = calculatePoints(
+    const result = calculateTestPoints(
       { home: 1, away: 1, isKnockout: true, winnerTeamId: 'away-team' },
       { home: 1, away: 1, winnerTeamId: 'away-team' }
     );
-    expect(result.winner_points).toBe(POINTS.WINNER);
-    expect(result.exact_bonus).toBe(POINTS.EXACT_BONUS);
+    expect(result.winner_points).toBe(TEST_SCORING_RULES.winnerPoints);
+    expect(result.exact_bonus).toBe(TEST_SCORING_RULES.exactBonusPoints);
   });
 
   it('does not infer knockout qualifier from the 90-minute score', () => {
-    const result = calculatePoints(
+    const result = calculateTestPoints(
       { home: 2, away: 0, isKnockout: true, winnerTeamId: 'away-team' },
       { home: 2, away: 0, winnerTeamId: 'home-team' }
     );
     expect(result.winner_points).toBe(0);
-    expect(result.exact_bonus).toBe(POINTS.EXACT_BONUS);
+    expect(result.exact_bonus).toBe(TEST_SCORING_RULES.exactBonusPoints);
   });
 
   it('awards knockout qualifier points independently of a wrong 90-minute score', () => {
-    const result = calculatePoints(
+    const result = calculateTestPoints(
       { home: 1, away: 1, isKnockout: true, winnerTeamId: 'home-team' },
       { home: 2, away: 1, winnerTeamId: 'home-team' }
     );
-    expect(result.winner_points).toBe(POINTS.WINNER);
+    expect(result.winner_points).toBe(TEST_SCORING_RULES.winnerPoints);
     expect(result.exact_bonus).toBe(0);
   });
 
   it('never returns negative or above the max', () => {
-    const samples: Array<[Parameters<typeof calculatePoints>[0], Parameters<typeof calculatePoints>[1]]> = [
+    const samples: Array<[Parameters<typeof calculateTestPoints>[0], Parameters<typeof calculateTestPoints>[1]]> = [
       [{ home: 0, away: 0 }, { home: 5, away: 5 }],
       [{ home: 7, away: 2 }, { home: 0, away: 9 }],
       [{ home: 4, away: 4 }, { home: 4, away: 4 }],
     ];
     for (const [actual, predicted] of samples) {
-      const { total_points } = calculatePoints(actual, predicted);
+      const { total_points } = calculateTestPoints(actual, predicted);
       expect(total_points).toBeGreaterThanOrEqual(0);
-      expect(total_points).toBeLessThanOrEqual(POINTS.MAX_PER_MATCH);
+      expect(total_points).toBeLessThanOrEqual(TEST_MAX_BASE_POINTS);
     }
   });
 });
@@ -153,18 +164,18 @@ describe('multiplier helpers', () => {
   });
 
   it('applies a legend-card style effective multiplier to every scoring field', () => {
-    const base = calculatePoints(
+    const base = calculateTestPoints(
       { home: 1, away: 1, isKnockout: true, winnerTeamId: 'home-team' },
       { home: 1, away: 1, winnerTeamId: 'home-team' }
     );
     const effectiveMultiplier = calculateEffectiveMultiplier(2, 3);
 
     expect(applyPointsMultiplier(base, effectiveMultiplier)).toEqual({
-      winner_points: POINTS.WINNER * effectiveMultiplier,
+      winner_points: TEST_SCORING_RULES.winnerPoints * effectiveMultiplier,
       home_goal_points: 0,
       away_goal_points: 0,
-      exact_bonus: POINTS.EXACT_BONUS * effectiveMultiplier,
-      total_points: POINTS.MAX_PER_MATCH * effectiveMultiplier,
+      exact_bonus: TEST_SCORING_RULES.exactBonusPoints * effectiveMultiplier,
+      total_points: TEST_MAX_BASE_POINTS * effectiveMultiplier,
     });
   });
 

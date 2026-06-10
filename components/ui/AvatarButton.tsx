@@ -1,6 +1,8 @@
-import { Image, Pressable, StyleSheet, Text } from 'react-native';
+import { Image, Pressable, StyleSheet } from 'react-native';
 
-import { Colors, Typography } from '@/constants';
+import { Colors } from '@/constants';
+
+const DEFAULT_AVATAR = require('@/assets/default_avatar.jpg');
 
 interface AvatarButtonProps {
   displayName?: string;
@@ -15,12 +17,13 @@ export function AvatarButton({
   size = 40,
   onPress,
 }: AvatarButtonProps): React.JSX.Element {
-  const initial = displayName?.trim().charAt(0).toUpperCase() ?? '?';
+  const avatarSource = avatarUrl ? { uri: avatarUrl } : DEFAULT_AVATAR;
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityLabel={`${displayName ?? 'Player'} profile`}
       style={[
         styles.container,
         {
@@ -30,15 +33,11 @@ export function AvatarButton({
         },
       ]}
     >
-      {avatarUrl ? (
-        <Image
-          source={{ uri: avatarUrl }}
-          style={{ width: size, height: size, borderRadius: size / 2 }}
-          resizeMode="cover"
-        />
-      ) : (
-        <Text style={styles.initial}>{initial}</Text>
-      )}
+      <Image
+        source={avatarSource}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        resizeMode="cover"
+      />
     </Pressable>
   );
 }
@@ -50,10 +49,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  initial: {
-    color: Colors.background.primary,
-    fontSize: Typography.size.lg,
-    fontWeight: Typography.weight.black,
-  },
 });
-

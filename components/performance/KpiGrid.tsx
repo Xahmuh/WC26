@@ -30,14 +30,14 @@ function streakLabel(streak: ComputedKPIs['streak']): { value: string; subtitle:
   if (streak.streak_type === 'none' || streak.current_streak === 0) {
     return {
       value: '0',
-      subtitle: 'No active streak',
+      subtitle: 'No current run',
       color: Theme.colors.textSecondary,
     };
   }
 
   return {
     value: String(streak.current_streak),
-    subtitle: streak.streak_type === 'win' ? 'Win streak' : 'Loss streak',
+    subtitle: streak.streak_type === 'win' ? 'Correct picks in a row' : 'Missed picks in a row',
     color: streak.streak_type === 'win' ? Theme.colors.accent : Theme.colors.live,
   };
 }
@@ -50,31 +50,31 @@ export function KpiGrid({ kpis }: KpiGridProps): React.JSX.Element {
   const cards: KpiCardConfig[] = [
     {
       key: 'accuracy',
-      title: 'Accuracy Rate',
+      title: 'Correct Picks',
       value: `${kpis.accuracyRate}%`,
-      subtitle: 'Correct outcomes',
+      subtitle: 'Winner or draw right',
       icon: 'target',
       accentColor: kpis.accuracyRate >= 60 ? Theme.colors.accent : Theme.colors.textPrimary,
     },
     {
       key: 'exact',
-      title: 'Exact Score',
+      title: 'Exact Scores',
       value: `${kpis.exactScoreAccuracy}%`,
-      subtitle: 'Perfect scorelines',
+      subtitle: 'Full score right',
       icon: 'star',
       accentColor: kpis.exactScoreAccuracy >= 15 ? Theme.colors.warning : Theme.colors.textPrimary,
     },
     {
       key: 'ppm',
-      title: 'Points / Match',
+      title: 'Avg Points',
       value: `${kpis.pointsPerMatch} pts`,
-      subtitle: 'Average return',
+      subtitle: 'Per scored match',
       icon: 'star',
       accentColor: Theme.colors.accent,
     },
     {
       key: 'streak',
-      title: 'Streak',
+      title: 'Current Run',
       value: streak.value,
       subtitle: streak.subtitle,
       icon: 'flame',
@@ -82,9 +82,9 @@ export function KpiGrid({ kpis }: KpiGridProps): React.JSX.Element {
     },
     {
       key: 'participation',
-      title: 'Participation',
+      title: 'Activity',
       value: `${kpis.participationRate}%`,
-      subtitle: 'Matches covered',
+      subtitle: 'Submitted picks',
       icon: 'trendingUp',
       accentColor: kpis.participationRate >= 70 ? Theme.colors.accent : Theme.colors.textPrimary,
     },

@@ -17,6 +17,8 @@ import type { Match, Prediction, Team, UserCard } from '@/types';
 interface PredictionFormProps {
   match: Match;
   existing?: Prediction;
+  onSaved?: () => void;
+  onEditStart?: () => void;
 }
 
 function teamNameById(match: Match, teamId: string | null | undefined): string | null {
@@ -181,6 +183,8 @@ function CardBoostPicker({
 export function PredictionForm({
   match,
   existing,
+  onSaved,
+  onEditStart,
 }: PredictionFormProps): React.JSX.Element {
   const [home, setHome] = useState<number>(existing?.pred_home_score ?? 0);
   const [away, setAway] = useState<number>(existing?.pred_away_score ?? 0);
@@ -284,6 +288,7 @@ export function PredictionForm({
         onSuccess: () => {
           setJustSaved(true);
           setIsEditing(false);
+          onSaved?.();
         },
       }
     );
@@ -365,6 +370,7 @@ export function PredictionForm({
           onPress={() => {
             setJustSaved(false);
             setIsEditing(true);
+            onEditStart?.();
           }}
           className="w-full mt-2"
           variant="secondary"

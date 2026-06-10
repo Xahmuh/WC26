@@ -9,6 +9,7 @@ import { PodiumSection } from '@/components/leaderboard/PodiumSection';
 import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState, ErrorState } from '@/components/ui/States';
+import { TabPageHeader } from '@/components/ui/TabPageHeader';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { PlayerProfileModal } from '@/components/ui/PlayerProfileModal';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
@@ -95,6 +96,7 @@ export default function LeaderboardScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1" edges={['top']}>
+      <TabPageHeader title="Leaderboard" subtitle="Top players and ranks" />
       {query.isLoading ? (
         <LoadingSpinner fullScreen label="Loading leaderboard…" />
       ) : query.isError ? (
@@ -105,7 +107,7 @@ export default function LeaderboardScreen(): React.JSX.Element {
             data={list}
             keyExtractor={(item) => item.user_id}
             renderItem={renderItem}
-            contentContainerClassName="gap-2 px-6 pt-2"
+            contentContainerClassName="gap-2 px-6 pt-4"
             contentContainerStyle={{
               // When the user is pinned below, the pinned row carries the tab-bar
               // clearance, so the list only needs a small bottom gap.

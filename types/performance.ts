@@ -6,6 +6,13 @@ export interface UserPerformanceStats {
   matches_participated: number;
 }
 
+export interface PerformancePointsBreakdown {
+  outcome_points: number;
+  exact_bonus: number;
+  question_points: number;
+  match_points: number;
+}
+
 export interface UserStreak {
   current_streak: number;
   streak_type: 'win' | 'loss' | 'none';

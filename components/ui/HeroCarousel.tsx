@@ -27,6 +27,8 @@ async function getActiveHeroSlides(): Promise<HeroSlide[]> {
     .from('hero_slides')
     .select('*')
     .eq('is_active', true)
+    .eq('placement', 'top')
+    .is('collection_id', null)
     .order('sort_order', { ascending: true });
 
   if (error) {

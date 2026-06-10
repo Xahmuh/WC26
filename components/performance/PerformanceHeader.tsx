@@ -6,6 +6,8 @@ import { useResponsive } from '@/lib/responsive';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 
+const DEFAULT_AVATAR = require('@/assets/default_avatar.jpg');
+
 interface PerformanceHeaderProps {
   displayName: string;
   avatarUrl?: string | null;
@@ -17,7 +19,7 @@ export function PerformanceHeader({
 }: PerformanceHeaderProps): React.JSX.Element {
   const { isSmall, scale: rs } = useResponsive();
   const avatarSize = rs(isSmall ? 56 : 68);
-  const initials = displayName.slice(0, 2).toUpperCase();
+  const avatarSource = avatarUrl ? { uri: avatarUrl } : DEFAULT_AVATAR;
 
   return (
     <Card
@@ -38,13 +40,7 @@ export function PerformanceHeader({
           className="items-center justify-center overflow-hidden rounded-full border-2"
           style={{ borderColor: Theme.colors.accent, width: avatarSize, height: avatarSize }}
         >
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} className="h-full w-full" />
-          ) : (
-            <View className="h-full w-full items-center justify-center bg-bgSurface3">
-              <Text className="text-lg font-bold text-textPrimary">{initials}</Text>
-            </View>
-          )}
+          <Image source={avatarSource} className="h-full w-full" resizeMode="cover" />
         </View>
 
         <View className="flex-1 items-start gap-1">
@@ -66,7 +62,7 @@ export function PerformanceHeader({
             className="text-left text-sm leading-5 text-textSecondary"
             numberOfLines={2}
           >
-            Track accuracy, streaks, and return on every prediction.
+            See your correct picks, points, and current run.
           </Text>
         </View>
       </View>

@@ -6,10 +6,12 @@ import { Container } from '@/components/ui/Container';
 import { Button } from '@/components/ui/Button';
 import { ErrorState } from '@/components/ui/States';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { KpiGrid } from '@/components/performance/KpiGrid';
 import { KpiSkeletonGrid } from '@/components/performance/KpiSkeletonGrid';
+import { PerformanceBreakdownGrid } from '@/components/performance/PerformanceBreakdownGrid';
 import { PerformanceHeader } from '@/components/performance/PerformanceHeader';
+import { PerformanceRadarCard } from '@/components/performance/PerformanceRadarCard';
 import { PerformanceSummary } from '@/components/performance/PerformanceSummary';
+import { useScoringRules } from '@/hooks/useAdmin';
 import { useUserPerformance } from '@/hooks/useUserPerformance';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -17,7 +19,11 @@ export default function UserPerformanceScreen(): React.JSX.Element {
   const router = useRouter();
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
-  const { kpis, loading, error, reload } = useUserPerformance(userId);
+  const { kpis, breakdown, loading, error, reload } = useUserPerformance(userId);
+  const scoringRulesQuery = useScoringRules();
+  const maxBasePoints = scoringRulesQuery.data
+    ? scoringRulesQuery.data.winnerPoints + scoringRulesQuery.data.exactBonusPoints
+    : undefined;
 
   const displayName = profile?.username || profile?.display_name || 'Player';
 
@@ -28,7 +34,7 @@ export default function UserPerformanceScreen(): React.JSX.Element {
           headerShown: false,
         }}
       />
-      <ScreenHeader title="My Performance" subtitle="Accuracy and scoring breakdown" fallback="/(tabs)/profile" />
+      <ScreenHeader title="My Performance" subtitle="Your prediction stats" fallback="/(tabs)/profile" />
 
       <ScrollView
         className="flex-1"
@@ -63,15 +69,8 @@ export default function UserPerformanceScreen(): React.JSX.Element {
             {!loading && !error && kpis ? (
               <View className="gap-5">
                 <PerformanceSummary kpis={kpis} />
-
-                <View className="gap-1">
-                  <Text className="text-lg font-black text-textPrimary">Performance breakdown</Text>
-                  <Text className="text-sm leading-5 text-textSecondary">
-                    A closer look at accuracy, exact scores, points, streaks, and coverage.
-                  </Text>
-                </View>
-
-                <KpiGrid kpis={kpis} />
+                <PerformanceRadarCard kpis={kpis} maxBasePoints={maxBasePoints} />
+                {breakdown ? <PerformanceBreakdownGrid breakdown={breakdown} /> : null}
               </View>
             ) : null}
           </View>

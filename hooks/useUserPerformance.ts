@@ -1,24 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { safe } from '@/lib/safe';
-import { fetchUserPerformance, fetchUserStreak } from '@/lib/supabase/queries/performance';
-import type { ComputedKPIs } from '@/types/performance';
-
-function computeKPIs(
-  stats: NonNullable<Awaited<ReturnType<typeof fetchUserPerformance>>>,
-  streak: Awaited<ReturnType<typeof fetchUserStreak>>,
-): ComputedKPIs {
-  return {
-    accuracyRate: Math.round(safe(stats.correct_predictions, stats.total_predictions) * 100),
-    exactScoreAccuracy: Math.round(safe(stats.exact_predictions, stats.total_predictions) * 100),
-    pointsPerMatch: parseFloat(safe(stats.total_points, stats.matches_participated).toFixed(1)),
-    participationRate: Math.round(safe(stats.matches_participated, stats.total_predictions) * 100),
-    streak,
-  };
-}
+import { EMPTY_PERFORMANCE_STATS, computePerformanceKPIs } from '@/lib/performanceMetrics';
+import { fetchUserPerformance, fetchUserPointsBreakdown, fetchUserStreak } from '@/lib/supabase/queries/performance';
+import type { ComputedKPIs, PerformancePointsBreakdown } from '@/types/performance';
 
 export function useUserPerformance(userId: string | null | undefined) {
   const [kpis, setKpis] = useState<ComputedKPIs | null>(null);
+  const [breakdown, setBreakdown] = useState<PerformancePointsBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -31,6 +19,7 @@ export function useUserPerformance(userId: string | null | undefined) {
     if (!userId) {
       setLoading(false);
       setKpis(null);
+      setBreakdown(null);
       return;
     }
 
@@ -42,23 +31,21 @@ export function useUserPerformance(userId: string | null | undefined) {
       setError(null);
 
       try {
-        const [stats, streak] = await Promise.all([
+        const [stats, streak, pointsBreakdown] = await Promise.all([
           fetchUserPerformance(uid),
           fetchUserStreak(uid),
+          fetchUserPointsBreakdown(uid),
         ]);
 
         if (cancelled) return;
 
-        if (!stats || stats.total_predictions === 0) {
-          setKpis(null);
-          return;
-        }
-
-        setKpis(computeKPIs(stats, streak));
+        setKpis(computePerformanceKPIs(stats ?? EMPTY_PERFORMANCE_STATS, streak));
+        setBreakdown(pointsBreakdown);
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : 'Unknown error');
         setKpis(null);
+        setBreakdown(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -71,5 +58,5 @@ export function useUserPerformance(userId: string | null | undefined) {
     };
   }, [userId, reloadToken]);
 
-  return { kpis, loading, error, reload };
+  return { kpis, breakdown, loading, error, reload };
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,18 +17,9 @@ import { useResponsive } from '@/lib/responsive';
 import { Button } from '@/components/ui/Button';
 import { GoogleButton } from '@/components/ui/GoogleButton';
 import { Icon } from '@/components/ui/Icon';
+import { useAuthContent } from '@/hooks/useAuthContent';
 import { useAuthStore } from '@/stores/auth.store';
 import { signInWithGoogle } from '@/services/auth.service';
-
-const QUOTES = [
-  { text: "Stop giving Arsenal set pieces… lower leagues await", author: "Ahmed Elsherbini" },
-  { text: "All Barcelona’s trophies were just about referees", author: "Yusuf Salem" },
-  { text: "Football is the ultimate drama.", author: "Pelé" },
-  { text: "You have to fight to reach your dream.", author: "Lionel Messi" },
-  { text: "Every game is a new opportunity to write history.", author: "World Cup 2026" },
-  { text: "Predicting the future is easy. Getting it right is the hard part.", author: "Football Legends" },
-  { text: "Some people think football is a matter of life and death. It's much more serious than that.", author: "Bill Shankly" }
-];
 
 export default function LoginScreen(): React.JSX.Element {
   const router = useRouter();
@@ -38,12 +29,24 @@ export default function LoginScreen(): React.JSX.Element {
   const [password, setPassword] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * QUOTES.length));
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const authContentQuery = useAuthContent();
+  const quotes = authContentQuery.data?.quotes ?? [];
+  const developerName = authContentQuery.data?.settings?.developer_name?.trim() ?? '';
 
-  const quote = QUOTES[quoteIndex] || QUOTES[0];
+  const quote = quotes.length > 0 ? quotes[quoteIndex % quotes.length] : null;
+
+  useEffect(() => {
+    if (quotes.length === 0) {
+      setQuoteIndex(0);
+      return;
+    }
+    setQuoteIndex((prev) => prev % quotes.length);
+  }, [quotes.length]);
 
   const handleNextQuote = () => {
-    setQuoteIndex((prev) => (prev + 1) % QUOTES.length);
+    if (quotes.length <= 1) return;
+    setQuoteIndex((prev) => (prev + 1) % quotes.length);
   };
 
   const signIn = useAuthStore((s) => s.signIn);
@@ -216,22 +219,24 @@ export default function LoginScreen(): React.JSX.Element {
                     minimumFontScale={0.88}
                     className="text-center italic text-sm text-textSecondary font-light leading-relaxed"
                   >
-                    " {quote.text} "
+                    " {quote.quote_text} "
                   </Text>
                   <Text
                     numberOfLines={1}
                     className="text-center text-[10px] font-bold uppercase tracking-widest text-accent mt-1"
                   >
-                    — {quote.author}
+                    - {quote.author}
                   </Text>
                 </Pressable>
               )}
 
-              <View className="w-full items-center justify-center -mt-1 pt-1.5 border-t border-bgBorder/35">
-                <Text className="text-xs tracking-wide text-white font-normal">
-                  Developed by Ahmed Elsherbini
-                </Text>
-              </View>
+              {developerName ? (
+                <View className="w-full items-center justify-center -mt-1 pt-1.5 border-t border-bgBorder/35">
+                  <Text className="text-xs tracking-wide text-white font-normal">
+                    Developed by {developerName}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </ScrollView>
       </KeyboardAvoidingView>

@@ -90,62 +90,8 @@ export function MyTeamsMatches({
     );
   }
 
-  const showPlaceholder = favoriteTeamIds.length === 0 || favoriteMatches.length === 0;
-
-  const renderedMatches = showPlaceholder
-    ? [
-        {
-          id: 'placeholder-1',
-          home_team: {
-            id: '',
-            external_id: 0,
-            name: 'Argentina',
-            short_name: 'ARG',
-            code: 'ARG',
-            flag_url: null,
-            group_name: null,
-          },
-          away_team: {
-            id: '',
-            external_id: 0,
-            name: 'Brazil',
-            short_name: 'BRA',
-            code: 'BRA',
-            flag_url: null,
-            group_name: null,
-          },
-          kickoff_time: new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString(),
-          points_multiplier: 2,
-          status: 'SCHEDULED',
-          is_placeholder: false,
-        },
-        {
-          id: 'placeholder-2',
-          home_team: {
-            id: '',
-            external_id: 0,
-            name: 'England',
-            short_name: 'ENG',
-            code: 'ENG',
-            flag_url: null,
-            group_name: null,
-          },
-          away_team: {
-            id: '',
-            external_id: 0,
-            name: 'France',
-            short_name: 'FRA',
-            code: 'FRA',
-            flag_url: null,
-            group_name: null,
-          },
-          kickoff_time: new Date(Date.now() + 1000 * 60 * 60 * 18).toISOString(),
-          points_multiplier: 3,
-          status: 'SCHEDULED',
-          is_placeholder: false,
-        },
-      ]
-    : favoriteMatches;
+  const hasFavoriteTeams = favoriteTeamIds.length > 0;
+  const hasFavoriteMatches = favoriteMatches.length > 0;
 
   return (
     <Card style={styles.card} padding={14}>
@@ -162,44 +108,50 @@ export function MyTeamsMatches({
         }
       />
 
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {renderedMatches.map((match, index) => {
-          const typedMatch = match as Match;
-          const isFavorite = favoriteTeamIds.includes(typedMatch.home_team?.id) || favoriteTeamIds.includes(typedMatch.away_team?.id);
-          const isGolden = Boolean((typedMatch as unknown as { is_golden?: boolean }).is_golden);
-          const isMatchOfDay = Boolean((typedMatch as unknown as { is_match_of_day?: boolean }).is_match_of_day);
+      {hasFavoriteMatches ? (
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {favoriteMatches.map((match, index) => {
+            const typedMatch = match as Match;
+            const isFavorite = favoriteTeamIds.includes(typedMatch.home_team?.id) || favoriteTeamIds.includes(typedMatch.away_team?.id);
+            const isGolden = Boolean((typedMatch as unknown as { is_golden?: boolean }).is_golden);
+            const isMatchOfDay = Boolean((typedMatch as unknown as { is_match_of_day?: boolean }).is_match_of_day);
 
-          return (
-            <MatchCard
-              key={typedMatch.id ?? `match-${index}`}
-              width={cardWidth}
-              homeTeam={buildCardTeam(typedMatch.home_team)}
-              awayTeam={buildCardTeam(typedMatch.away_team)}
-              matchTime={formatShortMatchTime(typedMatch.kickoff_time)}
-              multiplier={typedMatch.points_multiplier}
-              isFavorite={isFavorite}
-              isGolden={isGolden}
-              isMatchOfDay={isMatchOfDay}
-              onPress={() => router.push(`/match/${typedMatch.id}` as never)}
-            />
-          );
-        })}
+            return (
+              <MatchCard
+                key={typedMatch.id ?? `match-${index}`}
+                width={cardWidth}
+                homeTeam={buildCardTeam(typedMatch.home_team)}
+                awayTeam={buildCardTeam(typedMatch.away_team)}
+                matchTime={formatShortMatchTime(typedMatch.kickoff_time)}
+                multiplier={typedMatch.points_multiplier}
+                isFavorite={isFavorite}
+                isGolden={isGolden}
+                isMatchOfDay={isMatchOfDay}
+                onPress={() => router.push(`/match/${typedMatch.id}` as never)}
+              />
+            );
+          })}
 
-        <ScrollArrowButton
-          onPress={() => {
-            scrollRef.current?.scrollToEnd({ animated: true });
-          }}
-        />
-      </ScrollView>
-
-      {favoriteTeamIds.length === 0 ? (
-        <Text style={styles.helper}>No favorite teams yet. Pick some in your profile.</Text>
-      ) : null}
+          <ScrollArrowButton
+            onPress={() => {
+              scrollRef.current?.scrollToEnd({ animated: true });
+            }}
+          />
+        </ScrollView>
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.helper}>
+            {hasFavoriteTeams
+              ? 'No matches found for your favorite teams.'
+              : 'No favorite teams yet. Pick some in your profile.'}
+          </Text>
+        </View>
+      )}
     </Card>
   );
 }
@@ -224,9 +176,18 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   helper: {
-    marginTop: 10,
     color: Colors.text.secondary,
     fontSize: Typography.size.sm,
+  },
+  emptyState: {
+    minHeight: 72,
+    borderRadius: Layout.borderRadius.lg,
+    backgroundColor: '#111513',
+    borderWidth: 1,
+    borderColor: Colors.border.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
   },
   loadingRow: {
     flexDirection: 'row',

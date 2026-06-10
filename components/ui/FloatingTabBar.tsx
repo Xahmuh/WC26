@@ -7,7 +7,7 @@
 // the design-system Theme. Spec: ui kit/DESIGN_SYSTEM.md → "Bottom Navigation".
 // ============================================================================
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -17,15 +17,14 @@ import {
   Keyboard,
   Text,
   Image,
-  type ImageSourcePropType,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { Colors } from '@/constants';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useCardCatalog, useMyCards } from '@/hooks/useUserCards';
 
 type FloatingTabBarProps = {
   state: {
@@ -47,14 +46,7 @@ type FloatingTabBarProps = {
   };
 };
 
-type CenterCardPreview = {
-  key: string;
-  source: ImageSourcePropType;
-};
-
-const JOKER_CARD_SOURCE = require('@/assets/Joker.png');
-const CARD_FLIP_INTERVAL_MS = 3000;
-const CARD_FLIP_DURATION_MS = 560;
+const WORLD_CUP_BALL_SOURCE = require('@/assets/worldcup_ball_trionda_fab.png');
 
 // route name → semantic icon (outline + filled active variant)
 const TAB_ICONS: Record<string, { base: IconName; active: IconName }> = {
@@ -66,15 +58,15 @@ const TAB_ICONS: Record<string, { base: IconName; active: IconName }> = {
 };
 
 const NAV = {
-  bg: 'rgba(8,12,12,0.9)',
+  bg: 'rgba(8,12,12,0.96)',
   borderTopWidth: 1,
-  borderTopColor: 'rgba(201,223,106,0.22)',
-  borderRadius: 24,
-  paddingHorizontal: 7,
-  paddingVertical: 7,
-  iconSize: 23,
+  borderTopColor: 'rgba(201,223,106,0.2)',
+  borderRadius: 20,
+  paddingHorizontal: 10,
+  paddingVertical: 8,
+  iconSize: 21,
   iconActive: Colors.accent.lime,
-  iconInactive: 'rgba(226,230,211,0.58)',
+  iconInactive: 'rgba(226,230,211,0.68)',
   bottomOffset: 12,
 };
 
@@ -93,7 +85,6 @@ function NavItem({
   label,
   isCenter = false,
   pulse = false,
-  centerCardSources = [{ key: 'joker-fallback', source: JOKER_CARD_SOURCE }],
 }: {
   routeName: string;
   isActive: boolean;
@@ -104,15 +95,11 @@ function NavItem({
   label: string;
   isCenter?: boolean;
   pulse?: boolean;
-  centerCardSources?: CenterCardPreview[];
 }): React.JSX.Element {
   const scale = useRef(new Animated.Value(1)).current;
   const pulseValue = useRef(new Animated.Value(1)).current;
   const floatValue = useRef(new Animated.Value(0)).current;
   const shineValue = useRef(new Animated.Value(0)).current;
-  const flipValue = useRef(new Animated.Value(0)).current;
-  const [activeCardIndex, setActiveCardIndex] = useState(0);
-  const [nextCardIndex, setNextCardIndex] = useState(0);
   const icons = TAB_ICONS[routeName] ?? { base: 'home', active: 'homeActive' };
 
   const spring = (toValue: number) =>
@@ -184,66 +171,18 @@ function NavItem({
     };
   }, [floatValue, isCenter, shineValue]);
 
-  useEffect(() => {
-    setActiveCardIndex((current) => (current >= centerCardSources.length ? 0 : current));
-    setNextCardIndex((current) => (current >= centerCardSources.length ? 0 : current));
-  }, [centerCardSources.length]);
-
-  useEffect(() => {
-    if (!isCenter || centerCardSources.length <= 1) return;
-
-    const timer = setInterval(() => {
-      const incomingIndex = (activeCardIndex + 1) % centerCardSources.length;
-      setNextCardIndex(incomingIndex);
-      flipValue.setValue(0);
-
-      Animated.timing(flipValue, {
-        toValue: 1,
-        duration: CARD_FLIP_DURATION_MS,
-        useNativeDriver: Platform.OS !== 'web',
-      }).start(({ finished }) => {
-        if (!finished) return;
-        setActiveCardIndex(incomingIndex);
-        flipValue.setValue(0);
-      });
-    }, CARD_FLIP_INTERVAL_MS);
-
-    return () => {
-      clearInterval(timer);
-      flipValue.stopAnimation();
-    };
-  }, [activeCardIndex, centerCardSources.length, flipValue, isCenter]);
-
-  const jokerTranslateY = floatValue.interpolate({
+  const ballTranslateY = floatValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -5],
+    outputRange: [0, -4],
   });
-  const jokerRotate = floatValue.interpolate({
+  const ballRotate = floatValue.interpolate({
     inputRange: [0, 1],
-    outputRange: ['-6deg', '4deg'],
+    outputRange: ['-5deg', '5deg'],
   });
   const shineTranslate = shineValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [-40, 52],
+    outputRange: [-34, 48],
   });
-  const frontRotate = flipValue.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: ['0deg', '90deg', '90deg'],
-  });
-  const backRotate = flipValue.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: ['-90deg', '-90deg', '0deg'],
-  });
-  const frontOpacity = flipValue.interpolate({
-    inputRange: [0, 0.49, 0.5, 1],
-    outputRange: [1, 1, 0, 0],
-  });
-  const backOpacity = flipValue.interpolate({
-    inputRange: [0, 0.49, 0.5, 1],
-    outputRange: [0, 0, 1, 1],
-  });
-  const activeCardSource = centerCardSources[activeCardIndex]?.source ?? JOKER_CARD_SOURCE;
-  const nextCardSource = centerCardSources[nextCardIndex]?.source ?? activeCardSource;
 
   return (
     <TouchableOpacity
@@ -267,50 +206,27 @@ function NavItem({
         {isCenter ? (
           <Animated.View
             style={[
-              styles.jokerCardWrap,
-              isActive && styles.jokerCardWrapActive,
+              styles.ballFabWrap,
               {
                 transform: [
-                  { translateY: jokerTranslateY },
-                  { rotateZ: jokerRotate },
-                  { scale: isActive ? 1.03 : 1 },
+                  { translateY: ballTranslateY },
+                  { rotateZ: ballRotate },
+                  { scale: isActive ? 1.04 : 1 },
                 ],
               },
             ]}
           >
-            <View style={[styles.centerGlow, isActive && styles.centerGlowActive]} />
-            <View style={styles.jokerCardFrame}>
-              <Animated.View
-                style={[
-                  styles.jokerFace,
-                  {
-                    opacity: frontOpacity,
-                    transform: [{ perspective: 700 }, { rotateY: frontRotate }],
-                  },
-                ]}
-              >
-                <Image source={activeCardSource} style={styles.jokerImage} resizeMode="cover" />
-              </Animated.View>
-              <Animated.View
-                style={[
-                  styles.jokerFace,
-                  {
-                    opacity: backOpacity,
-                    transform: [{ perspective: 700 }, { rotateY: backRotate }],
-                  },
-                ]}
-              >
-                <Image source={nextCardSource} style={styles.jokerImage} resizeMode="cover" />
-              </Animated.View>
+            <View style={[styles.ballGlow, isActive && styles.ballGlowActive]} />
+            <View style={styles.ballFrame}>
+              <Image source={WORLD_CUP_BALL_SOURCE} style={styles.ballImage} resizeMode="contain" />
               <Animated.View
                 pointerEvents="none"
-                style={[styles.jokerShine, { transform: [{ translateX: shineTranslate }, { rotateZ: '18deg' }] }]}
+                style={[styles.ballShine, { transform: [{ translateX: shineTranslate }, { rotateZ: '18deg' }] }]}
               />
             </View>
           </Animated.View>
         ) : (
           <View style={[styles.iconPlate, isActive && styles.iconPlateActive]}>
-            {isActive ? <View style={styles.activeBeam} /> : null}
             <Icon
               name={isActive ? icons.active : icons.base}
               size={NAV.iconSize}
@@ -319,7 +235,11 @@ function NavItem({
           </View>
         )}
 
-        {!isCenter ? (
+        {isCenter ? (
+          <Text style={styles.centerLabel} numberOfLines={1}>
+            {label}
+          </Text>
+        ) : (
           <Text
             style={[
               styles.label,
@@ -329,11 +249,11 @@ function NavItem({
             adjustsFontSizeToFit
             minimumFontScale={0.82}
           >
-            {isActive ? label : ''}
+            {label}
           </Text>
-        ) : null}
+        )}
         {badgeCount != null && badgeCount > 0 && (
-          <View style={[styles.badge, isCenter && styles.centerBadge]}>
+          <View style={styles.badge}>
             <Text style={styles.badgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
           </View>
         )}
@@ -347,43 +267,11 @@ function useUnreadBadge(): number {
   return result.unreadCount;
 }
 
-function useCardsNavData(): { availableCardsBadge: number; centerCardSources: CenterCardPreview[] } {
-  const cardsResult = useMyCards();
-  const catalogResult = useCardCatalog();
-
-  return useMemo(() => {
-    const seen = new Set<string>();
-    const previews: CenterCardPreview[] = [];
-
-    const addPreview = (key: string, imageUrl?: string | null) => {
-      if (!imageUrl || seen.has(imageUrl)) return;
-      seen.add(imageUrl);
-      previews.push({ key, source: { uri: imageUrl } });
-    };
-
-    (cardsResult.data ?? []).forEach((card) => {
-      addPreview(card.id, card.definition?.image_url);
-    });
-
-    (catalogResult.data ?? []).forEach((definition) => {
-      addPreview(definition.id, definition.image_url);
-    });
-
-    return {
-      availableCardsBadge: (cardsResult.data ?? []).filter(
-        (card) => card.status === 'active' && card.uses_remaining > 0
-      ).length,
-      centerCardSources:
-        previews.length > 0 ? previews : [{ key: 'joker-fallback', source: JOKER_CARD_SOURCE }],
-    };
-  }, [cardsResult.data, catalogResult.data]);
-}
-
 export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps): React.JSX.Element | null {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const unreadBadge = useUnreadBadge();
-  const { availableCardsBadge, centerCardSources } = useCardsNavData();
 
   // Hide the floating pill while the keyboard is up so it never overlaps inputs.
   useEffect(() => {
@@ -410,7 +298,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
           const onPress = () => {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-            if (!isActive && !event.defaultPrevented) {
+            if (event.defaultPrevented) return;
+            if (route.name === 'cards') {
+              router.push('/profile/predictions?tab=PENDING' as never);
+              return;
+            }
+            if (!isActive) {
               navigation.navigate(route.name);
             }
           };
@@ -426,18 +319,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
               isActive={isActive}
               onPress={onPress}
               onLongPress={onLongPress}
-              accessibilityLabel={options?.tabBarAccessibilityLabel ?? options?.title}
-              label={options?.title ?? route.name}
-              badgeCount={
-                route.name === 'profile'
-                  ? unreadBadge
-                  : route.name === 'cards'
-                    ? availableCardsBadge
-                    : undefined
-              }
+              accessibilityLabel={isCenter ? 'Pending Predictions' : (options?.tabBarAccessibilityLabel ?? options?.title)}
+              label={isCenter ? 'Predict' : (options?.title ?? route.name)}
+              badgeCount={route.name === 'profile' ? unreadBadge : undefined}
               isCenter={isCenter}
-              pulse={isCenter && availableCardsBadge > 0}
-              centerCardSources={isCenter ? centerCardSources : undefined}
+              pulse={isCenter}
             />
           );
         })}
@@ -484,14 +370,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
     minWidth: 0,
-    height: 50,
+    height: 54,
     paddingHorizontal: 2,
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
   navItemCenter: {
-    height: 62,
-    marginTop: -25,
-    flex: 1.28,
+    height: 64,
+    marginTop: -24,
+    flex: 1.18,
   },
   navItemInner: {
     alignItems: 'center',
@@ -501,99 +387,95 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   centerItemInner: {
-    gap: 0,
+    gap: 2,
   },
   iconPlate: {
-    width: 38,
-    height: 31,
-    borderRadius: 16,
+    width: 36,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconPlateActive: {
-    backgroundColor: 'rgba(201,223,106,0.08)',
+    backgroundColor: 'rgba(201,223,106,0.1)',
   },
   label: {
     maxWidth: '100%',
-    minHeight: 11,
-    fontSize: 9,
-    lineHeight: 11,
+    minHeight: 12,
+    fontSize: 8.5,
+    lineHeight: 10,
     fontWeight: '800',
+    letterSpacing: 0,
   },
-  activeBeam: {
-    position: 'absolute',
-    top: -8,
-    width: 22,
-    height: 3,
-    borderRadius: 999,
-    backgroundColor: Colors.accent.lime,
-    ...Platform.select({
-      web: { boxShadow: '0 0 12px rgba(201,223,106,0.75)' },
-      ios: {
-        shadowColor: Colors.accent.lime,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.7,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-    }),
+  centerLabel: {
+    color: Colors.accent.lime,
+    fontSize: 8.5,
+    lineHeight: 10,
+    fontWeight: '900',
+    letterSpacing: 0,
+    textTransform: 'uppercase',
   },
-  centerGlow: {
-    position: 'absolute',
-    top: 10,
-    width: 42,
-    height: 52,
-    borderRadius: 21,
-    backgroundColor: 'rgba(201,223,106,0.22)',
-  },
-  centerGlowActive: {
-    backgroundColor: 'rgba(201,223,106,0.34)',
-  },
-  jokerCardWrap: {
-    width: 46,
-    height: 64,
+  ballFabWrap: {
+    width: 58,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
-  jokerCardWrapActive: {},
-  jokerCardFrame: {
-    width: 42,
-    height: 58,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1.2,
-    borderColor: 'rgba(201,223,106,0.72)',
-    backgroundColor: 'rgba(12,14,10,0.98)',
+  ballGlow: {
+    position: 'absolute',
+    top: 2,
+    left: 4,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: Colors.accent.lime,
+    backgroundColor: 'transparent',
     ...Platform.select({
-      web: { boxShadow: '0 10px 24px rgba(201,223,106,0.22)' },
+      web: { boxShadow: '0 0 18px rgba(201,223,106,0.34)' },
       ios: {
         shadowColor: Colors.accent.lime,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.34,
         shadowRadius: 12,
       },
-      android: { elevation: 12 },
+      android: { elevation: 10 },
     }),
   },
-  jokerFace: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backfaceVisibility: 'hidden',
+  ballGlowActive: {
+    backgroundColor: 'transparent',
   },
-  jokerImage: {
-    width: '100%',
-    height: '100%',
+  ballFrame: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: { boxShadow: '0 4px 10px rgba(0,0,0,0.18)' },
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 7,
+      },
+      android: { elevation: 6 },
+    }),
   },
-  jokerShine: {
+  ballImage: {
+    width: 46,
+    height: 46,
+  },
+  ballShine: {
     position: 'absolute',
-    top: -10,
-    bottom: -10,
-    width: 16,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    top: -6,
+    bottom: -6,
+    width: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
   badge: {
     position: 'absolute',
@@ -612,12 +494,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     lineHeight: 14,
-  },
-  centerBadge: {
-    top: -10,
-    right: 14,
-    backgroundColor: '#FF6B6B',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.85)',
   },
 });

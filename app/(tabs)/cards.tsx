@@ -1,5 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Animated, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,18 +17,24 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBox } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
+import { TabPageHeader } from '@/components/ui/TabPageHeader';
 import { Colors, Layout, Typography } from '@/constants';
-import { useScoringRules } from '@/hooks/useAdmin';
+import { useScoringRules, useStageCardSettings, useStageMultipliers } from '@/hooks/useAdmin';
 import { useMatches } from '@/hooks/useMatches';
 import { useMyPoints } from '@/hooks/usePoints';
 import { useCardCatalog, useMyCards } from '@/hooks/useUserCards';
 import { STAGE_LABELS } from '@/lib/constants';
 import { useResponsive } from '@/lib/responsive';
+import { DEFAULT_STAGE_MATCH_COUNTS, getStageRank, STAGE_ORDER } from '@/lib/stages';
 import type { CardDefinition, MatchStage, UserCard } from '@/types';
 
 type CollectionStatus = 'locked' | 'ready' | 'used' | 'revoked';
 
 const CARD_GAP = 12;
+const MIN_CARD_COLUMN_WIDTH = 150;
+const MIN_THREE_COLUMN_GRID_WIDTH = 720;
+const CARD_ART_ASPECT_RATIO = 1500 / 1080;
+const CARD_SKELETON_ITEMS = [0, 1, 2, 3];
 
 interface CollectionCard {
   definition: CardDefinition;
@@ -57,18 +73,53 @@ function getCardDescription(card: CollectionCard): string {
   );
 }
 
-function getStageRank(stage: MatchStage): number {
-  const order: MatchStage[] = [
-    'GROUP',
-    'ROUND_OF_32',
-    'ROUND_OF_16',
-    'QUARTER_FINAL',
-    'SEMI_FINAL',
-    'THIRD_PLACE',
-    'FINAL',
-  ];
-  const index = order.indexOf(stage);
-  return index === -1 ? 999 : index;
+function getCardArtHeight(width: number): number {
+  return Math.round(width * CARD_ART_ASPECT_RATIO);
+}
+
+function getCardHeight(width: number): number {
+  return getCardArtHeight(width) + 156;
+}
+
+function getGridColumnCount(gridWidth: number): number {
+  const maxColumns = gridWidth >= MIN_THREE_COLUMN_GRID_WIDTH ? 3 : 2;
+
+  for (let columns = maxColumns; columns > 1; columns -= 1) {
+    const candidateWidth = Math.floor((gridWidth - CARD_GAP * (columns - 1)) / columns);
+    if (candidateWidth >= MIN_CARD_COLUMN_WIDTH) return columns;
+  }
+
+  return 1;
+}
+
+function chunkItems<T>(items: T[], columns: number): T[][] {
+  const rows: T[][] = [];
+  for (let index = 0; index < items.length; index += columns) {
+    rows.push(items.slice(index, index + columns));
+  }
+  return rows;
+}
+
+function getColumnSpacingStyle(columnIndex: number, columnCount: number): { marginRight: number } | null {
+  return columnIndex < columnCount - 1 ? { marginRight: CARD_GAP } : null;
+}
+
+function renderGridSpacers(
+  count: number,
+  width: number,
+  startColumn: number,
+  columnCount: number
+): React.JSX.Element[] {
+  return Array.from({ length: count }, (_, index) => (
+    <View
+      key={`spacer-${index}`}
+      style={[
+        styles.cardSlotSpacer,
+        { width },
+        getColumnSpacingStyle(startColumn + index, columnCount),
+      ]}
+    />
+  ));
 }
 
 function buildCollection(input: {
@@ -76,6 +127,8 @@ function buildCollection(input: {
   userCards: UserCard[];
   matches: ReturnType<typeof useMatches>['data'];
   points: ReturnType<typeof useMyPoints>['data'];
+  stageSettings: Array<{ stage: MatchStage; expected_matches: number }> | undefined;
+  stageMultipliers: Array<{ stage: MatchStage; multiplier: number }> | undefined;
   winnerPoints: number;
   exactBonusPoints: number;
 }): CollectionCard[] {
@@ -96,14 +149,29 @@ function buildCollection(input: {
   const points = Array.from(input.points?.values() ?? []);
   const maxBasePoints = input.winnerPoints + input.exactBonusPoints;
 
-  const stagePossiblePoints = new Map<MatchStage, number>();
+  const expectedMatchesByStage = new Map<MatchStage, number>();
+  STAGE_ORDER.forEach((stage) => {
+    expectedMatchesByStage.set(stage, DEFAULT_STAGE_MATCH_COUNTS[stage]);
+  });
+  input.stageSettings?.forEach((setting) => {
+    expectedMatchesByStage.set(setting.stage, setting.expected_matches);
+  });
+
+  const defaultMultiplierByStage = new Map<MatchStage, number>();
+  input.stageMultipliers?.forEach((row) => {
+    defaultMultiplierByStage.set(row.stage, row.multiplier);
+  });
+
+  const stageActualMatchCount = new Map<MatchStage, number>();
+  const stageActualMultiplierSum = new Map<MatchStage, number>();
   const matchStageById = new Map<string, MatchStage>();
   matches.forEach((match) => {
     matchStageById.set(match.id, match.stage);
     if (match.status === 'POSTPONED' || match.status === 'CANCELLED') return;
-    stagePossiblePoints.set(
+    stageActualMatchCount.set(match.stage, (stageActualMatchCount.get(match.stage) ?? 0) + 1);
+    stageActualMultiplierSum.set(
       match.stage,
-      (stagePossiblePoints.get(match.stage) ?? 0) + maxBasePoints * match.points_multiplier
+      (stageActualMultiplierSum.get(match.stage) ?? 0) + match.points_multiplier
     );
   });
 
@@ -117,7 +185,16 @@ function buildCollection(input: {
   return Array.from(definitionsById.values())
     .map((definition) => {
       const userCard = userCardsByDefinitionId.get(definition.id) ?? null;
-      const totalPossiblePoints = stagePossiblePoints.get(definition.award_stage) ?? 0;
+      const expectedMatches =
+        expectedMatchesByStage.get(definition.award_stage) ??
+        stageActualMatchCount.get(definition.award_stage) ??
+        0;
+      const actualMatches = stageActualMatchCount.get(definition.award_stage) ?? 0;
+      const actualMultiplierSum = stageActualMultiplierSum.get(definition.award_stage) ?? 0;
+      const defaultMultiplier = defaultMultiplierByStage.get(definition.award_stage) ?? 1;
+      const missingMatches = Math.max(expectedMatches - actualMatches, 0);
+      const totalPossiblePoints =
+        maxBasePoints * (actualMultiplierSum + missingMatches * defaultMultiplier);
       const requiredPoints = totalPossiblePoints * (definition.threshold_percent / 100);
       const userPoints = userStagePoints.get(definition.award_stage) ?? 0;
       const unlocked = Boolean(userCard);
@@ -148,12 +225,16 @@ function CollectionCardTile({
   card,
   selected,
   width,
+  columnIndex,
+  columnCount,
   onPress,
   onView,
 }: {
   card: CollectionCard;
   selected: boolean;
   width: number;
+  columnIndex: number;
+  columnCount: number;
   onPress: () => void;
   onView: () => void;
 }): React.JSX.Element {
@@ -162,13 +243,15 @@ function CollectionCardTile({
   const locked = card.status === 'locked';
   const remainingUses = card.userCard?.uses_remaining ?? card.definition.max_uses;
   const maxUses = card.userCard?.max_uses ?? card.definition.max_uses;
+  const artHeight = getCardArtHeight(width);
 
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.gameCard,
-        { width },
+        { width, height: getCardHeight(width) },
+        getColumnSpacingStyle(columnIndex, columnCount),
         selected && styles.gameCardSelected,
         locked && styles.gameCardLocked,
         pressed && styles.gameCardPressed,
@@ -179,19 +262,14 @@ function CollectionCardTile({
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={styles.gameArtFrame}>
+      <View style={[styles.gameArtFrame, { height: artHeight }]}>
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} resizeMode="cover" style={styles.gameArtImage} />
+          <Image source={{ uri: imageUrl }} resizeMode="contain" style={styles.gameArtImage} />
         ) : (
           <View style={styles.gameArtFallback}>
             <Icon name="gift" size={34} color={locked ? Colors.text.tertiary : Colors.accent.lime} />
           </View>
         )}
-
-        <LinearGradient
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.16)', 'rgba(0,0,0,0.82)']}
-          style={StyleSheet.absoluteFill}
-        />
 
         {locked ? (
           <View style={styles.lockOverlay}>
@@ -219,15 +297,15 @@ function CollectionCardTile({
         >
           <Icon name="eye" size={16} color={Colors.text.primary} fixed />
         </Pressable>
+      </View>
 
-        <View style={styles.gameArtCaption}>
-          <Text style={styles.gameCardTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-            {card.definition.name}
-          </Text>
-          <Text style={styles.gameCardStage} numberOfLines={1}>
-            {STAGE_LABELS[card.definition.award_stage]}
-          </Text>
-        </View>
+      <View style={styles.gameNameBlock}>
+        <Text style={styles.gameCardTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+          {card.definition.name}
+        </Text>
+        <Text style={styles.gameCardStage} numberOfLines={1}>
+          {STAGE_LABELS[card.definition.award_stage]} card
+        </Text>
       </View>
 
       <View style={styles.gameCardFooter}>
@@ -256,70 +334,6 @@ function CollectionCardTile({
   );
 }
 
-function SelectedCardPanel({ card }: { card: CollectionCard }): React.JSX.Element {
-  const locked = card.status === 'locked';
-  const ready = card.status === 'ready';
-  const requiredPointsLabel = Math.ceil(card.requiredPoints);
-  const userPointsLabel = Math.floor(card.userStagePoints);
-  const remainingUses = card.userCard?.uses_remaining ?? card.definition.max_uses;
-  const maxUses = card.userCard?.max_uses ?? card.definition.max_uses;
-
-  return (
-    <View style={styles.detailPanel}>
-      <View style={styles.detailHeader}>
-        <View style={styles.detailTitleBlock}>
-          <Text style={styles.detailKicker}>{STAGE_LABELS[card.definition.award_stage]}</Text>
-          <Text style={styles.detailTitle} numberOfLines={1}>
-            {card.definition.name}
-          </Text>
-        </View>
-        <View style={[styles.detailStatus, ready ? styles.detailStatusReady : locked ? styles.detailStatusLocked : styles.detailStatusMuted]}>
-          <Text style={[styles.detailStatusText, ready ? styles.detailStatusReadyText : locked ? styles.detailStatusLockedText : styles.detailStatusMutedText]}>
-            {getStatusLabel(card.status)}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.detailDescription} numberOfLines={2}>
-        {getCardDescription(card)}
-      </Text>
-
-      <View style={styles.detailStatsRow}>
-        <View style={styles.detailStatBox}>
-          <Text style={styles.detailStatLabel}>Boost</Text>
-          <Text style={styles.detailStatValue}>+{card.definition.multiplier_bonus}</Text>
-        </View>
-        <View style={styles.detailStatBox}>
-          <Text style={styles.detailStatLabel}>Uses</Text>
-          <Text style={styles.detailStatValue}>{remainingUses}/{maxUses}</Text>
-        </View>
-        <View style={styles.detailStatBox}>
-          <Text style={styles.detailStatLabel}>Progress</Text>
-          <Text style={styles.detailStatValue}>{Math.round(card.progressPercent)}%</Text>
-        </View>
-      </View>
-
-      <View style={styles.detailProgressTrack}>
-        <View
-          style={[
-            styles.detailProgressFill,
-            {
-              width: `${Math.max(0, Math.min(100, card.progressPercent))}%`,
-              backgroundColor: ready ? Colors.accent.lime : 'rgba(255,255,255,0.36)',
-            },
-          ]}
-        />
-      </View>
-
-      <Text style={styles.detailHint} numberOfLines={1}>
-        {locked
-          ? `${userPointsLabel}/${requiredPointsLabel || 0} pts needed`
-          : `Usable ${STAGE_LABELS[card.definition.usable_from_stage]} to ${STAGE_LABELS[card.definition.usable_until_stage]}`}
-      </Text>
-    </View>
-  );
-}
-
 function CardDesignPreviewModal({
   card,
   visible,
@@ -333,83 +347,113 @@ function CardDesignPreviewModal({
 
   const imageUrl = card.definition.image_url ?? null;
   const locked = card.status === 'locked';
+  const ready = card.status === 'ready';
   const requiredPointsLabel = Math.ceil(card.requiredPoints);
   const userPointsLabel = Math.floor(card.userStagePoints);
+  const remainingUses = card.userCard?.uses_remaining ?? card.definition.max_uses;
+  const maxUses = card.userCard?.max_uses ?? card.definition.max_uses;
+  const progressPercent = Math.round(card.progressPercent);
   const lockedMessage =
     requiredPointsLabel > 0
       ? `${userPointsLabel}/${requiredPointsLabel} pts earned in ${STAGE_LABELS[card.definition.award_stage]}`
       : `Reach ${card.definition.threshold_percent}% of ${STAGE_LABELS[card.definition.award_stage]} points to unlock.`;
+  const usageMessage = locked
+    ? lockedMessage
+    : card.status === 'used'
+      ? `Used card. It was available from ${STAGE_LABELS[card.definition.usable_from_stage]} to ${STAGE_LABELS[card.definition.usable_until_stage]}.`
+      : card.status === 'revoked'
+        ? 'This card is no longer active.'
+        : `Usable from ${STAGE_LABELS[card.definition.usable_from_stage]} to ${STAGE_LABELS[card.definition.usable_until_stage]}.`;
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <SafeAreaView style={styles.previewSafeArea} edges={['top', 'bottom']}>
         <Pressable style={styles.previewBackdrop} onPress={onClose}>
           <Pressable style={styles.previewSheet} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.previewHeader}>
-              <View style={styles.previewTitleBlock}>
-                <Text style={styles.previewKicker}>Card design</Text>
-                <Text style={styles.previewTitle} numberOfLines={1}>
-                  {card.definition.name}
-                </Text>
-              </View>
-              <Pressable
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Close card design preview"
-                hitSlop={10}
-                style={styles.previewCloseButton}
-              >
-                <Icon name="close" size={18} color={Colors.text.primary} fixed />
-              </Pressable>
-            </View>
-
-            <View style={styles.previewArt}>
-              {imageUrl ? (
-                <Image source={{ uri: imageUrl }} resizeMode="cover" style={styles.previewArtImage} />
-              ) : (
-                <View style={styles.previewFallback}>
-                  <Icon name="gift" size={42} color={locked ? Colors.text.tertiary : Colors.accent.lime} />
-                  <Text style={styles.previewFallbackText}>No artwork uploaded</Text>
-                </View>
-              )}
-              <LinearGradient
-                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.82)']}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.previewCaption}>
-                <Text style={styles.previewCardName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
-                  {card.definition.name}
-                </Text>
-                <Text style={styles.previewCardStage} numberOfLines={1}>
-                  {STAGE_LABELS[card.definition.award_stage]}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.previewMetaRow}>
-              <View style={styles.previewMetaChip}>
-                <Text style={styles.previewMetaLabel}>Boost</Text>
-                <Text style={styles.previewMetaValue}>+{card.definition.multiplier_bonus}</Text>
-              </View>
-              <View style={styles.previewMetaChip}>
-                <Text style={styles.previewMetaLabel}>Status</Text>
-                <Text style={styles.previewMetaValue}>{getStatusLabel(card.status)}</Text>
-              </View>
-            </View>
-
-            {locked ? (
-              <View style={styles.previewLockedNotice}>
-                <View style={styles.previewLockedIcon}>
-                  <Icon name="lock" size={15} color={Colors.text.primary} fixed />
-                </View>
-                <View style={styles.previewLockedCopy}>
-                  <Text style={styles.previewLockedTitle}>Locked card</Text>
-                  <Text style={styles.previewLockedText} numberOfLines={2}>
-                    {lockedMessage}
+            <ScrollView
+              bounces={false}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.previewSheetContent}
+            >
+              <View style={styles.previewHeader}>
+                <View style={styles.previewTitleBlock}>
+                  <Text style={styles.previewKicker}>Card details</Text>
+                  <Text style={styles.previewTitle} numberOfLines={1}>
+                    {card.definition.name}
                   </Text>
                 </View>
+                <Pressable
+                  onPress={onClose}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close card design preview"
+                  hitSlop={10}
+                  style={styles.previewCloseButton}
+                >
+                  <Icon name="close" size={18} color={Colors.text.primary} fixed />
+                </Pressable>
               </View>
-            ) : null}
+
+              <View style={styles.previewArt}>
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} resizeMode="contain" style={styles.previewArtImage} />
+                ) : (
+                  <View style={styles.previewFallback}>
+                    <Icon name="gift" size={42} color={locked ? Colors.text.tertiary : Colors.accent.lime} />
+                    <Text style={styles.previewFallbackText}>No artwork uploaded</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.previewInfoBlock}>
+                <Text style={styles.previewDescription}>{getCardDescription(card)}</Text>
+                <Text style={styles.previewUsageText}>{usageMessage}</Text>
+              </View>
+
+              <View style={styles.previewMetaGrid}>
+                <View style={styles.previewMetaChip}>
+                  <Text style={styles.previewMetaLabel}>Boost</Text>
+                  <Text style={styles.previewMetaValue}>+{card.definition.multiplier_bonus}</Text>
+                </View>
+                <View style={styles.previewMetaChip}>
+                  <Text style={styles.previewMetaLabel}>Uses</Text>
+                  <Text style={styles.previewMetaValue}>{remainingUses}/{maxUses}</Text>
+                </View>
+                <View style={styles.previewMetaChip}>
+                  <Text style={styles.previewMetaLabel}>Progress</Text>
+                  <Text style={styles.previewMetaValue}>{progressPercent}%</Text>
+                </View>
+                <View style={styles.previewMetaChip}>
+                  <Text style={styles.previewMetaLabel}>Status</Text>
+                  <Text style={styles.previewMetaValue}>{getStatusLabel(card.status)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.previewProgressTrack}>
+                <View
+                  style={[
+                    styles.previewProgressFill,
+                    {
+                      width: `${Math.max(0, Math.min(100, card.progressPercent))}%`,
+                      backgroundColor: ready ? Colors.accent.lime : 'rgba(255,255,255,0.34)',
+                    },
+                  ]}
+                />
+              </View>
+
+              {locked ? (
+                <View style={styles.previewLockedNotice}>
+                  <View style={styles.previewLockedIcon}>
+                    <Icon name="lock" size={15} color={Colors.text.primary} fixed />
+                  </View>
+                  <View style={styles.previewLockedCopy}>
+                    <Text style={styles.previewLockedTitle}>Locked card</Text>
+                    <Text style={styles.previewLockedText} numberOfLines={2}>
+                      {lockedMessage}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </SafeAreaView>
@@ -417,10 +461,27 @@ function CardDesignPreviewModal({
   );
 }
 
-function CardSkeleton({ width }: { width: number }): React.JSX.Element {
+function CardSkeleton({
+  width,
+  columnIndex,
+  columnCount,
+}: {
+  width: number;
+  columnIndex: number;
+  columnCount: number;
+}): React.JSX.Element {
+  const artHeight = getCardArtHeight(width);
+
   return (
-    <View style={[styles.gameCard, { width }]}>
-      <SkeletonBox width="100%" height={214} borderRadius={18} />
+    <View
+      style={[
+        styles.gameCard,
+        { width, height: getCardHeight(width) },
+        getColumnSpacingStyle(columnIndex, columnCount),
+      ]}
+    >
+      <SkeletonBox width="100%" height={artHeight} borderRadius={18} />
+      <SkeletonBox width="82%" height={38} borderRadius={12} />
       <View style={styles.gameCardFooter}>
         <SkeletonBox width="46%" height={34} borderRadius={12} />
         <SkeletonBox width="46%" height={34} borderRadius={12} />
@@ -432,27 +493,46 @@ function CardSkeleton({ width }: { width: number }): React.JSX.Element {
 
 export default function CardsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const { isSmall, width } = useResponsive();
-  const compact = isSmall || width < 520;
-  const cardWidth = compact ? Math.min(238, Math.max(210, width - 72)) : 236;
-  const cardSnap = cardWidth + CARD_GAP;
+  const { width } = useResponsive();
+  const contentHorizontalPadding = 16;
+  const fallbackGridWidth = Math.max(0, width - contentHorizontalPadding * 2);
   const catalogQuery = useCardCatalog();
   const cardsQuery = useMyCards();
   const matchesQuery = useMatches();
   const pointsQuery = useMyPoints();
   const scoringRulesQuery = useScoringRules();
+  const stageSettingsQuery = useStageCardSettings();
+  const stageMultipliersQuery = useStageMultipliers();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [previewCard, setPreviewCard] = useState<CollectionCard | null>(null);
+  const [measuredGridWidth, setMeasuredGridWidth] = useState(0);
+  const gridWidth = measuredGridWidth || fallbackGridWidth;
+  const gridColumnCount = getGridColumnCount(gridWidth);
+  const cardWidth = Math.max(
+    0,
+    gridColumnCount === 1
+      ? gridWidth
+      : Math.floor((gridWidth - CARD_GAP * (gridColumnCount - 1)) / gridColumnCount)
+  );
   const refetchCatalog = catalogQuery.refetch;
   const refetchCards = cardsQuery.refetch;
   const refetchMatches = matchesQuery.refetch;
   const refetchPoints = pointsQuery.refetch;
   const refetchScoringRules = scoringRulesQuery.refetch;
+  const refetchStageSettings = stageSettingsQuery.refetch;
+  const refetchStageMultipliers = stageMultipliersQuery.refetch;
 
   const openCardPreview = useCallback((card: CollectionCard) => {
     setSelectedCardId(card.definition.id);
     setPreviewCard(card);
+  }, []);
+
+  const handleGridLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = Math.floor(event.nativeEvent.layout.width);
+    setMeasuredGridWidth((currentWidth) =>
+      Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth
+    );
   }, []);
 
   const refetchCardsPage = useCallback(async () => {
@@ -462,6 +542,8 @@ export default function CardsScreen(): React.JSX.Element {
       refetchMatches(),
       refetchPoints(),
       refetchScoringRules(),
+      refetchStageSettings(),
+      refetchStageMultipliers(),
     ]);
   }, [
     refetchCards,
@@ -469,6 +551,8 @@ export default function CardsScreen(): React.JSX.Element {
     refetchMatches,
     refetchPoints,
     refetchScoringRules,
+    refetchStageMultipliers,
+    refetchStageSettings,
   ]);
 
   useFocusEffect(
@@ -493,6 +577,8 @@ export default function CardsScreen(): React.JSX.Element {
         userCards: cardsQuery.data ?? [],
         matches: matchesQuery.data,
         points: pointsQuery.data,
+        stageSettings: stageSettingsQuery.data,
+        stageMultipliers: stageMultipliersQuery.data,
         winnerPoints: scoringRulesQuery.data?.winnerPoints ?? 0,
         exactBonusPoints: scoringRulesQuery.data?.exactBonusPoints ?? 0,
       }),
@@ -501,17 +587,27 @@ export default function CardsScreen(): React.JSX.Element {
       catalogQuery.data,
       matchesQuery.data,
       pointsQuery.data,
+      stageMultipliersQuery.data,
+      stageSettingsQuery.data,
       scoringRulesQuery.data?.exactBonusPoints,
       scoringRulesQuery.data?.winnerPoints,
     ]
   );
+  const cardRows = useMemo(() => {
+    return chunkItems(collection, gridColumnCount);
+  }, [collection, gridColumnCount]);
+  const skeletonRows = useMemo(() => {
+    return chunkItems(CARD_SKELETON_ITEMS, gridColumnCount);
+  }, [gridColumnCount]);
 
   const loading =
     catalogQuery.isLoading ||
     cardsQuery.isLoading ||
     matchesQuery.isLoading ||
     pointsQuery.isLoading ||
-    scoringRulesQuery.isLoading;
+    scoringRulesQuery.isLoading ||
+    stageSettingsQuery.isLoading ||
+    stageMultipliersQuery.isLoading;
   const readyCards = collection.filter((card) => card.status === 'ready').length;
   const lockedCards = collection.filter((card) => card.status === 'locked').length;
   const earnedCards = collection.length - lockedCards;
@@ -520,11 +616,19 @@ export default function CardsScreen(): React.JSX.Element {
     collection.find((card) => card.status === 'ready') ??
     collection[0] ??
     null;
-
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
+      <TabPageHeader
+        title="My Cards"
+        subtitle="Rewards, boosts, and unlocks"
+        showBackButton
+        fallbackHref="/profile"
+      />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 150 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -548,7 +652,7 @@ export default function CardsScreen(): React.JSX.Element {
             <Text style={styles.eyebrow}>Inventory</Text>
             <Text style={styles.title}>Your game cards</Text>
             <Text style={styles.subtitle}>
-              Swipe through your rewards. Ready cards can boost match predictions.
+              Browse your rewards. Ready cards can boost match predictions.
             </Text>
           </View>
 
@@ -594,32 +698,46 @@ export default function CardsScreen(): React.JSX.Element {
           <Text style={styles.sectionHint}>{collection.length} total</Text>
         </View>
 
-        <Animated.ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={cardSnap}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          contentContainerStyle={styles.cardsRail}
-        >
-          {loading
-            ? [0, 1, 2].map((item) => <CardSkeleton key={item} width={cardWidth} />)
-            : collection.map((card) => {
-                const isSelected = selectedCard?.definition.id === card.definition.id;
-                return (
-                  <CollectionCardTile
-                    key={card.definition.id}
-                    card={card}
-                    selected={isSelected}
+        {loading ? (
+          <View style={styles.cardsGrid} onLayout={handleGridLayout}>
+            {skeletonRows.map((row) => (
+              <View key={row.join('-')} style={styles.cardsRow}>
+                {row.map((item, columnIndex) => (
+                  <CardSkeleton
+                    key={item}
                     width={cardWidth}
-                    onPress={() => openCardPreview(card)}
-                    onView={() => openCardPreview(card)}
+                    columnIndex={columnIndex}
+                    columnCount={gridColumnCount}
                   />
-                );
-              })}
-        </Animated.ScrollView>
-
-        {!loading && selectedCard ? <SelectedCardPanel card={selectedCard} /> : null}
+                ))}
+                {renderGridSpacers(gridColumnCount - row.length, cardWidth, row.length, gridColumnCount)}
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.cardsGrid} onLayout={handleGridLayout}>
+            {cardRows.map((row) => (
+              <View key={row.map((card) => card.definition.id).join('-')} style={styles.cardsRow}>
+                {row.map((card, columnIndex) => {
+                  const isSelected = selectedCard?.definition.id === card.definition.id;
+                  return (
+                    <CollectionCardTile
+                      key={card.definition.id}
+                      card={card}
+                      selected={isSelected}
+                      width={cardWidth}
+                      columnIndex={columnIndex}
+                      columnCount={gridColumnCount}
+                      onPress={() => openCardPreview(card)}
+                      onView={() => openCardPreview(card)}
+                    />
+                  );
+                })}
+                {renderGridSpacers(gridColumnCount - row.length, cardWidth, row.length, gridColumnCount)}
+              </View>
+            ))}
+          </View>
+        )}
 
         {!loading && collection.length === 0 ? (
           <View style={styles.empty}>
@@ -755,13 +873,23 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weight.bold,
     textTransform: 'uppercase',
   },
-  cardsRail: {
-    gap: CARD_GAP,
-    paddingRight: 16,
-    paddingBottom: 2,
+  cardsGrid: {
+    width: '100%',
+  },
+  cardsRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    marginBottom: CARD_GAP,
+  },
+  cardSlotSpacer: {
+    flexShrink: 0,
   },
   gameCard: {
     position: 'relative',
+    alignSelf: 'stretch',
+    flexShrink: 0,
     overflow: 'hidden',
     borderRadius: 20,
     borderWidth: 1,
@@ -781,14 +909,17 @@ const styles = StyleSheet.create({
   },
   gameArtFrame: {
     position: 'relative',
-    height: 214,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
     overflow: 'hidden',
     borderRadius: 18,
-    backgroundColor: Colors.background.cardAlt,
+    backgroundColor: 'rgba(0,0,0,0.28)',
   },
   gameArtImage: {
-    width: '100%',
-    height: '100%',
+    width: '92%',
+    height: '92%',
+    resizeMode: 'contain',
   },
   gameArtFallback: {
     flex: 1,
@@ -796,22 +927,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  gameArtCaption: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 12,
-    gap: 3,
+  gameNameBlock: {
+    minHeight: 48,
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   gameCardTitle: {
     color: Colors.text.primary,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: Typography.weight.black,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   gameCardStage: {
-    color: Colors.text.secondary,
+    marginTop: 3,
+    color: Colors.accent.lime,
     fontSize: 10,
     fontWeight: Typography.weight.bold,
+    textAlign: 'center',
     textTransform: 'uppercase',
   },
   gameCardFooter: {
@@ -973,12 +1111,15 @@ const styles = StyleSheet.create({
   previewSheet: {
     width: '100%',
     maxWidth: 420,
+    maxHeight: '92%',
     alignSelf: 'center',
     overflow: 'hidden',
     borderRadius: 24,
     borderWidth: 1,
     borderColor: Colors.border.subtle,
     backgroundColor: Colors.background.card,
+  },
+  previewSheetContent: {
     padding: 14,
     gap: 14,
   },
@@ -1016,11 +1157,15 @@ const styles = StyleSheet.create({
   },
   previewArt: {
     position: 'relative',
-    width: '100%',
+    width: '76%',
+    maxWidth: 280,
+    alignSelf: 'center',
     aspectRatio: 0.72,
     overflow: 'hidden',
     borderRadius: 20,
-    backgroundColor: Colors.background.cardAlt,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.28)',
   },
   previewArtImage: {
     width: '100%',
@@ -1038,6 +1183,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: Typography.weight.bold,
     textTransform: 'uppercase',
+  },
+  previewInfoBlock: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border.subtle,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    gap: 6,
+  },
+  previewDescription: {
+    color: Colors.text.primary,
+    fontSize: 13,
+    fontWeight: Typography.weight.bold,
+    lineHeight: 18,
+  },
+  previewUsageText: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    lineHeight: 17,
   },
   previewCaption: {
     position: 'absolute',
@@ -1062,8 +1227,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  previewMetaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   previewMetaChip: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '47%',
     minHeight: 50,
     justifyContent: 'center',
     borderRadius: 14,
@@ -1083,6 +1254,16 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontSize: 14,
     fontWeight: Typography.weight.black,
+  },
+  previewProgressTrack: {
+    height: 7,
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  previewProgressFill: {
+    height: '100%',
+    borderRadius: 999,
   },
   previewLockedNotice: {
     minHeight: 64,

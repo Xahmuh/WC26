@@ -1,104 +1,39 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ProgressBar } from '@/components/ui';
-import { Icon } from '@/components/ui/Icon';
+import { Card } from '@/components/ui';
 import Theme from '@/constants/theme/design-system';
+import { computeFormScore, getFormLabel } from '@/lib/performanceMetrics';
 import type { ComputedKPIs } from '@/types/performance';
 
 interface PerformanceSummaryProps {
   kpis: ComputedKPIs;
 }
 
-function clampPercent(value: number): number {
-  return Math.max(0, Math.min(100, value));
-}
-
-function formLabel(score: number): string {
-  if (score >= 75) return 'Excellent form';
-  if (score >= 55) return 'Strong form';
-  if (score >= 35) return 'Building form';
-  return 'Getting started';
-}
-
 export function PerformanceSummary({ kpis }: PerformanceSummaryProps): React.JSX.Element {
-  const score = Math.round(
-    clampPercent(kpis.accuracyRate) * 0.55 +
-      clampPercent(kpis.participationRate) * 0.25 +
-      clampPercent(kpis.exactScoreAccuracy) * 0.2
-  );
-
-  const streakValue = kpis.streak.current_streak;
-  const streakText =
-    kpis.streak.streak_type === 'none' || streakValue === 0
-      ? 'No active streak'
-      : `${streakValue} ${kpis.streak.streak_type === 'win' ? 'win' : 'loss'} streak`;
+  const score = computeFormScore(kpis);
 
   return (
     <Card variant="accent" padding={16} style={styles.card}>
       <View style={styles.topRow}>
         <View style={styles.titleBlock}>
-          <Text style={styles.eyebrow}>Overall form</Text>
-          <Text style={styles.title}>{formLabel(score)}</Text>
+          <Text style={styles.eyebrow}>Form score</Text>
+          <Text style={styles.title}>{getFormLabel(score)}</Text>
         </View>
         <View style={styles.scoreBadge}>
           <Text style={styles.score}>{score}</Text>
-          <Text style={styles.scoreLabel}>score</Text>
+          <Text style={styles.scoreLabel}>form</Text>
         </View>
       </View>
 
-      <View style={styles.quickRow}>
-        <SummaryPill icon="target" label="Accuracy" value={`${kpis.accuracyRate}%`} />
-        <SummaryPill icon="star" label="Avg points" value={`${kpis.pointsPerMatch}`} />
-        <SummaryPill icon="flame" label="Streak" value={streakValue ? String(streakValue) : '0'} />
-      </View>
-
-      <View style={styles.progressBlock}>
-        <ProgressMetric label="Prediction accuracy" value={kpis.accuracyRate} />
-        <ProgressMetric label="Match coverage" value={kpis.participationRate} />
-      </View>
-
-      <Text style={styles.caption} numberOfLines={2}>
-        {streakText}. Keep predicting before kickoff to improve coverage and protect your form.
+      <Text style={styles.scoreNote}>
+        The circle score is out of 100. It combines correct picks, prediction activity, and exact scores.
       </Text>
+      <View style={styles.formulaRow}>
+        <Text style={styles.formulaPill}>Correct 55%</Text>
+        <Text style={styles.formulaPill}>Activity 25%</Text>
+        <Text style={styles.formulaPill}>Exact 20%</Text>
+      </View>
     </Card>
-  );
-}
-
-function SummaryPill({
-  icon,
-  label,
-  value,
-}: {
-  icon: Parameters<typeof Icon>[0]['name'];
-  label: string;
-  value: string;
-}): React.JSX.Element {
-  return (
-    <View style={styles.pill}>
-      <Icon name={icon} size={14} color={Theme.colors.accent} fixed />
-      <View style={styles.pillCopy}>
-        <Text style={styles.pillValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-          {value}
-        </Text>
-        <Text style={styles.pillLabel} numberOfLines={1}>
-          {label}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function ProgressMetric({ label, value }: { label: string; value: number }): React.JSX.Element {
-  const safeValue = clampPercent(value);
-
-  return (
-    <View style={styles.progressMetric}>
-      <View style={styles.progressLabelRow}>
-        <Text style={styles.progressLabel}>{label}</Text>
-        <Text style={styles.progressValue}>{safeValue}%</Text>
-      </View>
-      <ProgressBar progress={safeValue / 100} height={7} />
-    </View>
   );
 }
 
@@ -154,70 +89,31 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-  quickRow: {
-    marginTop: 16,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  pill: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.colors.bgBorder,
-    backgroundColor: Theme.colors.bgSurface3,
-    paddingHorizontal: 10,
-  },
-  pillCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  pillValue: {
-    color: Theme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '900',
-    lineHeight: 18,
-  },
-  pillLabel: {
-    marginTop: 2,
-    color: Theme.colors.textTertiary,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  progressBlock: {
-    marginTop: 16,
-    gap: 12,
-  },
-  progressMetric: {
-    gap: 7,
-  },
-  progressLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  progressLabel: {
-    color: Theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  progressValue: {
-    color: Theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  caption: {
-    marginTop: 14,
+  scoreNote: {
+    marginTop: 10,
     color: Theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 17,
+  },
+  formulaRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  formulaPill: {
+    minHeight: 26,
+    overflow: 'hidden',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.colors.accentBorder,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    color: Theme.colors.textPrimary,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 24,
+    paddingHorizontal: 9,
+    textTransform: 'uppercase',
   },
 });

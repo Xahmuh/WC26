@@ -1,10 +1,12 @@
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PredictionForm } from '@/components/prediction/PredictionForm';
 import { PredictionResult } from '@/components/prediction/PredictionResult';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -13,7 +15,7 @@ import { TeamFlag } from '@/components/ui/TeamFlag';
 import Theme from '@/constants/theme/design-system';
 import { Container } from '@/components/ui/Container';
 import { useScoringRules } from '@/hooks/useAdmin';
-import { useMatch } from '@/hooks/useMatches';
+import { useMatch, useMatches } from '@/hooks/useMatches';
 import { useMyPoints } from '@/hooks/usePoints';
 import { useMyPredictions } from '@/hooks/usePredictions';
 import { isFinishedLike, isNotStartedMatch } from '@/components/home/homeUtils';
@@ -21,13 +23,47 @@ import { STAGE_LABELS } from '@/lib/constants';
 import { formatKickoff } from '@/lib/dates';
 
 export default function MatchDetailScreen(): React.JSX.Element {
+  const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const matchId = typeof params.id === 'string' ? params.id : undefined;
 
   const matchQuery = useMatch(matchId);
+  const matchesQuery = useMatches();
   const predictionsQuery = useMyPredictions();
   const pointsQuery = useMyPoints();
   const rulesQuery = useScoringRules();
+  const [showNextMatchCta, setShowNextMatchCta] = useState(false);
+
+  useEffect(() => {
+    setShowNextMatchCta(false);
+  }, [matchId]);
+
+  const nextPredictableMatchId = useMemo(() => {
+    const currentMatch = matchQuery.data;
+    const matches = matchesQuery.data;
+    if (!currentMatch || !matches?.length) return null;
+
+    const currentKickoff = new Date(currentMatch.kickoff_time).getTime();
+    const openMatches = matches
+      .filter((candidate) =>
+        candidate.id !== currentMatch.id &&
+        !candidate.is_placeholder &&
+        isNotStartedMatch(candidate.status, candidate.kickoff_time)
+      )
+      .sort((a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime());
+
+    const predictions = predictionsQuery.data;
+    const pendingMatches = predictions
+      ? openMatches.filter((candidate) => !predictions.has(candidate.id))
+      : openMatches;
+    const candidates = pendingMatches.length > 0 ? pendingMatches : openMatches;
+
+    return (
+      candidates.find((candidate) => new Date(candidate.kickoff_time).getTime() >= currentKickoff)?.id ??
+      candidates[0]?.id ??
+      null
+    );
+  }, [matchQuery.data, matchesQuery.data, predictionsQuery.data]);
 
   if (matchQuery.isLoading) {
     return (
@@ -149,8 +185,23 @@ export default function MatchDetailScreen(): React.JSX.Element {
             ) : isFinished ? (
               <PredictionResult match={match} prediction={prediction} points={points} />
             ) : (
-              <PredictionForm match={match} existing={prediction} />
+              <PredictionForm
+                match={match}
+                existing={prediction}
+                onSaved={() => setShowNextMatchCta(true)}
+                onEditStart={() => setShowNextMatchCta(false)}
+              />
             )}
+
+            {showNextMatchCta && !match.is_placeholder && nextPredictableMatchId ? (
+              <Button
+                label="Predict Next Match"
+                variant="lime"
+                onPress={() => {
+                  router.push(`/match/${nextPredictableMatchId}` as never);
+                }}
+              />
+            ) : null}
           </View>
         </Container>
       </ScrollView>
@@ -171,8 +222,8 @@ interface PotentialPointsProps {
 /**
  * Shows what each scoring aspect is worth on THIS match — i.e. the
  * admin-configured per-aspect value scaled by this match's stage multiplier.
- * Each aspect stays independent (no "winner + bonus" combining): a 4x match
- * with winner=3/exact=5 shows +12 and +20, not (3+5)×4=32.
+ * Each aspect stays independent in the preview; exact-score totals combine
+ * winner points plus the exact-score bonus when the match is scored.
  */
 function PotentialPoints({ winnerPoints, exactPoints, multiplier }: PotentialPointsProps): React.JSX.Element {
   return (

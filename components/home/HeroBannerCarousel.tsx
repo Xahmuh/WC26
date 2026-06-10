@@ -7,15 +7,17 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   View,
   type ImageSourcePropType,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
-import { Colors, Layout } from '@/constants';
+import { Colors, Layout, Typography } from '@/constants';
 import { SkeletonBox } from '@/components/ui';
-import { useHeroSlides } from '@/hooks/useAdmin';
+import { useBannerCollections, useHeroSlides } from '@/hooks/useAdmin';
 import { getHeroSlideImageUrl } from '@/services/admin.service';
+import type { HomeBannerPosition } from '@/lib/bannerPositions';
 
 type HeroBannerSlide = {
   key: string;
@@ -24,39 +26,31 @@ type HeroBannerSlide = {
   linkUrl?: string | null;
 };
 
+type BannerSection = {
+  key: string;
+  title: string;
+  homePosition: HomeBannerPosition;
+  slides: HeroBannerSlide[];
+};
+
 const FALLBACK_SLIDES: HeroBannerSlide[] = [
   { key: 'hero-banner', source: require('@/assets/Hero-banner.png') },
   { key: 'herob', source: require('@/assets/herob.jpg') },
 ];
+
 const HERO_ASPECT_RATIO = 9 / 4;
 
-export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean }): React.JSX.Element {
+function BannerCarouselFrame({
+  slides,
+  isLoading,
+}: {
+  slides: HeroBannerSlide[];
+  isLoading?: boolean;
+}): React.JSX.Element {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
-  const slidesQuery = useHeroSlides();
-  const refetchSlides = slidesQuery.refetch;
-
-  useFocusEffect(
-    useCallback(() => {
-      void refetchSlides();
-    }, [refetchSlides])
-  );
-
-  const slides = useMemo(() => {
-    const activeSlides = (slidesQuery.data ?? [])
-      .filter((slide) => slide.is_active)
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((slide) => ({
-        key: slide.id,
-        source: { uri: getHeroSlideImageUrl(slide.image_path) },
-        backgroundColor: slide.background_color,
-        linkUrl: slide.link_url,
-      }));
-
-    return activeSlides.length > 0 ? activeSlides : FALLBACK_SLIDES;
-  }, [slidesQuery.data]);
 
   useEffect(() => {
     setActiveIndex((current) => (current >= slides.length ? 0 : current));
@@ -73,6 +67,8 @@ export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean 
 
     return () => clearInterval(timer);
   }, [activeIndex, containerWidth, slides.length]);
+
+  const isScrollable = slides.length > 1;
 
   const handleMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
     if (containerWidth <= 0) return;
@@ -95,7 +91,7 @@ export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean 
     }
   };
 
-  if (isLoading || slidesQuery.isLoading) {
+  if (isLoading) {
     return (
       <View style={styles.container}>
         <SkeletonBox height={1} borderRadius={16} style={styles.skeletonFill} />
@@ -111,7 +107,8 @@ export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean 
       <ScrollView
         ref={scrollRef}
         horizontal
-        pagingEnabled
+        pagingEnabled={isScrollable}
+        scrollEnabled={isScrollable}
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleMomentumEnd}
         scrollEventThrottle={16}
@@ -136,17 +133,113 @@ export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean 
         ))}
       </ScrollView>
 
-      <View style={styles.dots}>
-        {slides.map((slide, index) => (
-          <View
-            key={slide.key}
-            style={[
-              styles.dot,
-              index === activeIndex ? styles.dotActive : styles.dotInactive,
-            ]}
-          />
-        ))}
-      </View>
+      {isScrollable ? (
+        <View style={styles.dots}>
+          {slides.map((slide, index) => (
+            <View
+              key={slide.key}
+              style={[
+                styles.dot,
+                index === activeIndex ? styles.dotActive : styles.dotInactive,
+              ]}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export function HeroBannerCarousel({ isLoading = false }: { isLoading?: boolean }): React.JSX.Element {
+  const slidesQuery = useHeroSlides('top', null);
+  const refetchSlides = slidesQuery.refetch;
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetchSlides();
+    }, [refetchSlides])
+  );
+
+  const slides = useMemo(() => {
+    const activeSlides = (slidesQuery.data ?? [])
+      .filter((slide) => slide.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((slide) => ({
+        key: slide.id,
+        source: { uri: getHeroSlideImageUrl(slide.image_path) },
+        backgroundColor: slide.background_color,
+        linkUrl: slide.link_url,
+      }));
+
+    const firstActiveSlide = activeSlides[0];
+    return firstActiveSlide ? [firstActiveSlide] : [FALLBACK_SLIDES[0]!];
+  }, [slidesQuery.data]);
+
+  return <BannerCarouselFrame slides={slides} isLoading={isLoading || slidesQuery.isLoading} />;
+}
+
+export function HomeBannerCollections({
+  position,
+}: {
+  position: HomeBannerPosition;
+}): React.JSX.Element | null {
+  const collectionsQuery = useBannerCollections();
+  const slidesQuery = useHeroSlides('bottom');
+  const refetchCollections = collectionsQuery.refetch;
+  const refetchSlides = slidesQuery.refetch;
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetchCollections();
+      void refetchSlides();
+    }, [refetchCollections, refetchSlides])
+  );
+
+  const sections = useMemo<BannerSection[]>(() => {
+    const activeSlides = (slidesQuery.data ?? []).filter(
+      (slide) => slide.is_active && slide.collection_id
+    );
+
+    return (collectionsQuery.data ?? [])
+      .filter((collection) => collection.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((collection) => {
+        const collectionSlides = activeSlides
+          .filter((slide) => slide.collection_id === collection.id)
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map((slide) => ({
+            key: slide.id,
+            source: { uri: getHeroSlideImageUrl(slide.image_path) },
+            backgroundColor: slide.background_color,
+            linkUrl: slide.link_url,
+          }));
+
+        return {
+          key: collection.id,
+          title: collection.title,
+          homePosition: collection.home_position,
+          slides: collectionSlides,
+        };
+      })
+      .filter((section) => section.slides.length > 0);
+  }, [collectionsQuery.data, slidesQuery.data]);
+
+  if (collectionsQuery.isLoading || slidesQuery.isLoading) return null;
+
+  const displaySections = sections.filter((section) => section.homePosition === position);
+  if (displaySections.length === 0) return null;
+
+  return (
+    <View style={styles.collectionsWrap}>
+      {displaySections.map((section) => (
+        <View key={section.key} style={styles.collectionSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderLine} />
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+          </View>
+          <BannerCarouselFrame slides={section.slides} />
+        </View>
+      ))}
     </View>
   );
 }
@@ -200,5 +293,27 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  collectionsWrap: {
+    gap: 16,
+  },
+  collectionSection: {
+    gap: 10,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionHeaderLine: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: Colors.accent.lime,
+  },
+  sectionTitle: {
+    color: Colors.text.primary,
+    fontSize: 18,
+    fontWeight: Typography.weight.bold,
   },
 });

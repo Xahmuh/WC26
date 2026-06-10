@@ -174,7 +174,21 @@ export interface PredictionQuestion {
   lock_at?: string;
 }
 
-// Hero banner slides shown at the top of the home screen (admin-managed)
+export type BannerPlacement = 'top' | 'bottom';
+export type { HomeBannerPosition } from '@/lib/bannerPositions';
+
+export interface BannerCollection {
+  id: string;
+  title: string;
+  sort_order: number;
+  home_position: import('@/lib/bannerPositions').HomeBannerPosition;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Banner slides shown on the home screen (admin-managed)
 export interface HeroSlide {
   id: string;
   image_path: string; // path inside the `hero-banners` storage bucket
@@ -182,6 +196,8 @@ export interface HeroSlide {
   title: string | null;
   subtitle: string | null;
   link_url: string | null;
+  placement: BannerPlacement;
+  collection_id: string | null;
   sort_order: number;
   is_active: boolean;
   created_at: string;
@@ -238,6 +254,52 @@ export interface UserCard {
   unlocked_at: string;
   updated_at: string;
   definition?: CardDefinition | null;
+}
+
+export interface StageCardSetting {
+  stage: MatchStage;
+  expected_matches: number;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface ApiProvider {
+  id: string;
+  name: string;
+  adapter: string;
+  base_url: string;
+  competition_code: string;
+  token_secret_name: string;
+  is_active: boolean;
+  rate_limit_per_minute: number | null;
+  supports_fixtures: boolean;
+  supports_results: boolean;
+  notes: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface AuthQuote {
+  id: string;
+  quote_text: string;
+  author: string;
+  sort_order: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthScreenSettings {
+  id: number;
+  developer_name: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface AuthContent {
+  quotes: AuthQuote[];
+  settings: AuthScreenSettings | null;
 }
 
 export interface UserQuestionPrediction {

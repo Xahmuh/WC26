@@ -20,12 +20,23 @@ import { useCardCatalog, useMyCards } from '@/hooks/useUserCards';
 
 const FLIP_INTERVAL_MS = 5000;
 const FLIP_DURATION_MS = 760;
+const MYSTERY_BOX_ICON = require('@/assets/mystery_box_icon.png');
 
 type PreviewSlide = {
   key: string;
   imageUrl: string;
   name: string;
 };
+
+function formatCardPreviewName(name: string | null | undefined): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return 'Wild Card';
+
+  return trimmed
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 function useLoopedAnimation(toValue: number, duration: number) {
   const value = useRef(new Animated.Value(0)).current;
@@ -50,83 +61,37 @@ function useLoopedAnimation(toValue: number, duration: number) {
 function MysteryBoxAnimation(): React.JSX.Element {
   const glow = useLoopedAnimation(1, 2600);
   const float = useLoopedAnimation(1, 2800);
-  const spin = useLoopedAnimation(1, 5200);
-  const shimmer = useLoopedAnimation(1, 2100);
 
   const boxScale = glow.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [1, 1.025, 1],
-  });
-  const beamOpacity = glow.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.18, 0.38, 0.18],
+    outputRange: [1, 1.04, 1],
   });
   const translateY = float.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [0, -4, 0],
+    outputRange: [0, -5, 0],
   });
-  const lidLift = float.interpolate({
+  const rotateZ = float.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [0, -4, 0],
-  });
-  const lidRotate = float.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: ['0deg', '-4deg', '0deg'],
+    outputRange: ['-2deg', '3deg', '-2deg'],
   });
   const shadowScale = float.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [1, 0.86, 1],
-  });
-  const highlightTranslate = shimmer.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-26, 36],
-  });
-  const sparkleRotation = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: [1, 0.82, 1],
   });
 
   return (
     <View pointerEvents="none" style={styles.mysteryStage}>
       <Animated.View style={[styles.boxShadow, { transform: [{ scaleX: shadowScale }] }]} />
-      <Animated.View style={[styles.lightBeam, { opacity: beamOpacity, transform: [{ scale: boxScale }] }]} />
-
-      <Animated.View style={[styles.sparkleOne, { transform: [{ rotate: sparkleRotation }] }]}>
-        <Icon name="sparkles" size={8} color="rgba(245, 255, 161, 0.9)" />
-      </Animated.View>
-      <Animated.View style={[styles.sparkleTwo, { transform: [{ rotate: sparkleRotation }, { scale: boxScale }] }]}>
-        <Icon name="star" size={7} color="rgba(255, 255, 255, 0.82)" />
-      </Animated.View>
-      <Animated.View style={[styles.sparkleThree, { transform: [{ rotate: sparkleRotation }] }]}>
-        <Icon name="sparkles" size={6} color="rgba(120, 255, 202, 0.82)" />
-      </Animated.View>
-
-      <Animated.View style={[styles.boxWrap, { transform: [{ translateY }, { scale: boxScale }] }]}>
-        <Animated.View style={[styles.boxLid, { transform: [{ translateY: lidLift }, { rotateZ: lidRotate }] }]}>
-          <LinearGradient
-            colors={['#f7ff9a', '#d7d95e', '#7f9627']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.boxLidGradient}
-          />
-          <View style={styles.boxLidRim} />
-        </Animated.View>
-
-        <LinearGradient
-          colors={['#37441a', '#151d10', '#080d08']}
-          start={{ x: 0.15, y: 0 }}
-          end={{ x: 0.85, y: 1 }}
-          style={styles.boxBody}
-        >
-          <Animated.View style={[styles.boxHighlight, { transform: [{ translateX: highlightTranslate }, { rotateZ: '18deg' }] }]} />
-          <View style={styles.boxTopEdge} />
-          <View style={styles.ribbonVertical} />
-          <View style={styles.ribbonHorizontal} />
-          <View style={styles.questionBadge}>
-            <Text style={styles.questionMark}>?</Text>
-          </View>
-        </LinearGradient>
-      </Animated.View>
+      <Animated.Image
+        source={MYSTERY_BOX_ICON}
+        resizeMode="contain"
+        style={[
+          styles.mysteryBoxImage,
+          {
+            transform: [{ translateY }, { rotateZ }, { scale: boxScale }],
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -167,7 +132,7 @@ export function MyCardsPreview({ isLoading = false }: { isLoading?: boolean }): 
     const addSlide = (imageUrl: string | null | undefined, key: string, name: string | null | undefined) => {
       if (!imageUrl || seen.has(imageUrl)) return;
       seen.add(imageUrl);
-      nextSlides.push({ key, imageUrl, name: name?.trim() || 'Mystery card' });
+      nextSlides.push({ key, imageUrl, name: formatCardPreviewName(name) });
     };
 
     cards.forEach((card) => {
@@ -178,7 +143,7 @@ export function MyCardsPreview({ isLoading = false }: { isLoading?: boolean }): 
       addSlide(definition.image_url, definition.id, definition.name);
     });
 
-    addSlide(tileSettingsQuery.data?.image_url, 'home-tile-fallback', 'Mystery box');
+    addSlide(tileSettingsQuery.data?.image_url, 'home-tile-fallback', 'Wild Cards');
 
     return nextSlides;
   }, [cards, catalogQuery.data, tileSettingsQuery.data?.image_url]);
@@ -348,13 +313,13 @@ export function MyCardsPreview({ isLoading = false }: { isLoading?: boolean }): 
 
         <View style={styles.footer}>
           <View style={styles.footerCopy}>
-            <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-              {activeSlide?.name ?? 'Mystery Box'}
+            <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.82}>
+              {activeSlide?.name ?? 'Wild Cards'}
             </Text>
             <View style={styles.footerMeta}>
               <Icon name={hasImages ? 'sparkles' : 'lock'} size={13} color={Colors.accent.lime} />
-              <Text style={styles.metaText} numberOfLines={1}>
-                {hasImages ? 'MYSTERY DROP' : 'LOCKED'}
+              <Text style={styles.metaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.9}>
+                {hasImages ? 'WILD CARDS' : 'LOCKED'}
               </Text>
             </View>
           </View>
@@ -458,165 +423,69 @@ const styles = StyleSheet.create({
     bottom: 12,
     zIndex: 5,
     minHeight: 62,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 10,
+    alignItems: 'stretch',
+    justifyContent: 'flex-end',
   },
   footerCopy: {
-    flex: 1,
+    width: '100%',
     minWidth: 0,
+    position: 'relative',
+    zIndex: 3,
   },
   title: {
     color: Colors.text.primary,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: Typography.weight.black,
-    lineHeight: 22,
+    lineHeight: 20,
+    textTransform: 'capitalize',
   },
   footerMeta: {
-    marginTop: 6,
+    marginTop: 7,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 8,
+    minWidth: 106,
+    maxWidth: 122,
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
     backgroundColor: 'rgba(0, 0, 0, 0.46)',
+    borderWidth: 1,
+    borderColor: 'rgba(215, 217, 94, 0.18)',
+    position: 'relative',
+    zIndex: 4,
   },
   metaText: {
     color: Colors.accent.lime,
-    fontSize: 10,
+    flexShrink: 1,
+    fontSize: 9,
     fontWeight: Typography.weight.black,
-    lineHeight: 12,
+    lineHeight: 11,
+    letterSpacing: 0.2,
   },
   mysteryStage: {
-    width: 62,
-    height: 58,
+    position: 'absolute',
+    right: -8,
+    bottom: -4,
+    width: 56,
+    height: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: -3,
+    opacity: 0.92,
+    zIndex: 1,
   },
   boxShadow: {
     position: 'absolute',
-    bottom: 2,
-    width: 44,
-    height: 8,
+    bottom: 1,
+    width: 48,
+    height: 9,
     borderRadius: 999,
     backgroundColor: 'rgba(0, 0, 0, 0.46)',
   },
-  lightBeam: {
-    position: 'absolute',
-    bottom: 16,
-    width: 48,
-    height: 34,
-    borderRadius: 14,
-    backgroundColor: 'rgba(213, 232, 85, 0.16)',
-    transform: [{ rotateZ: '-8deg' }],
-  },
-  sparkleOne: {
-    position: 'absolute',
-    top: 1,
-    right: 4,
-    zIndex: 4,
-  },
-  sparkleTwo: {
-    position: 'absolute',
-    left: 3,
-    top: 18,
-    zIndex: 4,
-  },
-  sparkleThree: {
-    position: 'absolute',
-    right: 1,
-    bottom: 13,
-    zIndex: 4,
-  },
-  boxWrap: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  boxLid: {
-    width: 48,
-    height: 13,
-    borderRadius: 6,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(250, 255, 184, 0.55)',
-    zIndex: 3,
-    marginBottom: -2,
-  },
-  boxLidGradient: {
-    flex: 1,
-  },
-  boxLidRim: {
-    position: 'absolute',
-    left: 4,
-    right: 4,
-    bottom: 2,
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.28)',
-  },
-  boxBody: {
-    width: 42,
-    height: 32,
-    borderRadius: 8,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(213, 232, 85, 0.5)',
-  },
-  boxHighlight: {
-    position: 'absolute',
-    top: -8,
-    bottom: -8,
-    width: 9,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
-  },
-  boxTopEdge: {
-    position: 'absolute',
-    top: 3,
-    left: 5,
-    right: 5,
-    height: 1,
-    backgroundColor: 'rgba(250, 255, 184, 0.24)',
-  },
-  ribbonVertical: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 7,
-    backgroundColor: 'rgba(213, 232, 85, 0.5)',
-  },
-  ribbonHorizontal: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 7,
-    backgroundColor: 'rgba(213, 232, 85, 0.34)',
-  },
-  questionBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(250, 255, 184, 0.6)',
-    backgroundColor: 'rgba(3, 6, 5, 0.62)',
-  },
-  questionMark: {
-    color: Colors.text.primary,
-    fontSize: 13,
-    fontWeight: Typography.weight.black,
-    lineHeight: 15,
-    textShadowColor: 'rgba(213, 232, 85, 0.7)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
+  mysteryBoxImage: {
+    width: 54,
+    height: 50,
   },
   shine: {
     position: 'absolute',

@@ -7,6 +7,7 @@ export default [
   {
     ignores: [
       'android/**',
+      '.vercel/**',
       '.expo/**',
       'coverage/**',
       'dist/**',

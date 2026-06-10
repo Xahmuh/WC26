@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,7 +21,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Colors, Typography } from '@/constants';
 import { TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { HomeKpiBar } from '@/components/home/HomeKpiBar';
-import { HeroBannerCarousel } from '@/components/home/HeroBannerCarousel';
+import { HeroBannerCarousel, HomeBannerCollections } from '@/components/home/HeroBannerCarousel';
 import { MyCardsPreview } from '@/components/home/MyCardsPreview';
 import { NextMatchCountdown } from '@/components/home/NextMatchCountdown';
 import { MyTeamsMatches } from '@/components/home/MyTeamsMatches';
@@ -34,6 +35,7 @@ import { useSubmitQuestionPrediction, useUserQuestionPredictions, usePredictionQ
 import { useAuthStore } from '@/stores/auth.store';
 import { queryClient } from '@/lib/queryClient';
 import { supabase } from '@/lib/supabase';
+import { updateSupportedTeams } from '@/lib/profileMutations';
 import { useCountdown } from '@/hooks/useCountdown';
 import type { PredictionQuestion, UserProfile } from '@/types';
 import { useResponsive } from '@/lib/responsive';
@@ -48,6 +50,7 @@ export default function HomeScreen(): React.JSX.Element {
   const profile = useAuthStore((s) => s.profile);
   const userId = useAuthStore((s) => s.session?.user.id);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
+  const setSupportedTeams = useAuthStore((s) => s.setSupportedTeams);
   const [refreshing, setRefreshing] = useState(false);
   const [savingTeams, setSavingTeams] = useState(false);
   const [teamPickerOpen, setTeamPickerOpen] = useState(false);
@@ -96,8 +99,9 @@ export default function HomeScreen(): React.JSX.Element {
   useEffect(() => {
     if (!userId) return;
 
+    const channelId = Math.random().toString(36).slice(2, 9);
     const channel = supabase
-      .channel(`home-user-${userId}`)
+      .channel(`home-user-${userId}-${channelId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` },
@@ -135,12 +139,8 @@ export default function HomeScreen(): React.JSX.Element {
 
       setSavingTeams(true);
       try {
-        const { error } = await supabase
-          .from('users')
-          .update({ supported_teams: teams })
-          .eq('id', userId);
-
-        if (error) throw error;
+        const savedTeams = await updateSupportedTeams(userId, teams);
+        setSupportedTeams(savedTeams);
         await refreshProfile();
         return true;
       } catch (error: unknown) {
@@ -151,7 +151,7 @@ export default function HomeScreen(): React.JSX.Element {
         setSavingTeams(false);
       }
     },
-    [refreshProfile, userId]
+    [refreshProfile, setSupportedTeams, userId]
   );
 
   const handleEditTeams = useCallback(() => {
@@ -172,6 +172,7 @@ export default function HomeScreen(): React.JSX.Element {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE },
@@ -185,6 +186,7 @@ export default function HomeScreen(): React.JSX.Element {
         <HomeKpiBar />
 
         <HeroBannerCarousel />
+        <HomeBannerCollections position="after_top_banner" />
 
         <View style={styles.featureRow}>
           <View style={styles.featureHalf}>
@@ -194,18 +196,24 @@ export default function HomeScreen(): React.JSX.Element {
             <NextMatchCountdown />
           </View>
         </View>
+        <HomeBannerCollections position="after_cards_countdown" />
 
         <MyTeamsMatches onEditTeams={handleEditTeams} />
+        <HomeBannerCollections position="after_my_teams" />
 
         <PendingPredictions />
+        <HomeBannerCollections position="after_pending_predictions" />
 
         <TodayMatchesSection />
+        <HomeBannerCollections position="after_today_matches" />
 
         <View style={[styles.doubleRow, isSmall ? styles.doubleRowCompact : null]}>
           <PerformancePreview style={styles.splitCard} />
           <MiniLeaderboard style={styles.splitCard} />
         </View>
+        <HomeBannerCollections position="after_performance" />
 
+        <HomeBannerCollections position="before_tournament_questions" />
         <TournamentPredictionsSection />
       </ScrollView>
 
@@ -513,7 +521,7 @@ function PredictionQuestionModal({
   const shellPaddingTop = Math.max(16, insets.top + 12);
   const shellPaddingBottom = Math.max(16, insets.bottom + 12);
   const availableHeight = height - shellPaddingTop - shellPaddingBottom;
-  const modalHeight = Math.min(isCompact ? 440 : 500, Math.max(340, Math.floor(availableHeight * 0.78)));
+  const modalHeight = Math.min(isCompact ? 410 : 450, Math.max(350, Math.floor(availableHeight * 0.74)));
 
   if (!visible || !question) return null;
 
@@ -546,13 +554,12 @@ function PredictionQuestionModal({
           ]}
         >
           <View style={styles.modalHeader}>
-            <View style={styles.modalHeaderIcon}>
-              <Icon name="target" size={16} color={Colors.accent.lime} />
-            </View>
             <View style={styles.modalHeaderCopy}>
-              <Text style={styles.modalEyebrow}>Tournament Prediction</Text>
               <Text style={styles.modalTitle} numberOfLines={1}>
                 {modalTitle}
+              </Text>
+              <Text style={styles.modalSubtitle} numberOfLines={1}>
+                Tournament prediction - {question.points} pts - {statusLabel}
               </Text>
             </View>
             <Pressable
@@ -564,28 +571,6 @@ function PredictionQuestionModal({
             >
               <Icon name="close" size={18} color={Colors.text.primary} />
             </Pressable>
-          </View>
-
-          <View style={styles.modalMetaRow}>
-            <View style={styles.modalPointsPill}>
-              <Icon name="trophy" size={12} color={Colors.background.primary} />
-              <Text style={styles.modalPointsText}>{question.points} pts</Text>
-            </View>
-            <View
-              style={[
-                styles.modalStatusPill,
-                isResolved ? styles.modalStatusResolved : isLocked ? styles.modalStatusLocked : styles.modalStatusOpen,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modalStatusText,
-                  isResolved ? styles.modalStatusResolvedText : isLocked ? styles.modalStatusLockedText : styles.modalStatusOpenText,
-                ]}
-              >
-                {statusLabel}
-              </Text>
-            </View>
           </View>
 
           <ScrollView
@@ -625,7 +610,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     paddingTop: 6,
+    paddingBottom: 8,
     marginBottom: 2,
+    backgroundColor: Colors.background.primary,
+    zIndex: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.18,
+        shadowRadius: 10,
+      },
+      android: { elevation: 10 },
+      web: { boxShadow: '0 10px 18px rgba(0,0,0,0.18)' },
+    }),
   },
   headerSide: {
     flex: 1,
@@ -703,8 +701,8 @@ const styles = StyleSheet.create({
   questionInner: {
     paddingHorizontal: 0,
     paddingTop: 0,
-    paddingBottom: 10,
-    gap: 8,
+    paddingBottom: 12,
+    gap: 6,
   },
   questionHeader: {
     flexDirection: 'row',
@@ -736,17 +734,17 @@ const styles = StyleSheet.create({
   },
   questionTitle: {
     color: Colors.text.primary,
-    fontSize: 17,
-    fontWeight: Typography.weight.black,
-    lineHeight: 22,
+    fontSize: 16,
+    fontWeight: Typography.weight.bold,
+    lineHeight: 21,
   },
   recordBadgeWrap: {
     alignItems: 'flex-end',
   },
   recordBadge: {
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   recordPending: {
     backgroundColor: '#1E1E1E',
@@ -776,8 +774,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderRadius: 999,
     backgroundColor: 'rgba(74,222,128,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   statusChipText: {
     color: Colors.accent.lime,
@@ -790,8 +788,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderRadius: 999,
     backgroundColor: '#1E1E1E',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   statusChipMutedText: {
     color: Colors.text.secondary,
@@ -806,8 +804,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.accent.limeBorder,
     backgroundColor: Colors.background.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   statusChipOpenText: {
     color: Colors.accent.lime,
@@ -818,7 +816,7 @@ const styles = StyleSheet.create({
   },
   questionBody: {
     paddingHorizontal: 0,
-    paddingBottom: 4,
+    paddingBottom: 0,
     gap: 10,
   },
   questionImageWrap: {
@@ -837,12 +835,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   freeTextInput: {
-    minHeight: 94,
-    borderRadius: 14,
+    minHeight: 88,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border.subtle,
     backgroundColor: Colors.background.cardAlt,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     color: Colors.text.primary,
     fontSize: Typography.size.sm,
@@ -853,7 +851,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     minHeight: 44,
-    borderRadius: 999,
+    borderRadius: 12,
     backgroundColor: Colors.accent.lime,
     alignItems: 'center',
     justifyContent: 'center',
@@ -869,7 +867,6 @@ const styles = StyleSheet.create({
     color: Colors.background.primary,
     fontSize: 12,
     fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
   },
   submitButtonTextDisabled: {
     color: Colors.background.primary,
@@ -901,7 +898,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.78)',
+    backgroundColor: 'rgba(0,0,0,0.72)',
   },
   modalShell: {
     flex: 1,
@@ -914,9 +911,9 @@ const styles = StyleSheet.create({
     width: '100%',
     flexShrink: 1,
     overflow: 'hidden',
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.border.default,
+    borderColor: Colors.border.subtle,
     backgroundColor: Colors.background.card,
   },
   modalCardWrapWide: {
@@ -928,41 +925,29 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  modalHeaderIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.accent.limeBorder,
-    backgroundColor: Colors.accent.limeLight,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
   modalHeaderCopy: {
     flex: 1,
     minWidth: 0,
   },
-  modalEyebrow: {
-    color: Colors.accent.lime,
-    fontSize: 9,
-    fontWeight: Typography.weight.bold,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
   modalTitle: {
     color: Colors.text.primary,
-    fontSize: 16,
-    fontWeight: Typography.weight.black,
-    marginTop: 2,
+    fontSize: 18,
+    fontWeight: Typography.weight.bold,
+  },
+  modalSubtitle: {
+    marginTop: 3,
+    color: Colors.text.secondary,
+    fontSize: 12,
+    fontWeight: Typography.weight.medium,
   },
   modalCloseButton: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -970,72 +955,17 @@ const styles = StyleSheet.create({
     borderColor: Colors.border.subtle,
     backgroundColor: Colors.background.cardAlt,
   },
-  modalMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-  },
-  modalPointsPill: {
-    minHeight: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    backgroundColor: Colors.accent.lime,
-    paddingHorizontal: 10,
-  },
-  modalPointsText: {
-    color: Colors.background.primary,
-    fontSize: 11,
-    fontWeight: Typography.weight.black,
-    textTransform: 'uppercase',
-  },
-  modalStatusPill: {
-    minHeight: 28,
-    justifyContent: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-  },
-  modalStatusOpen: {
-    borderColor: Colors.accent.limeBorder,
-    backgroundColor: Colors.accent.limeLight,
-  },
-  modalStatusLocked: {
-    borderColor: Colors.border.default,
-    backgroundColor: Colors.background.cardAlt,
-  },
-  modalStatusResolved: {
-    borderColor: 'rgba(74,222,128,0.28)',
-    backgroundColor: 'rgba(74,222,128,0.12)',
-  },
-  modalStatusText: {
-    fontSize: 11,
-    fontWeight: Typography.weight.bold,
-    textTransform: 'uppercase',
-  },
-  modalStatusOpenText: {
-    color: Colors.accent.lime,
-  },
-  modalStatusLockedText: {
-    color: Colors.text.secondary,
-  },
-  modalStatusResolvedText: {
-    color: Colors.accent.lime,
-  },
   modalScroll: {
     flex: 1,
     flexShrink: 1,
   },
   modalScrollContent: {
-    paddingBottom: 14,
+    paddingBottom: 16,
   },
   modalQuestionWrap: {
     borderTopWidth: 1,
     borderTopColor: Colors.border.subtle,
-    paddingHorizontal: 14,
-    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
   },
 });

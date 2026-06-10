@@ -14,15 +14,55 @@ export type Database = {
   }
   public: {
     Tables: {
+      banner_collections: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banner_collections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hero_slides: {
         Row: {
           background_color: string
+          collection_id: string | null
           created_at: string
           created_by: string | null
           id: string
           image_path: string
           is_active: boolean
           link_url: string | null
+          placement: string
           sort_order: number
           subtitle: string | null
           title: string | null
@@ -30,12 +70,14 @@ export type Database = {
         }
         Insert: {
           background_color?: string
+          collection_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           image_path: string
           is_active?: boolean
           link_url?: string | null
+          placement?: string
           sort_order?: number
           subtitle?: string | null
           title?: string | null
@@ -43,18 +85,27 @@ export type Database = {
         }
         Update: {
           background_color?: string
+          collection_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           image_path?: string
           is_active?: boolean
           link_url?: string | null
+          placement?: string
           sort_order?: number
           subtitle?: string | null
           title?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "hero_slides_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "banner_collections"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "hero_slides_created_by_fkey"
             columns: ["created_by"]

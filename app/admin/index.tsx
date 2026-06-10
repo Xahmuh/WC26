@@ -9,8 +9,9 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { HeroCarousel } from '@/components/ui/HeroCarousel';
-import { HeroBannerManager } from '@/components/admin/HeroBannerManager';
+import { HeroBannerCarousel } from '@/components/home/HeroBannerCarousel';
+import { BottomBannerCollectionsManager, FixedHeroBannerManager } from '@/components/admin/HeroBannerManager';
+import { AuthContentManager } from '@/components/admin/AuthContentManager';
 import { HomeCardsTileManager } from '@/components/admin/HomeCardsTileManager';
 import { MatchesHeroManager } from '@/components/admin/MatchesHeroManager';
 import { DateTimePickerModal } from '@/components/ui/DateTimePickerModal';
@@ -35,15 +36,22 @@ import {
   useUpdateScoringRules,
   useStageMultipliers,
   useSetStageMultiplier,
+  useStageCardSettings,
+  useSetStageExpectedMatches,
   useCardDefinitions,
   useCreateCardDefinition,
   useUpdateCardDefinition,
   useDisableCardDefinition,
+  useDeleteCardDefinition,
   useUploadCardDefinitionImage,
   useRecalculateStageCards,
+  useApiProviders,
+  useUpsertApiProvider,
+  useSetActiveApiProvider,
 } from '@/hooks/useAdmin';
-import type { CardDefinition, Team, MatchDecisionMethod, MatchStage, MatchStatus, Match, PredictionQuestion } from '@/types';
+import type { ApiProvider, CardDefinition, Team, MatchDecisionMethod, MatchStage, MatchStatus, Match, PredictionQuestion } from '@/types';
 import { formatKickoff } from '@/lib/dates';
+import { DEFAULT_STAGE_MATCH_COUNTS } from '@/lib/stages';
 import { useResponsive } from '@/lib/responsive';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -192,7 +200,7 @@ const STAGE_ORDER: MatchStage[] = [
 
 const MULTIPLIER_OPTIONS = [1, 2, 3, 4, 5, 6];
 
-type AdminTab = 'matches' | 'add_match' | 'questions' | 'cards' | 'hero_banner' | 'scoring';
+type AdminTab = 'matches' | 'add_match' | 'questions' | 'cards' | 'hero_banner' | 'quotes' | 'scoring' | 'api';
 
 type AdminDialogVariant = 'success' | 'error' | 'warning' | 'info' | 'danger';
 
@@ -216,8 +224,10 @@ const ADMIN_TABS: Array<{ key: AdminTab; label: string; width: number }> = [
   { key: 'add_match', label: 'Add Match', width: 116 },
   { key: 'questions', label: 'Questions', width: 116 },
   { key: 'cards', label: 'Cards', width: 88 },
-  { key: 'hero_banner', label: 'Hero', width: 88 },
+  { key: 'hero_banner', label: 'Banners', width: 112 },
+  { key: 'quotes', label: 'Quotes', width: 96 },
   { key: 'scoring', label: 'Scoring', width: 104 },
+  { key: 'api', label: 'API', width: 82 },
 ];
 
 const ADMIN_DIALOG_META: Record<AdminDialogVariant, { icon: any; color: string; bg: string; border: string }> = {
@@ -483,12 +493,17 @@ function ScoringSettingsSectionWithEdit({ onDialog }: { onDialog: ShowAdminDialo
   const updateRulesMutation = useUpdateScoringRules();
   const stagesQuery = useStageMultipliers();
   const setStageMultiplierMutation = useSetStageMultiplier();
+  const matchesQuery = useMatches();
+  const stageCardSettingsQuery = useStageCardSettings();
+  const setStageExpectedMatchesMutation = useSetStageExpectedMatches();
 
   const [winnerPoints, setWinnerPoints] = useState('');
   const [exactBonusPoints, setExactBonusPoints] = useState('');
   const [didHydrateRules, setDidHydrateRules] = useState(false);
   const [isEditingStages, setIsEditingStages] = useState(false);
   const [stageDraft, setStageDraft] = useState<Partial<Record<MatchStage, number>>>({});
+  const [isEditingExpectedMatches, setIsEditingExpectedMatches] = useState(false);
+  const [expectedMatchesDraft, setExpectedMatchesDraft] = useState<Partial<Record<MatchStage, string>>>({});
 
   useEffect(() => {
     if (rulesQuery.data && !didHydrateRules) {
@@ -498,11 +513,52 @@ function ScoringSettingsSectionWithEdit({ onDialog }: { onDialog: ShowAdminDialo
     }
   }, [rulesQuery.data, didHydrateRules]);
 
+  useEffect(() => {
+    if (isEditingExpectedMatches) return;
+    const byStage = new Map(
+      (stageCardSettingsQuery.data ?? []).map((row) => [row.stage, row.expected_matches])
+    );
+    const nextDraft: Partial<Record<MatchStage, string>> = {};
+    STAGE_ORDER.forEach((stage) => {
+      nextDraft[stage] = String(byStage.get(stage) ?? DEFAULT_STAGE_MATCH_COUNTS[stage]);
+    });
+    setExpectedMatchesDraft(nextDraft);
+  }, [isEditingExpectedMatches, stageCardSettingsQuery.data]);
+
   const stageMultiplierByStage = new Map(
     (stagesQuery.data ?? []).map((row) => [row.stage, row.multiplier])
   );
 
   const getSavedStageMultiplier = (stage: MatchStage) => stageMultiplierByStage.get(stage) ?? 1;
+
+  const stageExpectedByStage = new Map(
+    (stageCardSettingsQuery.data ?? []).map((row) => [row.stage, row.expected_matches])
+  );
+
+  const stageAuditRows = STAGE_ORDER.map((stage) => {
+    const expectedMatches = stageExpectedByStage.get(stage) ?? DEFAULT_STAGE_MATCH_COUNTS[stage];
+    const activeMatches = (matchesQuery.data ?? []).filter(
+      (match) =>
+        match.stage === stage &&
+        match.status !== 'POSTPONED' &&
+        match.status !== 'CANCELLED'
+    );
+    const actualMatches = activeMatches.length;
+    const actualMultiplierSum = activeMatches.reduce((sum, match) => sum + match.points_multiplier, 0);
+    const savedMultiplier = getSavedStageMultiplier(stage);
+    const missingMatches = Math.max(expectedMatches - actualMatches, 0);
+    const basePoints = (rulesQuery.data?.winnerPoints ?? 0) + (rulesQuery.data?.exactBonusPoints ?? 0);
+    const possiblePoints = basePoints * (actualMultiplierSum + missingMatches * savedMultiplier);
+
+    return {
+      stage,
+      expectedMatches,
+      actualMatches,
+      missingMatches,
+      savedMultiplier,
+      possiblePoints,
+    };
+  });
 
   const resetStageDraft = () => {
     const nextDraft: Partial<Record<MatchStage, number>> = {};
@@ -551,6 +607,56 @@ function ScoringSettingsSectionWithEdit({ onDialog }: { onDialog: ShowAdminDialo
   const handleCancelStageEdit = () => {
     resetStageDraft();
     setIsEditingStages(false);
+  };
+
+  const handleSaveExpectedMatches = async () => {
+    const parsed = STAGE_ORDER.map((stage) => {
+      const raw = expectedMatchesDraft[stage] ?? String(DEFAULT_STAGE_MATCH_COUNTS[stage]);
+      const expectedMatches = parseInt(raw, 10);
+      return { stage, expectedMatches };
+    });
+
+    if (parsed.some((item) => Number.isNaN(item.expectedMatches) || item.expectedMatches < 0)) {
+      onDialog({
+        title: 'Invalid stage counts',
+        message: 'Expected matches must be non-negative whole numbers.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    const changed = parsed.filter(
+      (item) => item.expectedMatches !== (stageExpectedByStage.get(item.stage) ?? DEFAULT_STAGE_MATCH_COUNTS[item.stage])
+    );
+
+    if (changed.length === 0) {
+      setIsEditingExpectedMatches(false);
+      onDialog({ title: 'No changes', message: 'Stage match counts are already up to date.', variant: 'info' });
+      return;
+    }
+
+    try {
+      await Promise.all(
+        changed.map((item) =>
+          setStageExpectedMatchesMutation.mutateAsync({
+            stage: item.stage,
+            expectedMatches: item.expectedMatches,
+          })
+        )
+      );
+      setIsEditingExpectedMatches(false);
+      onDialog({
+        title: 'Saved',
+        message: `Updated ${changed.length} stage match count${changed.length === 1 ? '' : 's'}.`,
+        variant: 'success',
+      });
+    } catch (err: any) {
+      onDialog({
+        title: 'Error',
+        message: err.message || 'Failed to save stage match counts.',
+        variant: 'error',
+      });
+    }
   };
 
   const handleSaveStageEdit = async () => {
@@ -715,6 +821,94 @@ function ScoringSettingsSectionWithEdit({ onDialog }: { onDialog: ShowAdminDialo
           </View>
         )}
       </Card>
+
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
+        <View className="flex-row items-center justify-between gap-3">
+          <View className="min-w-0 flex-1">
+            <Text className="text-sm font-bold text-textPrimary">Stage Card Earning Audit</Text>
+            <Text className="mt-1 text-xs text-textSecondary">
+              Card thresholds use the full World Cup stage size, even before the API publishes later knockout fixtures.
+            </Text>
+          </View>
+          {!isEditingExpectedMatches ? (
+            <Pressable
+              onPress={() => setIsEditingExpectedMatches(true)}
+              disabled={stageCardSettingsQuery.isLoading}
+              className="rounded-lg border border-accentBorder bg-accentDim px-3 py-2 active:opacity-80"
+            >
+              <Text className="text-[10px] font-bold uppercase tracking-wide text-accent">Edit</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {stageCardSettingsQuery.isLoading || matchesQuery.isLoading || stagesQuery.isLoading ? (
+          <LoadingSpinner label="Loading stage audit..." />
+        ) : (
+          <View className="gap-2">
+            {stageAuditRows.map((row) => (
+              <View key={row.stage} className="rounded-xl border border-bgBorder bg-bgSurface1 px-3 py-3 gap-2">
+                <View className="flex-row items-center justify-between gap-3">
+                  <Text className="min-w-0 flex-1 text-xs font-bold uppercase text-textPrimary" numberOfLines={1}>
+                    {STAGE_LABELS[row.stage]}
+                  </Text>
+                  <Text className="text-[10px] font-bold text-accent">
+                    {row.possiblePoints} pts ceiling
+                  </Text>
+                </View>
+
+                <View className="flex-row flex-wrap gap-2">
+                  <View className="min-w-[86px] flex-1">
+                    <Text className="text-[9px] font-bold uppercase text-textTertiary">Expected</Text>
+                    {isEditingExpectedMatches ? (
+                      <TextInput
+                        value={expectedMatchesDraft[row.stage] ?? String(row.expectedMatches)}
+                        onChangeText={(value) =>
+                          setExpectedMatchesDraft((prev) => ({ ...prev, [row.stage]: value }))
+                        }
+                        keyboardType="number-pad"
+                        className="mt-1 h-9 rounded-lg border border-bgBorder bg-bgSurface2 px-2 text-center text-xs font-bold text-textPrimary"
+                        placeholderTextColor={Theme.colors.textTertiary}
+                      />
+                    ) : (
+                      <Text className="mt-1 text-xs font-bold text-textSecondary">{row.expectedMatches}</Text>
+                    )}
+                  </View>
+                  <View className="min-w-[86px] flex-1">
+                    <Text className="text-[9px] font-bold uppercase text-textTertiary">Actual</Text>
+                    <Text className="mt-1 text-xs font-bold text-textSecondary">{row.actualMatches}</Text>
+                  </View>
+                  <View className="min-w-[86px] flex-1">
+                    <Text className="text-[9px] font-bold uppercase text-textTertiary">Missing</Text>
+                    <Text className="mt-1 text-xs font-bold text-textSecondary">
+                      {row.missingMatches} @ {row.savedMultiplier}x
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            {isEditingExpectedMatches ? (
+              <View className="flex-row gap-2 pt-2">
+                <View className="flex-1">
+                  <Button
+                    label="Cancel"
+                    variant="secondary"
+                    onPress={() => setIsEditingExpectedMatches(false)}
+                    disabled={setStageExpectedMatchesMutation.isPending}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Button
+                    label={setStageExpectedMatchesMutation.isPending ? 'Saving...' : 'Save Counts'}
+                    onPress={handleSaveExpectedMatches}
+                    loading={setStageExpectedMatchesMutation.isPending}
+                  />
+                </View>
+              </View>
+            ) : null}
+          </View>
+        )}
+      </Card>
     </View>
   );
 }
@@ -795,6 +989,7 @@ function StageCardsSection({ onDialog }: { onDialog: ShowAdminDialog }): React.J
   const createMutation = useCreateCardDefinition();
   const updateMutation = useUpdateCardDefinition();
   const disableMutation = useDisableCardDefinition();
+  const deleteCardMutation = useDeleteCardDefinition();
   const uploadMutation = useUploadCardDefinitionImage();
   const recalculateMutation = useRecalculateStageCards();
 
@@ -990,6 +1185,31 @@ function StageCardsSection({ onDialog }: { onDialog: ShowAdminDialog }): React.J
             disableMutation.mutate(card.id, {
               onError: (err: any) =>
                 onDialog({ title: 'Error', message: err.message || 'Failed to disable card.', variant: 'error' }),
+            });
+          },
+        },
+      ],
+    });
+  };
+
+  const handleDeleteCard = (card: CardDefinition) => {
+    onDialog({
+      title: 'Delete card permanently?',
+      message: `${card.name} will be permanently deleted. Any copies already awarded to users will also be removed. This cannot be undone.`,
+      variant: 'danger',
+      actions: [
+        { label: 'Cancel', variant: 'secondary' },
+        {
+          label: 'Delete',
+          variant: 'danger',
+          onPress: () => {
+            deleteCardMutation.mutate(card.id, {
+              onSuccess: () => {
+                if (editingCardId === card.id) resetForm();
+                onDialog({ title: 'Deleted', message: 'Card permanently deleted.', variant: 'success' });
+              },
+              onError: (err: any) =>
+                onDialog({ title: 'Error', message: err.message || 'Failed to delete card.', variant: 'error' }),
             });
           },
         },
@@ -1237,6 +1457,385 @@ function StageCardsSection({ onDialog }: { onDialog: ShowAdminDialog }): React.J
                       {recalculateMutation.isPending ? 'Recalculating...' : 'Recalculate Stage'}
                     </Text>
                   </Pressable>
+                  <Pressable
+                    onPress={() => handleDeleteCard(card)}
+                    disabled={deleteCardMutation.isPending}
+                    className="rounded-lg border border-live/30 bg-liveDim px-3 py-2"
+                  >
+                    <Text className="text-[10px] font-bold uppercase text-live">
+                      {deleteCardMutation.isPending ? 'Deleting...' : 'Delete'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </Card>
+    </View>
+  );
+}
+
+interface ApiProviderFormState {
+  id: string;
+  name: string;
+  adapter: string;
+  baseUrl: string;
+  competitionCode: string;
+  tokenSecretName: string;
+  rateLimitPerMinute: string;
+  supportsFixtures: boolean;
+  supportsResults: boolean;
+  notes: string;
+  isActive: boolean;
+}
+
+function createApiProviderForm(provider?: ApiProvider): ApiProviderFormState {
+  return {
+    id: provider?.id ?? '',
+    name: provider?.name ?? '',
+    adapter: provider?.adapter ?? 'football_data_v4',
+    baseUrl: provider?.base_url ?? '',
+    competitionCode: provider?.competition_code ?? 'WC',
+    tokenSecretName: provider?.token_secret_name ?? 'FOOTBALL_API_TOKEN',
+    rateLimitPerMinute: provider?.rate_limit_per_minute ? String(provider.rate_limit_per_minute) : '',
+    supportsFixtures: provider?.supports_fixtures ?? true,
+    supportsResults: provider?.supports_results ?? true,
+    notes: provider?.notes ?? '',
+    isActive: provider?.is_active ?? false,
+  };
+}
+
+function makeProviderId(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
+
+function ApiSettingsSection({ onDialog }: { onDialog: ShowAdminDialog }): React.JSX.Element {
+  const providersQuery = useApiProviders();
+  const upsertMutation = useUpsertApiProvider();
+  const setActiveMutation = useSetActiveApiProvider();
+  const [form, setForm] = useState<ApiProviderFormState>(() => createApiProviderForm());
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+
+  const providers = providersQuery.data ?? [];
+  const activeProvider = providers.find((provider) => provider.is_active) ?? providers[0] ?? null;
+  const isSaving = upsertMutation.isPending || setActiveMutation.isPending;
+
+  const resetForm = () => {
+    setEditingProviderId(null);
+    setForm(createApiProviderForm());
+  };
+
+  const startEditProvider = (provider: ApiProvider) => {
+    setEditingProviderId(provider.id);
+    setForm(createApiProviderForm(provider));
+  };
+
+  const handleSaveProvider = () => {
+    const id = (form.id.trim() || makeProviderId(form.name)).toLowerCase();
+    const rateLimit = form.rateLimitPerMinute.trim()
+      ? parseInt(form.rateLimitPerMinute, 10)
+      : null;
+
+    if (!id || !/^[a-z0-9][a-z0-9_-]*$/.test(id)) {
+      onDialog({
+        title: 'Invalid provider id',
+        message: 'Use lowercase letters, numbers, dash, or underscore.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    if (!form.name.trim()) {
+      onDialog({ title: 'Invalid provider', message: 'Provider name is required.', variant: 'warning' });
+      return;
+    }
+
+    try {
+      const parsedUrl = new URL(form.baseUrl.trim());
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('Invalid protocol');
+    } catch {
+      onDialog({ title: 'Invalid URL', message: 'Base URL must start with http:// or https://.', variant: 'warning' });
+      return;
+    }
+
+    if (!form.competitionCode.trim() || !form.tokenSecretName.trim()) {
+      onDialog({
+        title: 'Missing API config',
+        message: 'Competition code and token secret name are required.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    if (rateLimit !== null && (Number.isNaN(rateLimit) || rateLimit <= 0)) {
+      onDialog({ title: 'Invalid rate limit', message: 'Rate limit must be a positive number.', variant: 'warning' });
+      return;
+    }
+
+    upsertMutation.mutate(
+      {
+        id,
+        name: form.name.trim(),
+        adapter: form.adapter.trim() || 'football_data_v4',
+        baseUrl: form.baseUrl.trim().replace(/\/+$/, ''),
+        competitionCode: form.competitionCode.trim(),
+        tokenSecretName: form.tokenSecretName.trim(),
+        isActive: form.isActive,
+        rateLimitPerMinute: rateLimit,
+        supportsFixtures: form.supportsFixtures,
+        supportsResults: form.supportsResults,
+        notes: form.notes.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          resetForm();
+          onDialog({ title: 'Saved', message: 'API provider settings saved.', variant: 'success' });
+        },
+        onError: (err: any) =>
+          onDialog({ title: 'Error', message: err.message || 'Failed to save API provider.', variant: 'error' }),
+      }
+    );
+  };
+
+  const handleSetActive = (provider: ApiProvider) => {
+    setActiveMutation.mutate(provider.id, {
+      onSuccess: () => {
+        onDialog({ title: 'Activated', message: `${provider.name} is now the active API provider.`, variant: 'success' });
+      },
+      onError: (err: any) =>
+        onDialog({ title: 'Error', message: err.message || 'Failed to activate provider.', variant: 'error' }),
+    });
+  };
+
+  return (
+    <View className="gap-6">
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
+        <View className="flex-row items-center justify-between gap-3">
+          <View className="min-w-0 flex-1">
+            <Text className="text-base font-bold text-textPrimary">Active API</Text>
+            <Text className="mt-1 text-xs text-textSecondary">
+              Fixture and result sync currently use the active football-data v4 compatible provider.
+            </Text>
+          </View>
+          <View className="rounded-full border border-accentBorder bg-accentDim px-3 py-1">
+            <Text className="text-[10px] font-bold uppercase text-accent">
+              {activeProvider?.adapter ?? 'No provider'}
+            </Text>
+          </View>
+        </View>
+
+        {providersQuery.isLoading ? (
+          <LoadingSpinner label="Loading API providers..." />
+        ) : activeProvider ? (
+          <View className="rounded-xl border border-bgBorder bg-bgSurface1 p-3 gap-2">
+            <Text className="text-sm font-bold text-textPrimary">{activeProvider.name}</Text>
+            <Text className="text-xs text-textSecondary">{activeProvider.base_url}</Text>
+            <View className="flex-row flex-wrap gap-2">
+              <Text className="text-[10px] font-bold text-textTertiary">
+                Competition: <Text className="text-textSecondary">{activeProvider.competition_code}</Text>
+              </Text>
+              <Text className="text-[10px] font-bold text-textTertiary">
+                Secret: <Text className="text-textSecondary">{activeProvider.token_secret_name}</Text>
+              </Text>
+              <Text className="text-[10px] font-bold text-textTertiary">
+                Rate: <Text className="text-textSecondary">{activeProvider.rate_limit_per_minute ?? 'n/a'}/min</Text>
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <Text className="text-xs text-live">No API provider configured.</Text>
+        )}
+      </Card>
+
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-4">
+        <View className="flex-row items-center justify-between gap-3">
+          <Text className="text-base font-bold text-textPrimary">
+            {editingProviderId ? 'Edit API Provider' : 'Add API Provider'}
+          </Text>
+          {editingProviderId ? (
+            <Pressable onPress={resetForm} className="rounded-lg border border-bgBorder bg-bgSurface1 px-3 py-2">
+              <Text className="text-[10px] font-bold uppercase text-textSecondary">New</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View className="flex-row flex-wrap gap-3">
+          <View className="min-w-[140px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Provider ID</Text>
+            <TextInput
+              value={form.id}
+              onChangeText={(id) => setForm((prev) => ({ ...prev, id }))}
+              placeholder="football-data"
+              placeholderTextColor={Theme.colors.textTertiary}
+              autoCapitalize="none"
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+          <View className="min-w-[140px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Name</Text>
+            <TextInput
+              value={form.name}
+              onChangeText={(name) => setForm((prev) => ({ ...prev, name }))}
+              placeholder="football-data.org"
+              placeholderTextColor={Theme.colors.textTertiary}
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+        </View>
+
+        <View className="gap-1.5">
+          <Text className="text-xs font-semibold text-textSecondary uppercase">Base URL</Text>
+          <TextInput
+            value={form.baseUrl}
+            onChangeText={(baseUrl) => setForm((prev) => ({ ...prev, baseUrl }))}
+            placeholder="https://api.football-data.org/v4"
+            placeholderTextColor={Theme.colors.textTertiary}
+            autoCapitalize="none"
+            className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+          />
+        </View>
+
+        <View className="flex-row flex-wrap gap-3">
+          <View className="min-w-[120px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Adapter</Text>
+            <TextInput
+              value={form.adapter}
+              onChangeText={(adapter) => setForm((prev) => ({ ...prev, adapter }))}
+              autoCapitalize="none"
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+          <View className="min-w-[96px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Competition</Text>
+            <TextInput
+              value={form.competitionCode}
+              onChangeText={(competitionCode) => setForm((prev) => ({ ...prev, competitionCode }))}
+              autoCapitalize="characters"
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+        </View>
+
+        <View className="flex-row flex-wrap gap-3">
+          <View className="min-w-[160px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Token Secret</Text>
+            <TextInput
+              value={form.tokenSecretName}
+              onChangeText={(tokenSecretName) => setForm((prev) => ({ ...prev, tokenSecretName }))}
+              autoCapitalize="characters"
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+          <View className="min-w-[96px] flex-1 gap-1.5">
+            <Text className="text-xs font-semibold text-textSecondary uppercase">Rate / min</Text>
+            <TextInput
+              value={form.rateLimitPerMinute}
+              onChangeText={(rateLimitPerMinute) => setForm((prev) => ({ ...prev, rateLimitPerMinute }))}
+              keyboardType="number-pad"
+              placeholder="10"
+              placeholderTextColor={Theme.colors.textTertiary}
+              className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+            />
+          </View>
+        </View>
+
+        <View className="flex-row flex-wrap gap-2">
+          {[
+            { key: 'supportsFixtures', label: 'Fixtures' },
+            { key: 'supportsResults', label: 'Results' },
+            { key: 'isActive', label: 'Set Active' },
+          ].map((item) => {
+            const key = item.key as 'supportsFixtures' | 'supportsResults' | 'isActive';
+            const selected = form[key];
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => setForm((prev) => ({ ...prev, [key]: !prev[key] }))}
+                className={`rounded-lg border px-3 py-2 ${
+                  selected ? 'border-accent bg-accentDim' : 'border-bgBorder bg-bgSurface1'
+                }`}
+              >
+                <Text className={`text-[10px] font-bold uppercase ${selected ? 'text-accent' : 'text-textSecondary'}`}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View className="gap-1.5">
+          <Text className="text-xs font-semibold text-textSecondary uppercase">Notes</Text>
+          <TextInput
+            value={form.notes}
+            onChangeText={(notes) => setForm((prev) => ({ ...prev, notes }))}
+            placeholder="Internal note for this provider"
+            placeholderTextColor={Theme.colors.textTertiary}
+            multiline
+            className="min-h-20 rounded-lg border border-bgBorder bg-bgSurface1 px-3 py-2 text-sm text-textPrimary"
+          />
+        </View>
+
+        <Button
+          label={upsertMutation.isPending ? 'Saving...' : 'Save API Provider'}
+          onPress={handleSaveProvider}
+          loading={upsertMutation.isPending}
+          disabled={isSaving}
+        />
+      </Card>
+
+      <Card className="p-4 border border-bgBorder bg-bgSurface2 gap-3">
+        <Text className="text-base font-bold text-textPrimary">Configured Providers</Text>
+        {providersQuery.isLoading ? (
+          <LoadingSpinner label="Loading providers..." />
+        ) : providers.length === 0 ? (
+          <Text className="text-sm text-textTertiary text-center py-4">No providers configured.</Text>
+        ) : (
+          <View className="gap-3">
+            {providers.map((provider) => (
+              <View key={provider.id} className="rounded-xl border border-bgBorder bg-bgSurface1 p-3 gap-3">
+                <View className="flex-row items-start justify-between gap-3">
+                  <View className="min-w-0 flex-1">
+                    <View className="flex-row flex-wrap items-center gap-2">
+                      <Text className="text-sm font-bold text-textPrimary">{provider.name}</Text>
+                      {provider.is_active ? (
+                        <View className="rounded bg-successDim px-2 py-0.5">
+                          <Text className="text-[9px] font-bold uppercase text-success">Active</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text className="mt-1 text-xs text-textSecondary" numberOfLines={1}>
+                      {provider.base_url}
+                    </Text>
+                    <Text className="mt-1 text-[10px] text-textTertiary">
+                      {provider.adapter} - {provider.competition_code} - {provider.token_secret_name}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="flex-row flex-wrap gap-2">
+                  <Pressable
+                    onPress={() => startEditProvider(provider)}
+                    className="rounded-lg border border-bgBorder bg-bgSurface2 px-3 py-2"
+                  >
+                    <Text className="text-[10px] font-bold uppercase text-textSecondary">Edit</Text>
+                  </Pressable>
+                  {!provider.is_active ? (
+                    <Pressable
+                      onPress={() => handleSetActive(provider)}
+                      disabled={setActiveMutation.isPending}
+                      className="rounded-lg border border-accentBorder bg-accentDim px-3 py-2"
+                    >
+                      <Text className="text-[10px] font-bold uppercase text-accent">
+                        {setActiveMutation.isPending ? 'Activating...' : 'Set Active'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             ))}
@@ -1443,6 +2042,13 @@ const styles = StyleSheet.create({
   adminTabLabelInactive: {
     color: Theme.colors.textSecondary,
   },
+  adminScrollContent: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 24,
+  },
 });
 
 const singleTeamPickerStyles = StyleSheet.create({
@@ -1459,6 +2065,7 @@ export default function AdminDashboard(): React.JSX.Element {
   const router = useRouter();
   const profile = useAuthStore((s) => s.profile);
   const isAdmin = profile?.role === 'admin';
+  const { isSmall, isTablet, containerMaxWidth } = useResponsive();
 
   const matchesQuery = useMatches();
   const questionsQuery = usePredictionQuestions();
@@ -1980,7 +2587,16 @@ export default function AdminDashboard(): React.JSX.Element {
         })}
       </ScrollView>
 
-      <ScrollView ref={scrollRef} contentContainerClassName="p-4 gap-6">
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={[
+          styles.adminScrollContent,
+          {
+            maxWidth: isTablet ? Math.min(containerMaxWidth, 1080) : undefined,
+            paddingHorizontal: isSmall ? 12 : 16,
+          },
+        ]}
+      >
         {/* Matches Multiplier Tab */}
         {activeTab === 'matches' && (
           <View className="gap-4">
@@ -2868,21 +3484,30 @@ export default function AdminDashboard(): React.JSX.Element {
         {/* Cards Tab */}
         {activeTab === 'cards' && <StageCardsSection onDialog={showAdminDialog} />}
 
-        {/* Hero Banner Tab */}
+        {/* Banners Tab */}
         {activeTab === 'hero_banner' && (
           <View className="gap-4">
             <View className="gap-1.5">
-              <Text className="text-xs font-semibold text-textSecondary uppercase">Live Preview</Text>
-              <HeroCarousel />
+              <Text className="text-xs font-semibold text-textSecondary uppercase">Fixed Banner Preview</Text>
+              <HeroBannerCarousel />
             </View>
-            <HeroBannerManager />
+            <Card className="border border-bgBorder bg-bgSurface2 p-4 gap-4">
+              <FixedHeroBannerManager onDialog={showAdminDialog} />
+            </Card>
+            <BottomBannerCollectionsManager onDialog={showAdminDialog} />
             <MatchesHeroManager />
             <HomeCardsTileManager />
           </View>
         )}
 
+        {/* Quotes Tab */}
+        {activeTab === 'quotes' && <AuthContentManager onDialog={showAdminDialog} />}
+
         {/* Scoring Tab */}
         {activeTab === 'scoring' && <ScoringSettingsSectionWithEdit onDialog={showAdminDialog} />}
+
+        {/* API Tab */}
+        {activeTab === 'api' && <ApiSettingsSection onDialog={showAdminDialog} />}
       </ScrollView>
 
       {/* Team Picker Modals */}

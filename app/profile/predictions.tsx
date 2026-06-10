@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Platform, Pressable, Text, View, type ListRenderItemInfo } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { MatchCard } from '@/components/match/MatchCard';
 import { Container } from '@/components/ui/Container';
+import { FloatingTabBar, TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBar';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { EmptyState, ErrorState } from '@/components/ui/States';
 import { isFinishedLike, isNotStartedMatch, isPredictionClosedMatch } from '@/components/home/homeUtils';
 import Theme from '@/constants/theme/design-system';
@@ -74,6 +74,47 @@ const TAB_COPY: Record<
   },
 };
 
+const BOTTOM_NAV_ROUTES = [
+  { key: 'predictions-home', name: 'home' },
+  { key: 'predictions-matches', name: 'matches' },
+  { key: 'predictions-cards', name: 'cards' },
+  { key: 'predictions-leaderboard', name: 'leaderboard' },
+  { key: 'predictions-profile', name: 'profile' },
+];
+
+const BOTTOM_NAV_DESCRIPTORS = {
+  'predictions-home': { options: { title: 'Home' } },
+  'predictions-matches': { options: { title: 'Matches' } },
+  'predictions-cards': { options: { title: 'Predict', tabBarAccessibilityLabel: 'Pending Predictions' } },
+  'predictions-leaderboard': { options: { title: 'Leaderboard' } },
+  'predictions-profile': { options: { title: 'Profile' } },
+};
+
+const BOTTOM_NAV_PATHS: Record<string, string> = {
+  home: '/(tabs)/home',
+  matches: '/(tabs)/matches',
+  cards: '/profile/predictions?tab=PENDING',
+  leaderboard: '/(tabs)/leaderboard',
+  profile: '/(tabs)/profile',
+};
+
+function PredictionsBottomNav(): React.JSX.Element {
+  const router = useRouter();
+  const state = useMemo(() => ({ index: 2, routes: BOTTOM_NAV_ROUTES }), []);
+  const navigation = useMemo(
+    () => ({
+      emit: () => ({ defaultPrevented: false }),
+      navigate: (routeName: string) => {
+        const href = BOTTOM_NAV_PATHS[routeName] ?? '/(tabs)/home';
+        router.replace(href as never);
+      },
+    }),
+    [router]
+  );
+
+  return <FloatingTabBar state={state} descriptors={BOTTOM_NAV_DESCRIPTORS} navigation={navigation} />;
+}
+
 function normalizeTab(value: string | string[] | undefined): PredictionsTab | null {
   const rawValue = Array.isArray(value) ? value[0] : value;
   const normalized = rawValue?.toUpperCase();
@@ -91,37 +132,54 @@ function byKickoffDesc(a: Match, b: Match): number {
   return new Date(b.kickoff_time).getTime() - new Date(a.kickoff_time).getTime();
 }
 
-function CountPill({ value, active }: { value: number; active: boolean }): React.JSX.Element {
-  return (
-    <View className={['min-w-[24px] items-center rounded-full px-2 py-0.5', active ? 'bg-accent' : 'bg-bgSurface1'].join(' ')}>
-      <Text className={['text-[11px] font-black', active ? 'text-accentDark' : 'text-textSecondary'].join(' ')}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 function SummaryStat({
   label,
   value,
   icon,
+  active,
+  onPress,
 }: {
   label: string;
   value: number;
   icon: IconName;
+  active: boolean;
+  onPress: () => void;
 }): React.JSX.Element {
   return (
-    <View
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`Show ${label.toLowerCase()} predictions`}
       style={{ flexBasis: '48%', flexGrow: 1 }}
-      className="min-w-0 rounded-2xl border border-bgBorder bg-bgSurface1 px-3 py-3"
+      className={[
+        'min-w-0 rounded-2xl border px-3 py-3 active:opacity-80',
+        active ? 'border-accent bg-accentDim' : 'border-bgBorder bg-bgSurface1',
+      ].join(' ')}
     >
-      <View className="mb-2 h-8 w-8 items-center justify-center rounded-full bg-accentDim">
-        <Icon name={icon} size={15} color={Theme.colors.accent} />
+      <View className={['mb-2 h-8 w-8 items-center justify-center rounded-full', active ? 'bg-accent' : 'bg-accentDim'].join(' ')}>
+        <Icon name={icon} size={15} color={active ? Theme.colors.accentDark : Theme.colors.accent} />
       </View>
-      <Text className="text-xl font-black text-textPrimary">{value}</Text>
-      <Text numberOfLines={1} className="text-[11px] font-semibold uppercase tracking-wide text-textTertiary">
+      <Text className={['text-xl font-black', active ? 'text-accent' : 'text-textPrimary'].join(' ')}>
+        {value}
+      </Text>
+      <Text
+        numberOfLines={1}
+        className={['text-[11px] font-semibold uppercase tracking-wide', active ? 'text-textPrimary' : 'text-textTertiary'].join(' ')}
+      >
         {label}
       </Text>
+    </Pressable>
+  );
+}
+
+function PredictionsPageHeader(): React.JSX.Element {
+  return (
+    <View className="border-b border-bgBorder bg-bgDeep">
+      <Container nested className="px-5 pb-3 pt-2">
+        <Text className="text-3xl font-black text-textPrimary">My Predictions</Text>
+        <Text className="mt-1 text-sm font-semibold text-textSecondary">Saved, open, and completed picks</Text>
+      </Container>
     </View>
   );
 }
@@ -170,21 +228,116 @@ export default function MyPredictionsScreen(): React.JSX.Element {
     return { UPCOMING: upcoming, PENDING: pending, HISTORY: history, MISSED: missed };
   }, [matchesQuery.data, predictionsQuery.data]);
 
+  const activeMatches = categorized[activeTab];
+  const activeCopy = TAB_COPY[activeTab];
+  const predictions = predictionsQuery.data;
+  const points = pointsQuery.data;
+  const openMatch = useCallback(
+    (id: string) => {
+      router.push(`/match/${id}` as never);
+    },
+    [router]
+  );
+
+  const renderMatch = useCallback(
+    ({ item }: ListRenderItemInfo<Match>) => (
+      <Container nested className="px-5">
+        <MatchCard
+          match={item}
+          prediction={predictions?.get(item.id)}
+          points={points?.get(item.id)}
+          onPress={openMatch}
+        />
+      </Container>
+    ),
+    [openMatch, points, predictions]
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <Container nested className="px-5 pb-3">
+        <View className="gap-4">
+          <View className="rounded-3xl border border-bgBorder bg-bgSurface2 p-4">
+            <View className="flex-row items-start justify-between gap-3">
+              <View className="min-w-0 flex-1">
+                <Text className="text-xs font-black uppercase tracking-[1.8px] text-accent">
+                  My Predictions
+                </Text>
+                <Text className="mt-1 text-2xl font-black leading-7 text-textPrimary">
+                  Your picks, cleanly tracked
+                </Text>
+                <Text className="mt-2 text-sm leading-5 text-textSecondary">
+                  Review saved predictions, pick open matches, and check completed results.
+                </Text>
+              </View>
+
+              <View className="h-12 w-12 items-center justify-center rounded-2xl bg-accentDim">
+                <Icon name="target" size={23} color={Theme.colors.accent} />
+              </View>
+            </View>
+
+            <View className="mt-4 flex-row flex-wrap gap-2">
+              {TABS.map((tab) => {
+                const active = activeTab === tab.key;
+
+                return (
+                  <SummaryStat
+                    key={tab.key}
+                    label={tab.label}
+                    value={categorized[tab.key].length}
+                    icon={tab.icon}
+                    active={active}
+                    onPress={() => setActiveTab(tab.key)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+
+          <View className="rounded-2xl border border-bgBorder bg-bgSurface2 px-4 py-3">
+            <Text className="text-[11px] font-black uppercase tracking-[1.5px] text-accent">
+              {activeCopy.eyebrow}
+            </Text>
+            <Text className="mt-1 text-lg font-black text-textPrimary">{activeCopy.title}</Text>
+            <Text className="mt-1 text-sm leading-5 text-textSecondary">{activeCopy.description}</Text>
+          </View>
+        </View>
+      </Container>
+    ),
+    [activeCopy.description, activeCopy.eyebrow, activeCopy.title, activeTab, categorized]
+  );
+
+  const emptyList = useMemo(
+    () => (
+      <Container nested className="px-5">
+        <View className="rounded-2xl border border-bgBorder bg-bgSurface2">
+          <EmptyState
+            title={activeCopy.emptyTitle}
+            description={activeCopy.emptyDescription}
+            icon={activeCopy.emptyIcon}
+          />
+        </View>
+      </Container>
+    ),
+    [activeCopy.emptyDescription, activeCopy.emptyIcon, activeCopy.emptyTitle]
+  );
+
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
+      <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ScreenHeader title="My Predictions" fallback="/(tabs)/profile" />
+        <PredictionsPageHeader />
         <LoadingSpinner fullScreen label="Loading predictions..." />
+        <PredictionsBottomNav />
       </SafeAreaView>
     );
   }
 
   if (isError) {
     return (
-      <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
+      <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ScreenHeader title="My Predictions" fallback="/(tabs)/profile" />
+        <PredictionsPageHeader />
         <ErrorState
           message={errorMsg || 'An error occurred.'}
           onRetry={() => {
@@ -193,126 +346,38 @@ export default function MyPredictionsScreen(): React.JSX.Element {
             void pointsQuery.refetch();
           }}
         />
+        <PredictionsBottomNav />
       </SafeAreaView>
     );
   }
 
-  const activeMatches = categorized[activeTab];
-  const activeCopy = TAB_COPY[activeTab];
-  const predictions = predictionsQuery.data;
-  const points = pointsQuery.data;
-
   return (
-    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-bgDeep" edges={['top']}>
       <Stack.Screen
         options={{
           headerShown: false,
         }}
       />
-      <ScreenHeader title="My Predictions" subtitle="Saved, open, and completed picks" fallback="/(tabs)/profile" />
+      <PredictionsPageHeader />
 
-      <ScrollView contentContainerClassName="pb-10 pt-4" showsVerticalScrollIndicator={false}>
-        <Container nested className="px-5">
-          <View className="gap-4">
-            <View className="rounded-3xl border border-bgBorder bg-bgSurface2 p-4">
-              <View className="flex-row items-start justify-between gap-3">
-                <View className="min-w-0 flex-1">
-                  <Text className="text-xs font-black uppercase tracking-[1.8px] text-accent">
-                    My Predictions
-                  </Text>
-                  <Text className="mt-1 text-2xl font-black leading-7 text-textPrimary">
-                    Your picks, cleanly tracked
-                  </Text>
-                  <Text className="mt-2 text-sm leading-5 text-textSecondary">
-                    Review saved predictions, pick open matches, and check completed results.
-                  </Text>
-                </View>
-
-                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-accentDim">
-                  <Icon name="target" size={23} color={Theme.colors.accent} />
-                </View>
-              </View>
-
-              <View className="mt-4 flex-row flex-wrap gap-2">
-                <SummaryStat label="Saved" value={categorized.UPCOMING.length} icon="lock" />
-                <SummaryStat label="To Pick" value={categorized.PENDING.length} icon="edit" />
-                <SummaryStat label="Done" value={categorized.HISTORY.length} icon="checkCircle" />
-                <SummaryStat label="Missed" value={categorized.MISSED.length} icon="ban" />
-              </View>
-            </View>
-
-            <View className="rounded-2xl border border-bgBorder bg-bgSurface3 p-1">
-              <View className="flex-row flex-wrap gap-1">
-                {TABS.map((tab) => {
-                  const active = activeTab === tab.key;
-                  const count = categorized[tab.key].length;
-
-                  return (
-                    <Pressable
-                      key={tab.key}
-                      onPress={() => setActiveTab(tab.key)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      style={{ flexBasis: '48%', flexGrow: 1 }}
-                      className={[
-                        'min-h-[48px] min-w-0 flex-row items-center justify-center gap-1.5 rounded-xl px-2',
-                        active ? 'bg-bgSurface2' : '',
-                      ].join(' ')}
-                    >
-                      <Icon name={tab.icon} size={14} color={active ? Theme.colors.accent : Theme.colors.textTertiary} />
-                      <Text
-                        numberOfLines={1}
-                        className={[
-                          'text-xs font-black uppercase tracking-wide',
-                          active ? 'text-textPrimary' : 'text-textSecondary',
-                        ].join(' ')}
-                      >
-                        {tab.label}
-                      </Text>
-                      <CountPill value={count} active={active} />
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View className="rounded-2xl border border-bgBorder bg-bgSurface2 px-4 py-3">
-              <Text className="text-[11px] font-black uppercase tracking-[1.5px] text-accent">
-                {activeCopy.eyebrow}
-              </Text>
-              <Text className="mt-1 text-lg font-black text-textPrimary">{activeCopy.title}</Text>
-              <Text className="mt-1 text-sm leading-5 text-textSecondary">{activeCopy.description}</Text>
-            </View>
-
-            {activeMatches.length === 0 ? (
-              <View className="rounded-2xl border border-bgBorder bg-bgSurface2">
-                <EmptyState
-                  title={activeCopy.emptyTitle}
-                  description={activeCopy.emptyDescription}
-                  icon={activeCopy.emptyIcon}
-                />
-              </View>
-            ) : (
-              <View className="gap-3">
-                {activeMatches.map((match) => {
-                  const pred = predictions?.get(match.id);
-                  const pts = points?.get(match.id);
-
-                  return (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      prediction={pred}
-                      points={pts}
-                      onPress={(id) => router.push(`/match/${id}`)}
-                    />
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        </Container>
-      </ScrollView>
+      <FlatList
+        data={activeMatches}
+        keyExtractor={(item) => item.id}
+        renderItem={renderMatch}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={emptyList}
+        ItemSeparatorComponent={() => <View className="h-3" />}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={60}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + 96 }}
+        contentContainerClassName="pt-4"
+        showsVerticalScrollIndicator={false}
+      />
+      <PredictionsBottomNav />
     </SafeAreaView>
   );
 }

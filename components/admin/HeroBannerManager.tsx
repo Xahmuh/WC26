@@ -9,14 +9,37 @@ import { Icon } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { getHeroSlideImageUrl } from '@/services/admin.service';
 import {
+  DEFAULT_HOME_BANNER_POSITION,
+  getHomeBannerPositionLabel,
+  HOME_BANNER_POSITIONS,
+  type HomeBannerPosition,
+} from '@/lib/bannerPositions';
+import {
   useHeroSlides,
   useUploadHeroSlideImage,
   useCreateHeroSlide,
   useUpdateHeroSlide,
   useDeleteHeroSlide,
   useReorderHeroSlides,
+  useBannerCollections,
+  useCreateBannerCollection,
+  useUpdateBannerCollection,
+  useDeleteBannerCollection,
 } from '@/hooks/useAdmin';
-import type { HeroSlide } from '@/types';
+import type { BannerPlacement, HeroSlide } from '@/types';
+
+type AdminDialogAction = {
+  label: string;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'lime';
+  onPress?: () => void;
+};
+
+type ShowAdminDialog = (dialog: {
+  title: string;
+  message?: string;
+  variant?: 'success' | 'error' | 'warning' | 'info' | 'danger';
+  actions?: AdminDialogAction[];
+}) => void;
 
 interface SlideFormState {
   imagePath: string | null;
@@ -267,8 +290,22 @@ function SlideRow({
   );
 }
 
-export function HeroBannerManager(): React.JSX.Element {
-  const { data: slides, isLoading } = useHeroSlides();
+export function HeroBannerManager({
+  onDialog,
+  placement = 'top',
+  collectionId = null,
+  heading = 'Top slider',
+  description = 'Control the top home screen banner. Add, reorder, edit, or hide slides.',
+  addLabel = '+ Add Slide',
+}: {
+  onDialog?: ShowAdminDialog;
+  placement?: BannerPlacement;
+  collectionId?: string | null;
+  heading?: string;
+  description?: string;
+  addLabel?: string;
+}): React.JSX.Element {
+  const { data: slides, isLoading } = useHeroSlides(placement, collectionId);
   const createMutation = useCreateHeroSlide();
   const updateMutation = useUpdateHeroSlide();
   const deleteMutation = useDeleteHeroSlide();
@@ -287,13 +324,19 @@ export function HeroBannerManager(): React.JSX.Element {
         title: form.title.trim() || null,
         subtitle: form.subtitle.trim() || null,
         linkUrl: form.linkUrl.trim() || null,
+        placement,
+        collectionId,
         sortOrder: orderedSlides.length,
         isActive: form.isActive,
       },
       {
         onSuccess: () => {
           setIsAdding(false);
-          Alert.alert('Success', 'Hero slide added.');
+          if (onDialog) {
+            onDialog({ title: 'Saved', message: 'Banner slide added.', variant: 'success' });
+          } else {
+            Alert.alert('Success', 'Banner slide added.');
+          }
         },
         onError: (err: any) => Alert.alert('Error', err.message || 'Failed to add slide.'),
       }
@@ -310,13 +353,19 @@ export function HeroBannerManager(): React.JSX.Element {
           title: form.title.trim() || null,
           subtitle: form.subtitle.trim() || null,
           linkUrl: form.linkUrl.trim() || null,
+          placement,
+          collectionId,
           isActive: form.isActive,
         },
       },
       {
         onSuccess: () => {
           setEditingSlideId(null);
-          Alert.alert('Success', 'Hero slide updated.');
+          if (onDialog) {
+            onDialog({ title: 'Saved', message: 'Banner slide updated.', variant: 'success' });
+          } else {
+            Alert.alert('Success', 'Banner slide updated.');
+          }
         },
         onError: (err: any) => Alert.alert('Error', err.message || 'Failed to update slide.'),
       }
@@ -324,16 +373,41 @@ export function HeroBannerManager(): React.JSX.Element {
   };
 
   const handleDelete = (slide: HeroSlide) => {
+    const deleteSlide = () => {
+      deleteMutation.mutate(slide.id, {
+        onSuccess: () => {
+          onDialog?.({ title: 'Deleted', message: 'Hero slide permanently deleted.', variant: 'success' });
+        },
+        onError: (err: any) => {
+          const message = err.message || 'Failed to delete slide.';
+          if (onDialog) {
+            onDialog({ title: 'Error', message, variant: 'error' });
+          } else {
+            Alert.alert('Error', message);
+          }
+        },
+      });
+    };
+
+    if (onDialog) {
+      onDialog({
+        title: 'Delete hero slide?',
+        message: 'This will permanently delete the slide from the home hero banner. This cannot be undone.',
+        variant: 'danger',
+        actions: [
+          { label: 'Cancel', variant: 'secondary' },
+          { label: 'Delete', variant: 'danger', onPress: deleteSlide },
+        ],
+      });
+      return;
+    }
+
     Alert.alert('Delete Slide', 'Are you sure you want to permanently delete this banner slide?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => {
-          deleteMutation.mutate(slide.id, {
-            onError: (err: any) => Alert.alert('Error', err.message || 'Failed to delete slide.'),
-          });
-        },
+        onPress: deleteSlide,
       },
     ]);
   };
@@ -355,12 +429,16 @@ export function HeroBannerManager(): React.JSX.Element {
 
   return (
     <View className="gap-4">
+      <View className="gap-1">
+        <Text className="text-base font-bold text-textPrimary">{heading}</Text>
+        <Text className="text-sm text-textSecondary">{description}</Text>
+      </View>
       <Text className="text-sm text-textSecondary">
-        Control the home screen hero banner. Add, reorder, edit, or hide slides — changes apply to users immediately.
+        Add, reorder, edit, or hide slides. Changes apply to users immediately.
       </Text>
 
       {isLoading ? (
-        <LoadingSpinner label="Loading hero slides..." />
+        <LoadingSpinner label="Loading banner slides..." />
       ) : (
         <View className="gap-3">
           {orderedSlides.map((slide, index) =>
@@ -400,7 +478,7 @@ export function HeroBannerManager(): React.JSX.Element {
             )
           )}
 
-          {orderedSlides.length === 0 && !isAdding && (
+          {placement === 'top' && orderedSlides.length === 0 && !isAdding && (
             <Card className="overflow-hidden border border-bgBorder bg-bgSurface2">
               <Image
                 source={CURRENT_FALLBACK_HERO}
@@ -422,6 +500,14 @@ export function HeroBannerManager(): React.JSX.Element {
               </View>
             </Card>
           )}
+          {placement === 'bottom' && orderedSlides.length === 0 && !isAdding ? (
+            <Card className="border border-bgBorder bg-bgSurface2 p-4">
+              <Text className="text-sm font-bold text-textPrimary">No slides in this group</Text>
+              <Text className="mt-1 text-xs text-textSecondary">
+                Add at least one active slide for this group to appear on the Home screen.
+              </Text>
+            </Card>
+          ) : null}
         </View>
       )}
 
@@ -434,9 +520,449 @@ export function HeroBannerManager(): React.JSX.Element {
           onSubmit={handleCreate}
         />
       ) : (
-        orderedSlides.length > 0 ? (
-          <Button label="+ Add Hero Slide" variant="secondary" onPress={() => setIsAdding(true)} />
+        orderedSlides.length > 0 || placement === 'bottom' ? (
+          <Button label={addLabel} variant="secondary" onPress={() => setIsAdding(true)} />
         ) : null
+      )}
+    </View>
+  );
+}
+
+export function FixedHeroBannerManager({
+  onDialog,
+}: {
+  onDialog?: ShowAdminDialog;
+}): React.JSX.Element {
+  const { data: slides, isLoading } = useHeroSlides('top', null);
+  const createMutation = useCreateHeroSlide();
+  const updateMutation = useUpdateHeroSlide();
+  const deleteMutation = useDeleteHeroSlide();
+  const [isEditing, setIsEditing] = useState(false);
+
+  const orderedSlides = (slides || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+  const primarySlide = orderedSlides.find((slide) => slide.is_active) ?? orderedSlides[0] ?? null;
+  const ignoredSlidesCount = primarySlide ? orderedSlides.filter((slide) => slide.id !== primarySlide.id).length : 0;
+
+  const showMessage = (
+    title: string,
+    message: string,
+    variant: 'success' | 'error' | 'warning' | 'info' = 'success'
+  ) => {
+    if (onDialog) {
+      onDialog({ title, message, variant });
+      return;
+    }
+    Alert.alert(title, message);
+  };
+
+  const handleSave = (form: SlideFormState) => {
+    if (primarySlide) {
+      updateMutation.mutate(
+        {
+          slideId: primarySlide.id,
+          updates: {
+            imagePath: form.imagePath || undefined,
+            backgroundColor: form.backgroundColor.trim() || '#13214a',
+            title: form.title.trim() || null,
+            subtitle: form.subtitle.trim() || null,
+            linkUrl: form.linkUrl.trim() || null,
+            placement: 'top',
+            collectionId: null,
+            sortOrder: 0,
+            isActive: form.isActive,
+          },
+        },
+        {
+          onSuccess: () => {
+            setIsEditing(false);
+            showMessage('Saved', 'Fixed hero banner updated.');
+          },
+          onError: (err: any) => showMessage('Error', err.message || 'Failed to update banner.', 'error'),
+        }
+      );
+      return;
+    }
+
+    createMutation.mutate(
+      {
+        imagePath: form.imagePath!,
+        backgroundColor: form.backgroundColor.trim() || '#13214a',
+        title: form.title.trim() || null,
+        subtitle: form.subtitle.trim() || null,
+        linkUrl: form.linkUrl.trim() || null,
+        placement: 'top',
+        collectionId: null,
+        sortOrder: 0,
+        isActive: form.isActive,
+      },
+      {
+        onSuccess: () => {
+          setIsEditing(false);
+          showMessage('Saved', 'Fixed hero banner created.');
+        },
+        onError: (err: any) => showMessage('Error', err.message || 'Failed to create banner.', 'error'),
+      }
+    );
+  };
+
+  const handleDelete = () => {
+    if (!primarySlide) return;
+
+    const deleteBanner = () => {
+      deleteMutation.mutate(primarySlide.id, {
+        onSuccess: () => showMessage('Deleted', 'Fixed hero banner deleted. The built-in fallback will show.'),
+        onError: (err: any) => showMessage('Error', err.message || 'Failed to delete banner.', 'error'),
+      });
+    };
+
+    if (onDialog) {
+      onDialog({
+        title: 'Delete fixed hero banner?',
+        message: 'This will remove the managed Home hero banner and show the built-in fallback image.',
+        variant: 'danger',
+        actions: [
+          { label: 'Cancel', variant: 'secondary' },
+          { label: 'Delete', variant: 'danger', onPress: deleteBanner },
+        ],
+      });
+      return;
+    }
+
+    Alert.alert('Delete fixed hero banner?', 'The built-in fallback image will show instead.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: deleteBanner },
+    ]);
+  };
+
+  if (isLoading) {
+    return <LoadingSpinner label="Loading fixed hero banner..." />;
+  }
+
+  if (isEditing) {
+    return (
+      <SlideEditorCard
+        submitLabel={primarySlide ? 'Save Banner' : 'Create Banner'}
+        busy={createMutation.isPending || updateMutation.isPending}
+        initial={
+          primarySlide
+            ? {
+                imagePath: primarySlide.image_path,
+                localPreviewUri: null,
+                backgroundColor: primarySlide.background_color,
+                title: primarySlide.title || '',
+                subtitle: primarySlide.subtitle || '',
+                linkUrl: primarySlide.link_url || '',
+                isActive: primarySlide.is_active,
+              }
+            : EMPTY_FORM
+        }
+        onCancel={() => setIsEditing(false)}
+        onSubmit={handleSave}
+      />
+    );
+  }
+
+  return (
+    <View className="gap-4">
+      <View className="gap-1">
+        <Text className="text-base font-bold text-textPrimary">Fixed Home Hero Banner</Text>
+        <Text className="text-sm text-textSecondary">
+          One static banner shown under the Home stats. No rotation, no swipe, no dots.
+        </Text>
+      </View>
+
+      {primarySlide ? (
+        <Card className="overflow-hidden border border-bgBorder bg-bgSurface2">
+          <Image
+            source={{ uri: getHeroSlideImageUrl(primarySlide.image_path) }}
+            style={{ width: '100%', aspectRatio: 9 / 4, backgroundColor: primarySlide.background_color }}
+            resizeMode="contain"
+          />
+          <View className="gap-3 p-4">
+            <View className="flex-row flex-wrap items-center justify-between gap-3">
+              <View className="min-w-0 flex-1">
+                <Text className="text-sm font-bold text-textPrimary" numberOfLines={1}>
+                  {primarySlide.title || 'Home hero banner'}
+                </Text>
+                <Text className="mt-1 text-xs text-textSecondary">
+                  {primarySlide.is_active ? 'Visible to users' : 'Hidden. Users see the built-in fallback.'}
+                </Text>
+                {ignoredSlidesCount > 0 ? (
+                  <Text className="mt-1 text-[10px] text-textTertiary">
+                    {ignoredSlidesCount} older top slide{ignoredSlidesCount === 1 ? '' : 's'} ignored by the fixed banner.
+                  </Text>
+                ) : null}
+              </View>
+              <Switch
+                value={primarySlide.is_active}
+                onValueChange={(isActive) =>
+                  updateMutation.mutate(
+                    { slideId: primarySlide.id, updates: { isActive, sortOrder: 0 } },
+                    { onError: (err: any) => showMessage('Error', err.message || 'Failed to update visibility.', 'error') }
+                  )
+                }
+                trackColor={{ false: Theme.colors.bgBorder, true: Theme.colors.accent }}
+              />
+            </View>
+            <View className="flex-row flex-wrap gap-2">
+              <Button
+                label="Edit Banner"
+                variant="secondary"
+                onPress={() => setIsEditing(true)}
+                className="flex-1 min-w-[130px]"
+              />
+              <Button
+                label="Delete"
+                variant="danger"
+                loading={deleteMutation.isPending}
+                onPress={handleDelete}
+                className="flex-1 min-w-[110px]"
+              />
+            </View>
+          </View>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden border border-bgBorder bg-bgSurface2">
+          <Image
+            source={CURRENT_FALLBACK_HERO}
+            style={{ width: '100%', aspectRatio: 9 / 4, backgroundColor: '#13214a' }}
+            resizeMode="contain"
+          />
+          <View className="gap-3 p-4">
+            <Text className="text-sm font-bold text-textPrimary">Built-in fallback banner</Text>
+            <Text className="text-xs text-textSecondary">
+              Create a managed fixed banner to replace this default image.
+            </Text>
+            <Button label="Create Fixed Banner" variant="secondary" onPress={() => setIsEditing(true)} />
+          </View>
+        </Card>
+      )}
+    </View>
+  );
+}
+
+function HomePositionPicker({
+  value,
+  onChange,
+}: {
+  value: HomeBannerPosition;
+  onChange: (position: HomeBannerPosition) => void;
+}): React.JSX.Element {
+  return (
+    <View className="gap-2">
+      <Text className="text-xs font-semibold uppercase text-textSecondary">Home screen position</Text>
+      <View className="flex-row flex-wrap gap-2">
+        {HOME_BANNER_POSITIONS.map((position) => {
+          const selected = value === position.key;
+          return (
+            <Pressable
+              key={position.key}
+              onPress={() => onChange(position.key)}
+              className={`rounded-lg border px-3 py-2 ${
+                selected ? 'border-accent bg-accentDim' : 'border-bgBorder bg-bgSurface1'
+              }`}
+            >
+              <Text className={`text-[10px] font-bold uppercase ${selected ? 'text-accent' : 'text-textSecondary'}`}>
+                {position.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+export function BottomBannerCollectionsManager({ onDialog }: { onDialog?: ShowAdminDialog }): React.JSX.Element {
+  const collectionsQuery = useBannerCollections();
+  const createMutation = useCreateBannerCollection();
+  const updateMutation = useUpdateBannerCollection();
+  const deleteMutation = useDeleteBannerCollection();
+  const [newTitle, setNewTitle] = useState('');
+  const [newHomePosition, setNewHomePosition] = useState<HomeBannerPosition>(DEFAULT_HOME_BANNER_POSITION);
+  const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({});
+
+  const collections = (collectionsQuery.data ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
+
+  const showError = (message: string) => {
+    if (onDialog) {
+      onDialog({ title: 'Error', message, variant: 'error' });
+      return;
+    }
+    Alert.alert('Error', message);
+  };
+
+  const handleCreateGroup = () => {
+    const title = newTitle.trim();
+    if (!title) {
+      showError('Group name is required.');
+      return;
+    }
+
+    createMutation.mutate(
+      { title, sortOrder: collections.length, homePosition: newHomePosition, isActive: true },
+      {
+        onSuccess: () => {
+          setNewTitle('');
+          setNewHomePosition(DEFAULT_HOME_BANNER_POSITION);
+          onDialog?.({ title: 'Created', message: 'Bottom slider group created.', variant: 'success' });
+        },
+        onError: (err: any) => showError(err.message || 'Failed to create group.'),
+      }
+    );
+  };
+
+  const handleDeleteGroup = (collectionId: string, title: string) => {
+    const deleteGroup = () => {
+      deleteMutation.mutate(collectionId, {
+        onSuccess: () => {
+          onDialog?.({ title: 'Deleted', message: 'Bottom slider group deleted.', variant: 'success' });
+        },
+        onError: (err: any) => showError(err.message || 'Failed to delete group.'),
+      });
+    };
+
+    if (onDialog) {
+      onDialog({
+        title: 'Delete bottom slider group?',
+        message: `${title} and all slides inside it will be permanently deleted. This cannot be undone.`,
+        variant: 'danger',
+        actions: [
+          { label: 'Cancel', variant: 'secondary' },
+          { label: 'Delete', variant: 'danger', onPress: deleteGroup },
+        ],
+      });
+      return;
+    }
+
+    Alert.alert('Delete group?', `${title} and all slides inside it will be permanently deleted.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: deleteGroup },
+    ]);
+  };
+
+  return (
+    <View className="gap-4">
+      <View className="gap-1">
+        <Text className="text-base font-bold text-textPrimary">Home slider groups</Text>
+        <Text className="text-sm text-textSecondary">
+          Create named slider groups, choose their slides, and place each group around Home screen sections.
+        </Text>
+      </View>
+
+      <Card className="border border-bgBorder bg-bgSurface2 p-4 gap-3">
+        <Text className="text-xs font-semibold uppercase text-textSecondary">New group name</Text>
+        <TextInput
+          value={newTitle}
+          onChangeText={setNewTitle}
+          placeholder="Group name"
+          placeholderTextColor={Theme.colors.textTertiary}
+          className="h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+        />
+        <HomePositionPicker value={newHomePosition} onChange={setNewHomePosition} />
+        <Button
+          label="Add Bottom Slider Group"
+          variant="secondary"
+          onPress={handleCreateGroup}
+          loading={createMutation.isPending}
+        />
+      </Card>
+
+      {collectionsQuery.isLoading ? (
+        <LoadingSpinner label="Loading bottom slider groups..." />
+      ) : collections.length === 0 ? (
+        <Card className="border border-bgBorder bg-bgSurface2 p-4">
+          <Text className="text-sm text-textSecondary">No bottom slider groups created yet.</Text>
+        </Card>
+      ) : (
+        <View className="gap-5">
+          {collections.map((collection) => {
+            const titleValue = titleDrafts[collection.id] ?? collection.title;
+            const trimmedTitle = titleValue.trim();
+            const titleChanged = Boolean(trimmedTitle) && trimmedTitle !== collection.title;
+
+            return (
+              <Card key={collection.id} className="border border-bgBorder bg-bgSurface2 p-4 gap-4">
+                <View className="gap-3">
+                  <View className="flex-row items-center justify-between gap-3">
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-xs font-semibold uppercase text-textSecondary">Group title</Text>
+                      <TextInput
+                        value={titleValue}
+                        onChangeText={(title) =>
+                          setTitleDrafts((prev) => ({ ...prev, [collection.id]: title }))
+                        }
+                        placeholder="Group title"
+                        placeholderTextColor={Theme.colors.textTertiary}
+                        className="mt-1 h-11 rounded-lg border border-bgBorder bg-bgSurface1 px-3 text-sm text-textPrimary"
+                      />
+                    </View>
+                    <Switch
+                      value={collection.is_active}
+                      onValueChange={(isActive) =>
+                        updateMutation.mutate(
+                          { collectionId: collection.id, updates: { isActive } },
+                          { onError: (err: any) => showError(err.message || 'Failed to update group.') }
+                        )
+                      }
+                      trackColor={{ false: Theme.colors.bgBorder, true: Theme.colors.accent }}
+                    />
+                  </View>
+
+                  <HomePositionPicker
+                    value={collection.home_position}
+                    onChange={(homePosition) =>
+                      updateMutation.mutate(
+                        { collectionId: collection.id, updates: { homePosition } },
+                        { onError: (err: any) => showError(err.message || 'Failed to update group position.') }
+                      )
+                    }
+                  />
+
+                  <View className="flex-row gap-2">
+                    <Button
+                      label="Save Name"
+                      variant="secondary"
+                      disabled={!titleChanged}
+                      loading={updateMutation.isPending}
+                      onPress={() =>
+                        updateMutation.mutate(
+                          { collectionId: collection.id, updates: { title: trimmedTitle } },
+                          {
+                            onSuccess: () =>
+                              setTitleDrafts((prev) => {
+                                const next = { ...prev };
+                                delete next[collection.id];
+                                return next;
+                              }),
+                            onError: (err: any) => showError(err.message || 'Failed to rename group.'),
+                          }
+                        )
+                      }
+                      className="flex-1"
+                    />
+                    <Button
+                      label="Delete Group"
+                      variant="danger"
+                      loading={deleteMutation.isPending}
+                      onPress={() => handleDeleteGroup(collection.id, collection.title)}
+                      className="flex-1"
+                    />
+                  </View>
+                </View>
+
+                <HeroBannerManager
+                  onDialog={onDialog}
+                  placement="bottom"
+                  collectionId={collection.id}
+                  heading={`${collection.title} slides`}
+                  description={`These slides appear ${getHomeBannerPositionLabel(collection.home_position).toLowerCase()}.`}
+                  addLabel="+ Add Group Slide"
+                />
+              </Card>
+            );
+          })}
+        </View>
       )}
     </View>
   );
