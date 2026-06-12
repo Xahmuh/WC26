@@ -30,6 +30,11 @@ export function isNotStartedMatch(status: string | undefined, kickoffTime: strin
   return kickoffMs > nowMs;
 }
 
+export function isVisibleTodayMatch(match: Match, nowMs = Date.now()): boolean {
+  if (!isTodayLocal(match.kickoff_time)) return false;
+  return isLiveMatchStatus(match.status) || isNotStartedMatch(match.status, match.kickoff_time, nowMs);
+}
+
 export function hasConcreteTeams(match: Match): boolean {
   return !match.is_placeholder && Boolean(match.home_team?.id) && Boolean(match.away_team?.id);
 }

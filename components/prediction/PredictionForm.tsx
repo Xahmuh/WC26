@@ -460,8 +460,8 @@ export function PredictionForm({
         </View>
       ) : null}
 
-      <View className={showSkipPrediction ? 'flex-row gap-3' : ''}>
-        <View className={showSkipPrediction ? 'min-w-0 flex-1' : ''}>
+      <View className="gap-3">
+        <View>
           <Button
             label={existing ? 'Update Prediction' : 'Submit Prediction'}
             onPress={handleSubmit}
@@ -470,7 +470,7 @@ export function PredictionForm({
           />
         </View>
         {showSkipPrediction ? (
-          <View className="min-w-0 flex-1">
+          <View>
             <Button
               label="Skip Prediction"
               variant="ghost"

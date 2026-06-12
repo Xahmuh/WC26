@@ -210,9 +210,9 @@ export default function MatchDetailScreen(): React.JSX.Element {
                     Prediction saved
                   </Text>
                 </View>
-                <View className="flex-row gap-3">
+                <View className="gap-3">
                   {nextPredictableMatchId ? (
-                    <View className="min-w-0 flex-1">
+                    <View>
                       <Button
                         label="Predict Next Match"
                         variant="lime"
@@ -222,7 +222,7 @@ export default function MatchDetailScreen(): React.JSX.Element {
                       />
                     </View>
                   ) : null}
-                  <View className="min-w-0 flex-1">
+                  <View>
                     <Button
                       label="Back to Home"
                       variant="ghost"

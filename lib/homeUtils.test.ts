@@ -1,6 +1,7 @@
 import {
   isMissedPredictionMatch,
   isOpenPredictionMatch,
+  isVisibleTodayMatch,
 } from '@/components/home/homeUtils';
 import type { Match, Team } from '@/types';
 
@@ -62,5 +63,27 @@ describe('home prediction match helpers', () => {
     });
 
     expect(isMissedPredictionMatch(tbdMatch, nowMs)).toBe(false);
+  });
+
+  it('keeps live matches visible in today matches', () => {
+    const liveMatch = makeMatch({
+      status: 'IN_PLAY',
+      kickoff_time: new Date(nowMs - 30 * 60_000).toISOString(),
+      home_score: 1,
+      away_score: 0,
+    });
+
+    expect(isVisibleTodayMatch(liveMatch, nowMs)).toBe(true);
+  });
+
+  it('hides matches from today matches after the result is recorded', () => {
+    const finishedMatch = makeMatch({
+      status: 'FINISHED',
+      kickoff_time: new Date(nowMs - 2 * 60 * 60_000).toISOString(),
+      home_score: 2,
+      away_score: 1,
+    });
+
+    expect(isVisibleTodayMatch(finishedMatch, nowMs)).toBe(false);
   });
 });

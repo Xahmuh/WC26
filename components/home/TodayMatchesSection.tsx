@@ -7,7 +7,7 @@ import { Colors, Layout, Typography } from '@/constants';
 import { useResponsive } from '@/lib/responsive';
 import { useMatches } from '@/hooks/useMatches';
 import { useAuthStore } from '@/stores/auth.store';
-import { formatShortMatchTime, isNotStartedMatch, isTodayLocal } from '@/components/home/homeUtils';
+import { formatShortMatchTime, isVisibleTodayMatch } from '@/components/home/homeUtils';
 import { Icon } from '@/components/ui/Icon';
 
 const CARD_GAP = 10;
@@ -50,8 +50,7 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
     const nowMs = Date.now();
 
     return (matchesQuery.data ?? [])
-      .filter((match) => isTodayLocal(match.kickoff_time))
-      .filter((match) => isNotStartedMatch(match.status, match.kickoff_time, nowMs))
+      .filter((match) => isVisibleTodayMatch(match, nowMs))
       .sort((a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime());
   }, [matchesQuery.data]);
 
@@ -91,7 +90,7 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
         <SectionHeader title="Today's Matches" badge={rows.length} onViewAll={openTodayMatches} />
         <View style={styles.emptyState}>
           <Icon name="calendar" size={18} color={Colors.text.secondary} />
-          <Text style={styles.emptyText}>No upcoming matches today</Text>
+          <Text style={styles.emptyText}>No upcoming or live matches today</Text>
         </View>
       </Card>
     );
