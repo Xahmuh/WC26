@@ -9,13 +9,14 @@ import { Icon } from '@/components/ui/Icon';
 import { Colors, Typography } from '@/constants';
 import { useMatches } from '@/hooks/useMatches';
 import { formatCountdownParts, formatShortMatchTime } from '@/components/home/homeUtils';
+import { isPredictionOpenStatus } from '@/lib/matchStatus';
 import type { Match } from '@/types';
 
 const KICKOFF_PROGRESS_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 function isScheduledMatch(match: Match): boolean {
   const normalizedStatus = match.status.toUpperCase();
-  return normalizedStatus === 'SCHEDULED' || normalizedStatus === 'UPCOMING';
+  return normalizedStatus === 'UPCOMING' || isPredictionOpenStatus(match.status);
 }
 
 function hasConcreteTeams(match: Match): boolean {

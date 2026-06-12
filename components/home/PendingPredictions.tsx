@@ -8,7 +8,7 @@ import { Colors, Layout, Typography } from '@/constants';
 import { Icon } from '@/components/ui/Icon';
 import { useMatches } from '@/hooks/useMatches';
 import { useMyPredictions } from '@/hooks/usePredictions';
-import { formatShortMatchTime, isNotStartedMatch } from '@/components/home/homeUtils';
+import { formatShortMatchTime, isOpenPredictionMatch } from '@/components/home/homeUtils';
 import { useResponsive } from '@/lib/responsive';
 
 const COMPACT_AWAY_NAME_LENGTH = 13;
@@ -77,7 +77,7 @@ export function PendingPredictions({ isLoading = false }: { isLoading?: boolean 
     const nowMs = Date.now();
 
     const pendingMatches = (matchesQuery.data ?? [])
-      .filter((match) => isNotStartedMatch(match.status, match.kickoff_time, nowMs))
+      .filter((match) => isOpenPredictionMatch(match, nowMs))
       .filter((match) => !predictionMap.has(match.id));
 
     return {

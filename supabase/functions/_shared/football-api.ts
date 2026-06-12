@@ -4,7 +4,11 @@
 // Free plan: 10 requests/minute — callers must pace themselves.
 // ============================================================================
 
-import { getActiveApiProvider, getApiProviderToken } from './api-provider.ts';
+import {
+  getActiveApiProvider,
+  getApiProviderToken,
+  type ApiProviderConfig,
+} from './api-provider.ts';
 
 export type ApiMatchStatus =
   | 'SCHEDULED'
@@ -21,6 +25,7 @@ export interface ApiMatch {
   id: number;
   status: ApiMatchStatus;
   utcDate: string;
+  lastUpdated?: string | null;
   score: {
     duration: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | string | null;
     fullTime: { home: number | null; away: number | null };
@@ -40,22 +45,15 @@ export class RateLimitError extends Error {
   }
 }
 
-/**
- * Fetches ALL finished WC matches in a SINGLE request, instead of polling each
- * match individually. This is the rate-limit-friendly path used by the poller:
- * one call per cron tick regardless of how many matches are in flight.
- *
- * @throws RateLimitError on HTTP 429 so the caller can back off.
- * @throws Error on other non-2xx responses.
- */
-export async function fetchFinishedMatches(): Promise<ApiMatch[]> {
-  const provider = await getActiveApiProvider();
+async function fetchProviderMatches(
+  provider: ApiProviderConfig,
+  path: string
+): Promise<ApiMatch[]> {
   const token = getApiProviderToken(provider);
 
-  const res = await fetch(
-    `${provider.base_url}/competitions/${provider.competition_code}/matches?status=FINISHED`,
-    { headers: { 'X-Auth-Token': token } }
-  );
+  const res = await fetch(`${provider.base_url}${path}`, {
+    headers: { 'X-Auth-Token': token },
+  });
 
   if (res.status === 429) {
     const retryAfter = Number(res.headers.get('Retry-After')) || 60;
@@ -69,6 +67,34 @@ export async function fetchFinishedMatches(): Promise<ApiMatch[]> {
 
   const payload = (await res.json()) as ApiMatchesResponse;
   return payload.matches ?? [];
+}
+
+/**
+ * Fetches ALL finished WC matches in a SINGLE request, instead of polling each
+ * match individually. This is the rate-limit-friendly path used by the poller:
+ * one call per cron tick regardless of how many matches are in flight.
+ *
+ * @throws RateLimitError on HTTP 429 so the caller can back off.
+ * @throws Error on other non-2xx responses.
+ */
+export async function fetchFinishedMatches(): Promise<ApiMatch[]> {
+  const provider = await getActiveApiProvider();
+  return fetchProviderMatches(
+    provider,
+    `/competitions/${provider.competition_code}/matches?status=FINISHED`
+  );
+}
+
+export async function fetchCompetitionMatchesByDateRange(
+  dateFrom: string,
+  dateTo: string
+): Promise<ApiMatch[]> {
+  const provider = await getActiveApiProvider();
+  const params = new URLSearchParams({ dateFrom, dateTo });
+  return fetchProviderMatches(
+    provider,
+    `/competitions/${provider.competition_code}/matches?${params.toString()}`
+  );
 }
 
 /**

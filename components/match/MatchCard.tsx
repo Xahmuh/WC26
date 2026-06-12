@@ -1,13 +1,15 @@
-import { memo, useEffect, useRef } from 'react';
-import { Animated, Platform, Pressable, Text, View } from 'react-native';
+import { memo } from 'react';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Icon } from '@/components/ui/Icon';
+import { LiveBadge } from '@/components/ui/LiveBadge';
 import { MultiplierBadge } from '@/components/ui/MultiplierBadge';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import Theme from '@/constants/theme/design-system';
 import { STATUS_LABELS } from '@/lib/constants';
 import { formatKickoff } from '@/lib/dates';
+import { isLiveMatchStatus, shouldShowMatchScore } from '@/lib/matchStatus';
 import type { Match, MatchStatus, PointsRecord, Prediction } from '@/types';
 
 interface MatchCardProps {
@@ -19,10 +21,15 @@ interface MatchCardProps {
 
 const STATUS_TONE: Record<MatchStatus, BadgeTone> = {
   SCHEDULED: 'info',
+  TIMED: 'info',
   IN_PLAY: 'warning',
+  PAUSED: 'warning',
+  EXTRA_TIME: 'warning',
+  PENALTY_SHOOTOUT: 'warning',
   FINISHED: 'success',
   POSTPONED: 'neutral',
   CANCELLED: 'danger',
+  SUSPENDED: 'neutral',
 };
 
 function MatchCardComponent({
@@ -32,22 +39,9 @@ function MatchCardComponent({
   onPress,
 }: MatchCardProps): React.JSX.Element {
   const isFinished = match.status === 'FINISHED';
-  const isLive = match.status === 'IN_PLAY';
+  const isLive = isLiveMatchStatus(match.status);
   const hasScore = match.home_score !== null && match.away_score !== null;
-
-  // ClutchTime "live state": pulse the red indicator dot while in play.
-  const pulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (!isLive) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.3, duration: 800, useNativeDriver: Platform.OS !== 'web' }),
-        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: Platform.OS !== 'web' }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [isLive, pulse]);
+  const showScore = shouldShowMatchScore(match.status) && hasScore;
 
   // Red border + glow (iOS) / elevation (Android) for live cards — kit spec.
   const liveCardStyle = isLive
@@ -83,12 +77,7 @@ function MatchCardComponent({
       <View className="mb-3 flex-row flex-wrap items-center justify-between gap-2">
         <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-1.5">
           {isLive ? (
-            <View className="flex-row items-center gap-1.5">
-              <Animated.View
-                style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: Theme.colors.live, opacity: pulse }}
-              />
-              <Text className="text-xs font-bold uppercase tracking-wider text-live">Live</Text>
-            </View>
+            <LiveBadge />
           ) : (
             <Badge label={STATUS_LABELS[match.status]} tone={STATUS_TONE[match.status]} />
           )}
@@ -121,7 +110,7 @@ function MatchCardComponent({
         </View>
 
         <View className="px-3">
-          {hasScore ? (
+          {showScore ? (
             <Text className={`text-lg font-bold ${isLive ? 'text-live' : 'text-textPrimary'}`}>
               {match.home_score} – {match.away_score}
             </Text>

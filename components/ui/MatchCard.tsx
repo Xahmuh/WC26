@@ -1,10 +1,12 @@
-import type { Team } from '@/types';
+import type { MatchStatus, Team } from '@/types';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Layout, Typography } from '@/constants';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { MultiplierBadge } from '@/components/ui/MultiplierBadge';
 import { Icon } from '@/components/ui/Icon';
+import { LiveBadge } from '@/components/ui/LiveBadge';
+import { isLiveMatchStatus, shouldShowMatchScore } from '@/lib/matchStatus';
 
 interface MatchCardTeam {
   name: string;
@@ -15,6 +17,9 @@ interface MatchCardProps {
   homeTeam: MatchCardTeam;
   awayTeam: MatchCardTeam;
   matchTime: string;
+  status?: MatchStatus;
+  homeScore?: number | null;
+  awayScore?: number | null;
   multiplier?: number;
   isMatchOfDay?: boolean;
   isGolden?: boolean;
@@ -28,6 +33,9 @@ export function MatchCard({
   homeTeam,
   awayTeam,
   matchTime,
+  status,
+  homeScore,
+  awayScore,
   multiplier,
   isMatchOfDay,
   isGolden,
@@ -38,6 +46,13 @@ export function MatchCard({
 }: MatchCardProps): React.JSX.Element {
   const showGoldenBadge = Boolean(isMatchOfDay || isGolden);
   const showFavorite = Boolean(isFavorite || onFavoritePress);
+  const isLive = isLiveMatchStatus(status);
+  const showScore =
+    shouldShowMatchScore(status) &&
+    homeScore !== null &&
+    homeScore !== undefined &&
+    awayScore !== null &&
+    awayScore !== undefined;
 
   return (
     <Pressable
@@ -47,12 +62,17 @@ export function MatchCard({
     >
       <View style={styles.content}>
         <View>
-          {showGoldenBadge ? (
-            <View style={styles.goldenBadge}>
-              <Icon name="star" size={10} color={Colors.background.primary} />
-              <Text style={styles.goldenBadgeText} numberOfLines={1}>
-                MATCH OF THE DAY
-              </Text>
+          {(showGoldenBadge || isLive) ? (
+            <View style={styles.badgesRow}>
+              {isLive ? <LiveBadge compact /> : null}
+              {showGoldenBadge ? (
+                <View style={styles.goldenBadge}>
+                  <Icon name="star" size={10} color={Colors.background.primary} />
+                  <Text style={styles.goldenBadgeText} numberOfLines={1}>
+                    MATCH OF THE DAY
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -64,7 +84,13 @@ export function MatchCard({
               </Text>
             </View>
             <View style={styles.vsSlot}>
-              <Text style={styles.vs}>VS</Text>
+              {showScore ? (
+                <Text style={[styles.score, isLive && styles.liveScore]} numberOfLines={1}>
+                  {homeScore}-{awayScore}
+                </Text>
+              ) : (
+                <Text style={styles.vs}>VS</Text>
+              )}
             </View>
             <View style={styles.team}>
               <TeamFlag team={awayTeam.team} size={34} fixed />
@@ -126,6 +152,13 @@ const styles = StyleSheet.create({
   goldenBorder: {
     borderColor: Colors.gold,
     borderWidth: 1.5,
+  },
+  badgesRow: {
+    minHeight: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   goldenBadge: {
     backgroundColor: Colors.gold,
@@ -205,6 +238,15 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.sm,
     fontWeight: Typography.weight.bold,
     textAlign: 'center',
+  },
+  score: {
+    color: Colors.text.primary,
+    fontSize: 15,
+    fontWeight: Typography.weight.bold,
+    textAlign: 'center',
+  },
+  liveScore: {
+    color: Colors.red,
   },
   footer: {
     flexDirection: 'row',

@@ -154,6 +154,9 @@ export function MyTeamsMatches({
                 homeTeam={buildCardTeam(typedMatch.home_team)}
                 awayTeam={buildCardTeam(typedMatch.away_team)}
                 matchTime={formatShortMatchTime(typedMatch.kickoff_time)}
+                status={typedMatch.status}
+                homeScore={typedMatch.home_score}
+                awayScore={typedMatch.away_score}
                 multiplier={typedMatch.points_multiplier}
                 isFavorite={isFavorite}
                 isGolden={isGolden}

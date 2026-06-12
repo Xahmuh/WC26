@@ -1,4 +1,9 @@
 import type { Match } from '@/types';
+import {
+  isFinishedMatchStatus,
+  isLiveMatchStatus,
+  isPredictionOpenStatus,
+} from '@/lib/matchStatus';
 
 export type HomeMatch = Match & {
   is_golden?: boolean;
@@ -7,18 +12,17 @@ export type HomeMatch = Match & {
 };
 
 export function isFinishedLike(status: string | undefined): boolean {
-  const normalized = status?.toUpperCase() ?? '';
-  return normalized === 'FINISHED' || normalized === 'COMPLETED';
+  return isFinishedMatchStatus(status);
 }
 
 export function isUpcomingLike(status: string | undefined): boolean {
   const normalized = status?.toUpperCase() ?? '';
-  return normalized === 'SCHEDULED' || normalized === 'UPCOMING' || normalized === 'IN_PLAY';
+  return normalized === 'UPCOMING' || isPredictionOpenStatus(status);
 }
 
 export function isNotStartedMatch(status: string | undefined, kickoffTime: string, nowMs = Date.now()): boolean {
   const normalized = status?.toUpperCase() ?? '';
-  if (normalized !== 'SCHEDULED' && normalized !== 'UPCOMING') return false;
+  if (normalized !== 'UPCOMING' && !isPredictionOpenStatus(status)) return false;
 
   const kickoffMs = new Date(kickoffTime).getTime();
   if (Number.isNaN(kickoffMs)) return false;
@@ -26,15 +30,27 @@ export function isNotStartedMatch(status: string | undefined, kickoffTime: strin
   return kickoffMs > nowMs;
 }
 
+export function hasConcreteTeams(match: Match): boolean {
+  return !match.is_placeholder && Boolean(match.home_team?.id) && Boolean(match.away_team?.id);
+}
+
+export function isOpenPredictionMatch(match: Match, nowMs = Date.now()): boolean {
+  return hasConcreteTeams(match) && isNotStartedMatch(match.status, match.kickoff_time, nowMs);
+}
+
 export function isPredictionClosedMatch(status: string | undefined, kickoffTime: string, nowMs = Date.now()): boolean {
   const normalized = status?.toUpperCase() ?? '';
   if (normalized === 'POSTPONED' || normalized === 'CANCELLED') return false;
-  if (normalized === 'IN_PLAY' || normalized === 'FINISHED' || normalized === 'COMPLETED') return true;
+  if (isLiveMatchStatus(status) || isFinishedMatchStatus(status) || normalized === 'SUSPENDED') return true;
 
   const kickoffMs = new Date(kickoffTime).getTime();
   if (Number.isNaN(kickoffMs)) return false;
 
   return kickoffMs <= nowMs;
+}
+
+export function isMissedPredictionMatch(match: Match, nowMs = Date.now()): boolean {
+  return hasConcreteTeams(match) && isPredictionClosedMatch(match.status, match.kickoff_time, nowMs);
 }
 
 export function isTodayLocal(iso: string): boolean {

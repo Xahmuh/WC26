@@ -53,7 +53,17 @@ interface ApiMatchesResponse {
   matches: ApiMatch[];
 }
 
-type DbStatus = 'SCHEDULED' | 'IN_PLAY' | 'FINISHED' | 'POSTPONED' | 'CANCELLED';
+type DbStatus =
+  | 'SCHEDULED'
+  | 'TIMED'
+  | 'IN_PLAY'
+  | 'PAUSED'
+  | 'EXTRA_TIME'
+  | 'PENALTY_SHOOTOUT'
+  | 'FINISHED'
+  | 'POSTPONED'
+  | 'CANCELLED'
+  | 'SUSPENDED';
 type DbStage =
   | 'GROUP'
   | 'ROUND_OF_32'
@@ -63,17 +73,23 @@ type DbStage =
   | 'THIRD_PLACE'
   | 'FINAL';
 
-function mapStatus(s: ApiStatus): DbStatus {
+function mapStatus(s: ApiStatus, duration?: ApiMatch['score']['duration']): DbStatus {
   switch (s) {
     case 'FINISHED':
     case 'AWARDED':
       return 'FINISHED';
     case 'IN_PLAY':
-    case 'PAUSED':
+      if (duration === 'EXTRA_TIME') return 'EXTRA_TIME';
+      if (duration === 'PENALTY_SHOOTOUT') return 'PENALTY_SHOOTOUT';
       return 'IN_PLAY';
+    case 'PAUSED':
+      return 'PAUSED';
+    case 'TIMED':
+      return 'TIMED';
     case 'POSTPONED':
-    case 'SUSPENDED':
       return 'POSTPONED';
+    case 'SUSPENDED':
+      return 'SUSPENDED';
     case 'CANCELLED':
       return 'CANCELLED';
     default:
@@ -206,12 +222,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const matchRows = payload.matches.map((m) => {
       const homeId = m.homeTeam.id ? idByExternal.get(m.homeTeam.id) ?? null : null;
       const awayId = m.awayTeam.id ? idByExternal.get(m.awayTeam.id) ?? null : null;
-      const status = mapStatus(m.status);
-      const finished = status === 'FINISHED';
+      const apiStatus = mapStatus(m.status, m.score.duration);
       const stage = mapStage(m.stage);
-      const homeScore = finished ? (m.score.regularTime?.home ?? m.score.fullTime.home) : null;
-      const awayScore = finished ? (m.score.regularTime?.away ?? m.score.fullTime.away) : null;
-      const winnerTeamId = finished ? resolveWinnerTeamId(m, homeId, awayId) : null;
+      const rawHomeScore = m.score.regularTime?.home ?? m.score.fullTime.home;
+      const rawAwayScore = m.score.regularTime?.away ?? m.score.fullTime.away;
+      const finishedWithScore =
+        apiStatus === 'FINISHED' && rawHomeScore !== null && rawAwayScore !== null;
+      const status = apiStatus === 'FINISHED' && !finishedWithScore ? 'IN_PLAY' : apiStatus;
+      const homeScore = finishedWithScore ? rawHomeScore : null;
+      const awayScore = finishedWithScore ? rawAwayScore : null;
+      const winnerTeamId = finishedWithScore ? resolveWinnerTeamId(m, homeId, awayId) : null;
       return {
         external_id: m.id,
         home_team_id: homeId,
@@ -224,7 +244,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         home_score: homeScore,
         away_score: awayScore,
         winner_team_id: winnerTeamId,
-        decision_method: finished
+        decision_method: finishedWithScore
           ? resolveDecisionMethod(m.score.duration, homeScore, awayScore, winnerTeamId)
           : null,
       };

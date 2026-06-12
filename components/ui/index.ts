@@ -5,6 +5,7 @@ export { TeamFlag } from './TeamFlag';
 export { MatchCard } from './MatchCard';
 export { ProgressBar } from './ProgressBar';
 export { StatusBadge } from './StatusBadge';
+export { LiveBadge } from './LiveBadge';
 export { SkeletonBox } from './SkeletonBox';
 export { AvatarButton } from './AvatarButton';
 export { NotificationBell } from './NotificationBell';

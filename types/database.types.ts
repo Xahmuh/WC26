@@ -1099,10 +1099,15 @@ export type Database = {
         | "FINAL"
       match_status:
         | "SCHEDULED"
+        | "TIMED"
         | "IN_PLAY"
+        | "PAUSED"
+        | "EXTRA_TIME"
+        | "PENALTY_SHOOTOUT"
         | "FINISHED"
         | "POSTPONED"
         | "CANCELLED"
+        | "SUSPENDED"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1242,10 +1247,15 @@ export const Constants = {
       ],
       match_status: [
         "SCHEDULED",
+        "TIMED",
         "IN_PLAY",
+        "PAUSED",
+        "EXTRA_TIME",
+        "PENALTY_SHOOTOUT",
         "FINISHED",
         "POSTPONED",
         "CANCELLED",
+        "SUSPENDED",
       ],
     },
   },

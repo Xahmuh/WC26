@@ -27,7 +27,8 @@ import { useMyPoints } from '@/hooks/usePoints';
 import { useMyPredictions } from '@/hooks/usePredictions';
 import { useTeams } from '@/hooks/useTeams';
 import { STAGE_LABELS } from '@/lib/constants';
-import { isPast, isToday } from '@/lib/dates';
+import { isToday } from '@/lib/dates';
+import { isNotStartedMatch } from '@/components/home/homeUtils';
 import { useAppStore, type MatchFilter } from '@/stores/app.store';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Match, MatchStage, Team } from '@/types';
@@ -60,11 +61,9 @@ function getStageLabel(stage: 'ALL' | MatchStage): string {
 function applyFilter(matches: Match[], filter: MatchFilter, supportedTeams?: string[]): Match[] {
   switch (filter) {
     case 'TODAY':
-      return matches.filter((m) => isToday(m.kickoff_time));
+      return matches.filter((m) => isToday(m.kickoff_time) && isNotStartedMatch(m.status, m.kickoff_time));
     case 'UPCOMING':
-      return matches.filter(
-        (m) => m.status === 'SCHEDULED' && !isPast(m.kickoff_time)
-      );
+      return matches.filter((m) => isNotStartedMatch(m.status, m.kickoff_time));
     case 'FINISHED':
       return matches.filter((m) => m.status === 'FINISHED');
     case 'MY_TEAMS':

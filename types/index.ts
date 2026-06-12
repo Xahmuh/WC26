@@ -8,10 +8,15 @@
 
 export type MatchStatus =
   | 'SCHEDULED'
+  | 'TIMED'
   | 'IN_PLAY'
+  | 'PAUSED'
+  | 'EXTRA_TIME'
+  | 'PENALTY_SHOOTOUT'
   | 'FINISHED'
   | 'POSTPONED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'SUSPENDED';
 
 export type MatchStage =
   | 'GROUP'

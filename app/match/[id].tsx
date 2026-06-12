@@ -8,6 +8,7 @@ import { PredictionResult } from '@/components/prediction/PredictionResult';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
+import { LiveBadge } from '@/components/ui/LiveBadge';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { ErrorState } from '@/components/ui/States';
@@ -18,9 +19,10 @@ import { useScoringRules } from '@/hooks/useAdmin';
 import { useMatch, useMatches } from '@/hooks/useMatches';
 import { useMyPoints } from '@/hooks/usePoints';
 import { useMyPredictions } from '@/hooks/usePredictions';
-import { isFinishedLike, isNotStartedMatch } from '@/components/home/homeUtils';
+import { isFinishedLike, isNotStartedMatch, isOpenPredictionMatch } from '@/components/home/homeUtils';
 import { STAGE_LABELS } from '@/lib/constants';
 import { formatKickoff } from '@/lib/dates';
+import { isLiveMatchStatus, shouldShowMatchScore } from '@/lib/matchStatus';
 
 export default function MatchDetailScreen(): React.JSX.Element {
   const router = useRouter();
@@ -45,11 +47,7 @@ export default function MatchDetailScreen(): React.JSX.Element {
 
     const currentKickoff = new Date(currentMatch.kickoff_time).getTime();
     const openMatches = matches
-      .filter((candidate) =>
-        candidate.id !== currentMatch.id &&
-        !candidate.is_placeholder &&
-        isNotStartedMatch(candidate.status, candidate.kickoff_time)
-      )
+      .filter((candidate) => candidate.id !== currentMatch.id && isOpenPredictionMatch(candidate))
       .sort((a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime());
 
     const predictions = predictionsQuery.data;
@@ -99,7 +97,12 @@ export default function MatchDetailScreen(): React.JSX.Element {
   const prediction = predictionsQuery.data?.get(match.id);
   const points = pointsQuery.data?.get(match.id);
   const isFinished = isFinishedLike(match.status);
+  const isLive = isLiveMatchStatus(match.status);
   const isPredictionOpen = isNotStartedMatch(match.status, match.kickoff_time);
+  const showScore =
+    shouldShowMatchScore(match.status) &&
+    match.home_score !== null &&
+    match.away_score !== null;
   const headerTitle = match.is_placeholder
     ? 'Match Details'
     : `${match.home_team.short_name ?? match.home_team.name} vs ${match.away_team.short_name ?? match.away_team.name}`;
@@ -109,7 +112,7 @@ export default function MatchDetailScreen(): React.JSX.Element {
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenHeader
         title={headerTitle}
-        subtitle={isFinished ? 'Final result' : isPredictionOpen ? 'Make your prediction' : 'Predictions closed'}
+        subtitle={isFinished ? 'Final result' : isLive ? 'Live now' : isPredictionOpen ? 'Make your prediction' : 'Predictions closed'}
         fallback="/(tabs)/matches"
       />
       <ScrollView contentContainerClassName="pb-10 pt-4">
@@ -126,9 +129,7 @@ export default function MatchDetailScreen(): React.JSX.Element {
                 </View>
 
                 <View className="items-center gap-1 px-2">
-                  {isFinished &&
-                  match.home_score !== null &&
-                  match.away_score !== null ? (
+                  {showScore ? (
                     <Text className="text-2xl font-bold text-textPrimary">
                       {match.home_score} – {match.away_score}
                     </Text>
@@ -146,6 +147,7 @@ export default function MatchDetailScreen(): React.JSX.Element {
               </View>
 
               <View className="flex-row items-center gap-2">
+                {isLive ? <LiveBadge /> : null}
                 <Badge label={STAGE_LABELS[match.stage]} tone="info" />
                 {match.is_placeholder && (
                   <View className="rounded bg-accentDim px-2 py-0.5 border border-accentBorder/50">
@@ -193,14 +195,29 @@ export default function MatchDetailScreen(): React.JSX.Element {
               />
             )}
 
-            {showNextMatchCta && !match.is_placeholder && nextPredictableMatchId ? (
-              <Button
-                label="Predict Next Match"
-                variant="lime"
-                onPress={() => {
-                  router.push(`/match/${nextPredictableMatchId}` as never);
-                }}
-              />
+            {showNextMatchCta && !match.is_placeholder ? (
+              <View className="flex-row flex-wrap gap-3">
+                <View className={nextPredictableMatchId ? 'min-w-[120px] flex-1' : 'w-full'}>
+                  <Button
+                    label="Back Home"
+                    variant="ghost"
+                    onPress={() => {
+                      router.replace('/(tabs)/home' as never);
+                    }}
+                  />
+                </View>
+                {nextPredictableMatchId ? (
+                  <View className="min-w-[180px] flex-1">
+                    <Button
+                      label="Predict Next Match"
+                      variant="lime"
+                      onPress={() => {
+                        router.push(`/match/${nextPredictableMatchId}` as never);
+                      }}
+                    />
+                  </View>
+                ) : null}
+              </View>
             ) : null}
           </View>
         </Container>

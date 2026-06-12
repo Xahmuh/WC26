@@ -29,6 +29,10 @@ import {
   RateLimitError,
   type ApiMatch,
 } from '../_shared/football-api.ts';
+import {
+  getResultDecision,
+  POLLABLE_MATCH_FILTER,
+} from './result-state.ts';
 
 interface MatchToPoll {
   id: string;
@@ -53,11 +57,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Lock predictions for any match that has started.
     await supabase.rpc('lock_predictions_at_kickoff');
 
-    // Candidate matches: everything we don't yet consider FINISHED.
+    // Candidate matches: anything unfinished, plus any bad FINISHED row that
+    // still lacks a complete score.
     const { data: dbMatches, error: selectError } = await supabase
       .from('matches')
       .select('id, external_id, home_team_id, away_team_id, is_knockout')
-      .neq('status', 'FINISHED')
+      .or(POLLABLE_MATCH_FILTER)
       .returns<MatchToPoll[]>();
 
     if (selectError) {
@@ -91,12 +96,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const api = finishedByExternalId.get(match.external_id);
       if (!api) continue; // not finished yet per the API
 
-      const home = api.score.regularTime?.home ?? api.score.fullTime.home;
-      const away = api.score.regularTime?.away ?? api.score.fullTime.away;
-      if (home === null || away === null) continue; // finished without a score?
-      const winnerTeamId = resolveWinnerTeamId(api.score.winner, match, api);
+      const decision = getResultDecision(api);
+      if (decision.action === 'defer') {
+        console.warn('[poll-results] Provider returned FINISHED without final score', {
+          providerMatchId: api.id,
+          status: api.status,
+          homeScore: decision.homeScore,
+          awayScore: decision.awayScore,
+          lastUpdated: api.lastUpdated ?? null,
+        });
+        continue;
+      }
+      if (decision.action !== 'finalize') continue;
+
+      const home = decision.homeScore;
+      const away = decision.awayScore;
+      const winnerTeamId = resolveWinnerTeamId(api.score?.winner ?? null, match, home, away);
       const decisionMethod = resolveDecisionMethod(
-        api.score.duration,
+        api.score?.duration ?? null,
         home,
         away,
         winnerTeamId
@@ -157,14 +174,13 @@ async function fetchFinishedWithRetry(): Promise<ApiMatch[]> {
 function resolveWinnerTeamId(
   winner: ApiMatch['score']['winner'],
   match: MatchToPoll,
-  api: ApiMatch
+  home: number,
+  away: number
 ): string | null {
   if (winner === 'HOME_TEAM') return match.home_team_id;
   if (winner === 'AWAY_TEAM') return match.away_team_id;
-  if (api.score.fullTime.home !== null && api.score.fullTime.away !== null) {
-    if (api.score.fullTime.home > api.score.fullTime.away) return match.home_team_id;
-    if (api.score.fullTime.away > api.score.fullTime.home) return match.away_team_id;
-  }
+  if (home > away) return match.home_team_id;
+  if (away > home) return match.away_team_id;
   return null;
 }
 

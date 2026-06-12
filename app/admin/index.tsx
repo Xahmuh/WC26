@@ -2777,7 +2777,18 @@ export default function AdminDashboard(): React.JSX.Element {
                             <View className="gap-1.5">
                               <Text className="text-xs text-textTertiary uppercase font-semibold">Status</Text>
                               <View className="flex-row flex-wrap gap-1.5">
-                                {(['SCHEDULED', 'IN_PLAY', 'FINISHED', 'POSTPONED', 'CANCELLED'] as MatchStatus[]).map((statusVal) => (
+                                {([
+                                  'SCHEDULED',
+                                  'TIMED',
+                                  'IN_PLAY',
+                                  'PAUSED',
+                                  'EXTRA_TIME',
+                                  'PENALTY_SHOOTOUT',
+                                  'FINISHED',
+                                  'POSTPONED',
+                                  'CANCELLED',
+                                  'SUSPENDED',
+                                ] as MatchStatus[]).map((statusVal) => (
                                   <Pressable
                                     key={statusVal}
                                     onPress={() => setEditStatus(statusVal)}

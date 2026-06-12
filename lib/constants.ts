@@ -12,10 +12,15 @@ export const STAGE_LABELS: Record<MatchStage, string> = {
 
 export const STATUS_LABELS: Record<MatchStatus, string> = {
   SCHEDULED: 'Scheduled',
+  TIMED: 'Scheduled',
   IN_PLAY: 'In play',
+  PAUSED: 'Paused',
+  EXTRA_TIME: 'Extra time',
+  PENALTY_SHOOTOUT: 'Penalties',
   FINISHED: 'Finished',
   POSTPONED: 'Postponed',
   CANCELLED: 'Cancelled',
+  SUSPENDED: 'Suspended',
 };
 
 export const MIN_GOALS = 0;

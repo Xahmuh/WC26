@@ -9,7 +9,7 @@ import { FloatingTabBar, TAB_BAR_CLEARANCE } from '@/components/ui/FloatingTabBa
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState, ErrorState } from '@/components/ui/States';
-import { isFinishedLike, isNotStartedMatch, isPredictionClosedMatch } from '@/components/home/homeUtils';
+import { isFinishedLike, isMissedPredictionMatch, isOpenPredictionMatch } from '@/components/home/homeUtils';
 import Theme from '@/constants/theme/design-system';
 import { useMatches } from '@/hooks/useMatches';
 import { useMyPoints } from '@/hooks/usePoints';
@@ -214,7 +214,7 @@ export default function MyPredictionsScreen(): React.JSX.Element {
       .sort(byKickoffAsc);
 
     const pending = matches
-      .filter((match) => !predictions.has(match.id) && isNotStartedMatch(match.status, match.kickoff_time, nowMs))
+      .filter((match) => !predictions.has(match.id) && isOpenPredictionMatch(match, nowMs))
       .sort(byKickoffAsc);
 
     const history = matches
@@ -222,7 +222,7 @@ export default function MyPredictionsScreen(): React.JSX.Element {
       .sort(byKickoffDesc);
 
     const missed = matches
-      .filter((match) => !predictions.has(match.id) && isPredictionClosedMatch(match.status, match.kickoff_time, nowMs))
+      .filter((match) => !predictions.has(match.id) && isMissedPredictionMatch(match, nowMs))
       .sort(byKickoffDesc);
 
     return { UPCOMING: upcoming, PENDING: pending, HISTORY: history, MISSED: missed };
