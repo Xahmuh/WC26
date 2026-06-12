@@ -88,7 +88,7 @@ export function MyTeamsMatches({
     return (
       <Card style={styles.card} padding={14}>
         <SectionHeader
-          title="MY TEAMS MATCHES"
+          title="My Teams Matches"
           rightContent={
             <Pressable disabled accessibilityRole="button">
               <Text style={styles.viewAll}>Edit Teams</Text>
@@ -114,7 +114,7 @@ export function MyTeamsMatches({
   return (
     <Card style={styles.card} padding={14}>
       <SectionHeader
-        title="MY TEAMS MATCHES"
+        title="My Teams Matches"
         rightContent={
           <Pressable
             onPress={onEditTeams ?? (() => router.push('/profile'))}

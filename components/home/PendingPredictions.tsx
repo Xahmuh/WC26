@@ -92,7 +92,7 @@ export function PendingPredictions({ isLoading = false }: { isLoading?: boolean 
   if (loading) {
     return (
       <Card style={styles.card} padding={12}>
-        <SectionHeader title="PENDING PREDICTIONS" badge={3} />
+        <SectionHeader title="Pending Predictions" badge={3} />
         <View style={styles.rows}>
           {[0, 1, 2].map((index) => (
             <View key={index} style={styles.loadingCard}>
@@ -131,7 +131,7 @@ export function PendingPredictions({ isLoading = false }: { isLoading?: boolean 
   if (rows.length === 0) {
     return (
       <Card style={styles.card} padding={12}>
-        <SectionHeader title="PENDING PREDICTIONS" badge={0} />
+        <SectionHeader title="Pending Predictions" badge={0} />
         <View style={styles.emptyState}>
           <Icon name="checkCircle" size={18} color={Colors.accent.lime} />
           <Text style={styles.emptyText}>You're all caught up!</Text>
@@ -143,7 +143,7 @@ export function PendingPredictions({ isLoading = false }: { isLoading?: boolean 
   return (
       <Card style={styles.card} padding={12}>
         <SectionHeader
-          title="PENDING PREDICTIONS"
+          title="Pending Predictions"
           badge={totalPending}
           onViewAll={() => router.push('/profile/predictions?tab=PENDING' as never)}
         />

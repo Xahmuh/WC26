@@ -79,15 +79,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: Colors.text.primary,
-    fontSize: 18,
-    fontWeight: Typography.weight.black,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontSize: Typography.size.lg,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0,
     flexShrink: 1,
   },
   titleSmall: {
-    fontSize: 16,
-    letterSpacing: 0.6,
+    fontSize: Typography.size.lg,
   },
   badge: {
     backgroundColor: Colors.accent.lime,

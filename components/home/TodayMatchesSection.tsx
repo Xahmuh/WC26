@@ -60,7 +60,7 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
   if (loading) {
     return (
       <Card style={styles.card} padding={14}>
-        <SectionHeader title="TODAY'S MATCHES" onViewAll={openTodayMatches} />
+        <SectionHeader title="Today's Matches" onViewAll={openTodayMatches} />
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -88,7 +88,7 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
   if (rows.length === 0) {
     return (
       <Card style={styles.card} padding={14}>
-        <SectionHeader title="TODAY'S MATCHES" badge={rows.length} onViewAll={openTodayMatches} />
+        <SectionHeader title="Today's Matches" badge={rows.length} onViewAll={openTodayMatches} />
         <View style={styles.emptyState}>
           <Icon name="calendar" size={18} color={Colors.text.secondary} />
           <Text style={styles.emptyText}>No upcoming matches today</Text>
@@ -102,7 +102,7 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
   return (
     <Card style={styles.card} padding={14}>
       <SectionHeader
-        title="TODAY'S MATCHES"
+        title="Today's Matches"
         badge={rows.length}
         onViewAll={openTodayMatches}
       />
