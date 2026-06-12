@@ -72,7 +72,10 @@ export function Button({
         <ActivityIndicator color={SPINNER[variant]} />
       ) : (
         <Text
-          className={`text-base font-semibold uppercase tracking-wide ${LABEL[variant]}`}
+          className={`text-center text-base font-semibold uppercase tracking-wide ${LABEL[variant]}`}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
           style={variant === 'primary' ? { color: '#000000' } : undefined}
         >
           {label}

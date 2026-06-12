@@ -19,6 +19,7 @@ interface PredictionFormProps {
   existing?: Prediction;
   onSaved?: () => void;
   onEditStart?: () => void;
+  onSkipPrediction?: () => void;
 }
 
 function teamNameById(match: Match, teamId: string | null | undefined): string | null {
@@ -185,6 +186,7 @@ export function PredictionForm({
   existing,
   onSaved,
   onEditStart,
+  onSkipPrediction,
 }: PredictionFormProps): React.JSX.Element {
   const [home, setHome] = useState<number>(existing?.pred_home_score ?? 0);
   const [away, setAway] = useState<number>(existing?.pred_away_score ?? 0);
@@ -265,6 +267,7 @@ export function PredictionForm({
     existing.pred_away_score === away &&
     existing.pred_winner_team_id === winnerTeamId &&
     existing.applied_user_card_id === selectedCardId;
+  const showSkipPrediction = !existing && Boolean(onSkipPrediction);
 
   const handleSubmit = (): void => {
     if (showQualifierPicker && !winnerTeamId) {
@@ -457,12 +460,26 @@ export function PredictionForm({
         </View>
       ) : null}
 
-      <Button
-        label={existing ? 'Update prediction' : 'Submit prediction'}
-        onPress={handleSubmit}
-        loading={mutation.isPending}
-        disabled={unchanged}
-      />
+      <View className={showSkipPrediction ? 'flex-row gap-3' : ''}>
+        <View className={showSkipPrediction ? 'min-w-0 flex-1' : ''}>
+          <Button
+            label={existing ? 'Update Prediction' : 'Submit Prediction'}
+            onPress={handleSubmit}
+            loading={mutation.isPending}
+            disabled={unchanged}
+          />
+        </View>
+        {showSkipPrediction ? (
+          <View className="min-w-0 flex-1">
+            <Button
+              label="Skip Prediction"
+              variant="ghost"
+              disabled={mutation.isPending}
+              onPress={onSkipPrediction}
+            />
+          </View>
+        ) : null}
+      </View>
 
       {existing && (
         <Button

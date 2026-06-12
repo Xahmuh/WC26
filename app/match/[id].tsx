@@ -192,31 +192,46 @@ export default function MatchDetailScreen(): React.JSX.Element {
                 existing={prediction}
                 onSaved={() => setShowNextMatchCta(true)}
                 onEditStart={() => setShowNextMatchCta(false)}
+                onSkipPrediction={
+                  nextPredictableMatchId && !prediction
+                    ? () => {
+                        router.push(`/match/${nextPredictableMatchId}` as never);
+                      }
+                    : undefined
+                }
               />
             )}
 
             {showNextMatchCta && !match.is_placeholder ? (
-              <View className="flex-row flex-wrap gap-3">
-                <View className={nextPredictableMatchId ? 'min-w-[120px] flex-1' : 'w-full'}>
-                  <Button
-                    label="Back Home"
-                    variant="ghost"
-                    onPress={() => {
-                      router.replace('/(tabs)/home' as never);
-                    }}
-                  />
+              <View className="gap-3 rounded-2xl border border-accentBorder/60 bg-accentDim p-3">
+                <View className="flex-row items-center gap-2">
+                  <Icon name="checkCircle" size={16} color={Theme.colors.accent} />
+                  <Text className="min-w-0 flex-1 text-xs font-bold uppercase tracking-wide text-accent">
+                    Prediction saved
+                  </Text>
                 </View>
-                {nextPredictableMatchId ? (
-                  <View className="min-w-[180px] flex-1">
+                <View className="flex-row gap-3">
+                  {nextPredictableMatchId ? (
+                    <View className="min-w-0 flex-1">
+                      <Button
+                        label="Predict Next Match"
+                        variant="lime"
+                        onPress={() => {
+                          router.push(`/match/${nextPredictableMatchId}` as never);
+                        }}
+                      />
+                    </View>
+                  ) : null}
+                  <View className="min-w-0 flex-1">
                     <Button
-                      label="Predict Next Match"
-                      variant="lime"
+                      label="Back to Home"
+                      variant="ghost"
                       onPress={() => {
-                        router.push(`/match/${nextPredictableMatchId}` as never);
+                        router.replace('/(tabs)/home' as never);
                       }}
                     />
                   </View>
-                ) : null}
+                </View>
               </View>
             ) : null}
           </View>
