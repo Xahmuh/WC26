@@ -6,9 +6,12 @@ import { PerformanceRadarCard } from '@/components/performance/PerformanceRadarC
 import { PerformanceSummary } from '@/components/performance/PerformanceSummary';
 import Theme from '@/constants/theme/design-system';
 import { usePlayerProfile } from '@/hooks/usePlayerProfile';
+import { useTeams } from '@/hooks/useTeams';
 import { useResponsive } from '@/lib/responsive';
+import type { Team } from '@/types';
 import { Card } from './Card';
 import { Icon } from './Icon';
+import { TeamFlag } from './TeamFlag';
 
 interface PlayerProfileModalProps {
   visible: boolean;
@@ -32,6 +35,7 @@ export function PlayerProfileModal({
   rank,
 }: PlayerProfileModalProps): React.JSX.Element {
   const { data: profile, isLoading, isError, error } = usePlayerProfile(playerId);
+  const teamsQuery = useTeams(visible && Boolean(profile?.supported_teams?.length));
   const insets = useSafeAreaInsets();
   const { height } = useResponsive();
 
@@ -43,6 +47,11 @@ export function PlayerProfileModal({
   const displayHandle = profile?.username || profile?.display_name || '?';
   const earnedCardCount = profile?.earned_cards.length ?? 0;
   const medalColor = rank ? MEDAL_COLOR[rank] : undefined;
+  const supportedTeams = (profile?.supported_teams ?? []).reduce<Team[]>((resolvedTeams, teamId) => {
+    const team = teamsQuery.data?.find((candidate) => candidate.id === teamId);
+    if (team) resolvedTeams.push(team);
+    return resolvedTeams;
+  }, []);
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -99,6 +108,24 @@ export function PlayerProfileModal({
                     </View>
                   ) : null}
                 </View>
+
+                {supportedTeams.length > 0 ? (
+                  <View style={styles.supportedTeamsWrap}>
+                    {supportedTeams.slice(0, 4).map((team) => (
+                      <View key={team.id} style={styles.supportedTeamChip}>
+                        <TeamFlag team={team} size={14} fixed />
+                        <Text style={styles.supportedTeamText} numberOfLines={1}>
+                          {team.code ?? team.short_name ?? team.name}
+                        </Text>
+                      </View>
+                    ))}
+                    {supportedTeams.length > 4 ? (
+                      <View style={styles.supportedTeamOverflow}>
+                        <Text style={styles.supportedTeamOverflowText}>+{supportedTeams.length - 4}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
 
                 <View style={styles.identityCopy}>
                   <Text style={styles.playerName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
@@ -238,6 +265,51 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     backgroundColor: Theme.colors.bgSurface2,
+  },
+  supportedTeamsWrap: {
+    maxWidth: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  supportedTeamChip: {
+    minHeight: 28,
+    maxWidth: 132,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingLeft: 7,
+    paddingRight: 9,
+  },
+  supportedTeamText: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: Theme.colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  supportedTeamOverflow: {
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.colors.bgBorder,
+    backgroundColor: Theme.colors.bgSurface3,
+    paddingHorizontal: 9,
+  },
+  supportedTeamOverflowText: {
+    color: Theme.colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '900',
   },
   identityCopy: {
     alignItems: 'center',

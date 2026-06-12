@@ -17,10 +17,11 @@ async function fetchTeams(): Promise<Team[]> {
   return data ?? [];
 }
 
-export function useTeams() {
+export function useTeams(enabled = true) {
   return useQuery({
     queryKey: teamKeys.all,
     queryFn: fetchTeams,
+    enabled,
     staleTime: 300_000, // 5 minutes cache
   });
 }
