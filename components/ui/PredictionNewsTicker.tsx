@@ -53,11 +53,13 @@ export function PredictionNewsTicker({ enabled = true }: { enabled?: boolean }):
       onPress={() => router.push('/notifications' as never)}
       style={styles.strip}
     >
-      <View style={styles.label}>
-        <Icon name="flame" size={13} color={TICKER_TEXT} fixed />
-        <Text style={styles.labelText} numberOfLines={1}>
-          Breaking
-        </Text>
+      <View style={styles.sideSlot}>
+        <View style={styles.label}>
+          <Icon name="flame" size={13} color={TICKER_TEXT} fixed />
+          <Text style={styles.labelText} numberOfLines={1}>
+            Breaking
+          </Text>
+        </View>
       </View>
 
       <Animated.View style={[styles.messageWrap, { opacity: fade }]}>
@@ -71,11 +73,13 @@ export function PredictionNewsTicker({ enabled = true }: { enabled?: boolean }):
         </Text>
       </Animated.View>
 
-      {items.length > 1 ? (
-        <Text style={styles.counter} numberOfLines={1}>
-          {index + 1}/{items.length}
-        </Text>
-      ) : null}
+      <View style={[styles.sideSlot, styles.rightSlot]}>
+        {items.length > 1 ? (
+          <Text style={styles.counter} numberOfLines={1}>
+            {index + 1}/{items.length}
+          </Text>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -92,6 +96,15 @@ const styles = StyleSheet.create({
     backgroundColor: TICKER_BG,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.18)',
+  },
+  sideSlot: {
+    width: 86,
+    flexShrink: 0,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  rightSlot: {
+    alignItems: 'flex-end',
   },
   label: {
     height: 26,
@@ -114,18 +127,21 @@ const styles = StyleSheet.create({
   messageWrap: {
     minWidth: 0,
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   message: {
     color: TICKER_TEXT,
     fontSize: 12,
     lineHeight: 15,
     fontWeight: '800',
+    textAlign: 'center',
   },
   counter: {
     color: TICKER_TEXT,
     fontSize: 10,
     fontWeight: '900',
     opacity: 0.72,
-    flexShrink: 0,
+    textAlign: 'right',
   },
 });
