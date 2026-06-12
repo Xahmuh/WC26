@@ -44,16 +44,16 @@ export function TeamFlag({
 }: TeamFlagProps): React.JSX.Element {
   const [failedUrls, setFailedUrls] = useState<string[]>([]);
   const dim = fixed ? size : scale(size);
-  const width = Math.round(dim * 1.4);
+  const width = Math.round(dim * 1.5);
   const height = dim;
   const radius = 6;
   const candidateUrls = useMemo(() => {
     const urls = uniqueUrls([
-      team?.flag_url,
       team?.code ? getFlagUrl(team.code) : null,
       team?.short_name ? getFlagUrl(team.short_name) : null,
       team?.name ? getFlagUrl(team.name) : null,
       countryCode ? getFlagUrl(countryCode) : null,
+      team?.flag_url,
     ]);
 
     if (Platform.OS === 'web') return urls;

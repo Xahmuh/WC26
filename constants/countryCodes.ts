@@ -14,8 +14,11 @@ export const COUNTRY_CODES: Record<string, string> = {
   'Cape Verde Islands': 'cv',
   Chile: 'cl',
   Colombia: 'co',
+  'Congo DR': 'cd',
+  'Congo Democratic Republic': 'cd',
   'Costa Rica': 'cr',
   Croatia: 'hr',
+  Curacao: 'cw',
   Czechia: 'cz',
   'Czech Republic': 'cz',
   Denmark: 'dk',
@@ -26,6 +29,7 @@ export const COUNTRY_CODES: Record<string, string> = {
   Germany: 'de',
   Ghana: 'gh',
   Greece: 'gr',
+  Haiti: 'ht',
   Hungary: 'hu',
   Iran: 'ir',
   Iraq: 'iq',
@@ -56,6 +60,7 @@ export const COUNTRY_CODES: Record<string, string> = {
   'South Africa': 'za',
   'South Korea': 'kr',
   Spain: 'es',
+  Sweden: 'se',
   Switzerland: 'ch',
   Tunisia: 'tn',
   Turkey: 'tr',
@@ -85,8 +90,14 @@ const FLAG_CODE_ALIASES: Record<string, string> = {
   chi: 'cl',
   civ: 'ci',
   col: 'co',
+  cod: 'cd',
+  congodr: 'cd',
+  congodemocraticrepublic: 'cd',
+  democraticrepublicofthecongo: 'cd',
   crc: 'cr',
   cro: 'hr',
+  cuw: 'cw',
+  curacao: 'cw',
   cze: 'cz',
   den: 'dk',
   ecu: 'ec',
@@ -96,6 +107,8 @@ const FLAG_CODE_ALIASES: Record<string, string> = {
   ger: 'de',
   gha: 'gh',
   gre: 'gr',
+  hai: 'ht',
+  haiti: 'ht',
   hun: 'hu',
   irn: 'ir',
   irq: 'iq',
@@ -120,6 +133,8 @@ const FLAG_CODE_ALIASES: Record<string, string> = {
   sco: 'gb-sct',
   sen: 'sn',
   srb: 'rs',
+  swe: 'se',
+  sweden: 'se',
   svk: 'sk',
   svn: 'si',
   kor: 'kr',
@@ -164,7 +179,12 @@ const FLAG_CODE_ALIASES: Record<string, string> = {
 };
 
 function normalizeFlagKey(value: string): string {
-  return value.trim().toLowerCase().replace(/[\s_]+/g, '');
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
 }
 
 export function resolveFlagCode(teamNameOrCode: string): string {
@@ -184,5 +204,5 @@ export function resolveFlagCode(teamNameOrCode: string): string {
 
 export function getFlagUrl(teamNameOrCode: string): string {
   const code = resolveFlagCode(teamNameOrCode);
-  return `https://flagcdn.com/w40/${code}.png`;
+  return `https://flagcdn.com/w160/${code}.png`;
 }
