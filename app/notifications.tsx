@@ -20,6 +20,7 @@ const ICON_FOR: Record<NotificationType, IconName> = {
   match_result: 'matches',
   announcement: 'info',
   tournament: 'trophy',
+  prediction_news: 'flame',
 };
 
 function relativeTime(iso: string): string {

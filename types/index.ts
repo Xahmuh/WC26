@@ -317,6 +317,16 @@ export interface UserQuestionPrediction {
   status?: 'pending' | 'approved' | 'rejected';
 }
 
+export interface PredictionNews {
+  id: string;
+  message: string;
+  is_active: boolean;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============================================================================
 // Supabase row shapes + Database generic for a typed client.
 // Only the columns the mobile app touches are modelled here.

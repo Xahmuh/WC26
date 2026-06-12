@@ -11,7 +11,8 @@ export type NotificationType =
   | 'rank_change'
   | 'match_result'
   | 'announcement'
-  | 'tournament';
+  | 'tournament'
+  | 'prediction_news';
 
 export interface AppNotification {
   id: string;

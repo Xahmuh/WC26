@@ -18,6 +18,7 @@ if (Platform.OS === 'web') {
 import Theme from '@/constants/theme/design-system';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { PredictionNewsTicker } from '@/components/ui/PredictionNewsTicker';
 import { queryClient } from '@/lib/queryClient';
 import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/services/auth.service';
@@ -95,6 +96,7 @@ function RootNavigator(): React.JSX.Element {
   const { width } = useWindowDimensions();
   const initialize = useAuthStore((s) => s.initialize);
   const initializing = useAuthStore((s) => s.initializing);
+  const session = useAuthStore((s) => s.session);
 
   useEffect(() => {
     void initialize();
@@ -124,36 +126,39 @@ function RootNavigator(): React.JSX.Element {
   const useMaxContainer = isWeb && width > 480;
 
   const content = (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: APP_BACKGROUND_COLOR },
-      }}
-    >
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen
-        name="match/[id]"
-        options={{
+    <>
+      <PredictionNewsTicker enabled={Boolean(session)} />
+      <Stack
+        screenOptions={{
           headerShown: false,
-          presentation: 'card',
+          contentStyle: { backgroundColor: APP_BACKGROUND_COLOR },
         }}
-      />
-      <Stack.Screen
-        name="user-performance"
-        options={{
-          headerShown: false,
-          presentation: 'card',
-        }}
-      />
-      <Stack.Screen
-        name="notifications"
-        options={{
-          headerShown: false,
-          presentation: 'card',
-        }}
-      />
-    </Stack>
+      >
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="match/[id]"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="user-performance"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="notifications"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+      </Stack>
+    </>
   );
 
   if (useMaxContainer) {
