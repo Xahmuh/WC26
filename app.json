@@ -3,7 +3,7 @@
     "scheme": "wc26",
     "name": "WC26",
     "slug": "wc26",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",

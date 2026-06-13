@@ -15,6 +15,7 @@ import { AuthContentManager } from '@/components/admin/AuthContentManager';
 import { HomeCardsTileManager } from '@/components/admin/HomeCardsTileManager';
 import { MatchesHeroManager } from '@/components/admin/MatchesHeroManager';
 import { PredictionNewsManager } from '@/components/admin/PredictionNewsManager';
+import { AppUpdateManager } from '@/components/admin/AppUpdateManager';
 import { DateTimePickerModal } from '@/components/ui/DateTimePickerModal';
 import { useMatches } from '@/hooks/useMatches';
 import { usePredictionQuestions } from '@/hooks/usePredictionQuestions';
@@ -201,7 +202,17 @@ const STAGE_ORDER: MatchStage[] = [
 
 const MULTIPLIER_OPTIONS = [1, 2, 3, 4, 5, 6];
 
-type AdminTab = 'matches' | 'add_match' | 'questions' | 'cards' | 'hero_banner' | 'news' | 'quotes' | 'scoring' | 'api';
+type AdminTab =
+  | 'matches'
+  | 'add_match'
+  | 'questions'
+  | 'cards'
+  | 'hero_banner'
+  | 'news'
+  | 'updates'
+  | 'quotes'
+  | 'scoring'
+  | 'api';
 
 type AdminDialogVariant = 'success' | 'error' | 'warning' | 'info' | 'danger';
 
@@ -227,6 +238,7 @@ const ADMIN_TABS: Array<{ key: AdminTab; label: string; width: number }> = [
   { key: 'cards', label: 'Cards', width: 88 },
   { key: 'hero_banner', label: 'Banners', width: 112 },
   { key: 'news', label: 'News', width: 86 },
+  { key: 'updates', label: 'Updates', width: 104 },
   { key: 'quotes', label: 'Quotes', width: 96 },
   { key: 'scoring', label: 'Scoring', width: 104 },
   { key: 'api', label: 'API', width: 82 },
@@ -3517,6 +3529,13 @@ export default function AdminDashboard(): React.JSX.Element {
         {activeTab === 'news' && (
           <Card className="border border-bgBorder bg-bgSurface2 p-4">
             <PredictionNewsManager onDialog={showAdminDialog} />
+          </Card>
+        )}
+
+        {/* Updates Tab */}
+        {activeTab === 'updates' && (
+          <Card className="border border-bgBorder bg-bgSurface2 p-4">
+            <AppUpdateManager onDialog={showAdminDialog} />
           </Card>
         )}
 

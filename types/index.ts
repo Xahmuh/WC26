@@ -307,6 +307,17 @@ export interface AuthContent {
   settings: AuthScreenSettings | null;
 }
 
+export interface AppUpdateSettings {
+  id: number;
+  latest_version: string;
+  minimum_supported_version: string;
+  update_required: boolean;
+  update_url: string | null;
+  release_notes: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
 export interface UserQuestionPrediction {
   id: string;
   user_id: string;

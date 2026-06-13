@@ -19,6 +19,7 @@ import Theme from '@/constants/theme/design-system';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { PredictionNewsTicker } from '@/components/ui/PredictionNewsTicker';
+import { AppUpdateGate } from '@/components/ui/AppUpdateGate';
 import { queryClient } from '@/lib/queryClient';
 import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/services/auth.service';
@@ -158,6 +159,7 @@ function RootNavigator(): React.JSX.Element {
           }}
         />
       </Stack>
+      <AppUpdateGate />
     </>
   );
 

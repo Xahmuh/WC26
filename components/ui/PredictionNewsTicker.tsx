@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/ui/Icon';
 import { useActivePredictionNews } from '@/hooks/usePredictionNews';
@@ -12,6 +13,7 @@ const FADE_MS = 220;
 
 export function PredictionNewsTicker({ enabled = true }: { enabled?: boolean }): React.JSX.Element | null {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const newsQuery = useActivePredictionNews(enabled);
   const items = useMemo(() => newsQuery.data ?? [], [newsQuery.data]);
   const [index, setIndex] = useState(0);
@@ -51,7 +53,13 @@ export function PredictionNewsTicker({ enabled = true }: { enabled?: boolean }):
       accessibilityRole="button"
       accessibilityLabel={`Breaking prediction news: ${current.message}`}
       onPress={() => router.push('/notifications' as never)}
-      style={styles.strip}
+      style={[
+        styles.strip,
+        {
+          minHeight: 44 + insets.top,
+          paddingTop: insets.top + 7,
+        },
+      ]}
     >
       <View style={styles.sideSlot}>
         <View style={styles.label}>
