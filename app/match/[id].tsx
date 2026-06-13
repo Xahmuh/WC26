@@ -21,7 +21,7 @@ import { useMyPoints } from '@/hooks/usePoints';
 import { useMyPredictions } from '@/hooks/usePredictions';
 import { isFinishedLike, isNotStartedMatch, isOpenPredictionMatch } from '@/components/home/homeUtils';
 import { STAGE_LABELS } from '@/lib/constants';
-import { formatKickoff } from '@/lib/dates';
+import { formatKickoff, toTimestamp } from '@/lib/dates';
 import { isLiveMatchStatus, shouldShowMatchScore } from '@/lib/matchStatus';
 
 export default function MatchDetailScreen(): React.JSX.Element {
@@ -45,10 +45,10 @@ export default function MatchDetailScreen(): React.JSX.Element {
     const matches = matchesQuery.data;
     if (!currentMatch || !matches?.length) return null;
 
-    const currentKickoff = new Date(currentMatch.kickoff_time).getTime();
+    const currentKickoff = toTimestamp(currentMatch.kickoff_time);
     const openMatches = matches
       .filter((candidate) => candidate.id !== currentMatch.id && isOpenPredictionMatch(candidate))
-      .sort((a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime());
+      .sort((a, b) => toTimestamp(a.kickoff_time) - toTimestamp(b.kickoff_time));
 
     const predictions = predictionsQuery.data;
     const pendingMatches = predictions
@@ -57,7 +57,7 @@ export default function MatchDetailScreen(): React.JSX.Element {
     const candidates = pendingMatches.length > 0 ? pendingMatches : openMatches;
 
     return (
-      candidates.find((candidate) => new Date(candidate.kickoff_time).getTime() >= currentKickoff)?.id ??
+      candidates.find((candidate) => toTimestamp(candidate.kickoff_time) >= currentKickoff)?.id ??
       candidates[0]?.id ??
       null
     );

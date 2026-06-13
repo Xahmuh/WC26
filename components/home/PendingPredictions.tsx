@@ -10,6 +10,7 @@ import { useMatches } from '@/hooks/useMatches';
 import { useMyPredictions } from '@/hooks/usePredictions';
 import { formatShortMatchTime, isOpenPredictionMatch } from '@/components/home/homeUtils';
 import { useResponsive } from '@/lib/responsive';
+import { toTimestamp } from '@/lib/dates';
 
 const COMPACT_AWAY_NAME_LENGTH = 13;
 
@@ -21,7 +22,7 @@ function getCompactAwayTeamName(name: string): string {
 }
 
 function getLockProgress(kickoffTime: string): number {
-  const kickoff = new Date(kickoffTime).getTime();
+  const kickoff = toTimestamp(kickoffTime);
   if (Number.isNaN(kickoff)) return 0;
 
   const remaining = kickoff - Date.now();

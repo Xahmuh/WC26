@@ -9,6 +9,7 @@ import { useMatches } from '@/hooks/useMatches';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatShortMatchTime, isVisibleTodayMatch } from '@/components/home/homeUtils';
 import { Icon } from '@/components/ui/Icon';
+import { toTimestamp } from '@/lib/dates';
 
 const CARD_GAP = 10;
 const MOBILE_VISIBLE_CARD_COUNT = 1.75;
@@ -51,7 +52,7 @@ export function TodayMatchesSection({ isLoading = false }: { isLoading?: boolean
 
     return (matchesQuery.data ?? [])
       .filter((match) => isVisibleTodayMatch(match, nowMs))
-      .sort((a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime());
+      .sort((a, b) => toTimestamp(a.kickoff_time) - toTimestamp(b.kickoff_time));
   }, [matchesQuery.data]);
 
   const loading = isLoading || matchesQuery.isLoading;

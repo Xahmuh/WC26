@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { toTimestamp } from '@/lib/dates';
 import type { Tables } from '@/types/database.types';
 import type { PerformancePointsBreakdown, UserPerformanceStats, UserStreak } from '@/types/performance';
 
@@ -141,7 +142,7 @@ export async function fetchUserStreak(userId: string): Promise<UserStreak> {
     .sort((a, b) => {
       const aKickoff = a.match_id ? matchesById.get(a.match_id)?.kickoff_time ?? '' : '';
       const bKickoff = b.match_id ? matchesById.get(b.match_id)?.kickoff_time ?? '' : '';
-      return new Date(bKickoff).getTime() - new Date(aKickoff).getTime();
+      return toTimestamp(bKickoff) - toTimestamp(aKickoff);
     });
 
   if (scoredMatches.length === 0) {

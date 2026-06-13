@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Colors, Typography } from '@/constants';
 import { useMatches } from '@/hooks/useMatches';
 import { formatCountdownParts, formatShortMatchTime } from '@/components/home/homeUtils';
+import { toTimestamp } from '@/lib/dates';
 import { isPredictionOpenStatus } from '@/lib/matchStatus';
 import type { Match } from '@/types';
 
@@ -24,7 +25,7 @@ function hasConcreteTeams(match: Match): boolean {
 }
 
 function kickoffTimestamp(match: Match): number {
-  const timestamp = new Date(match.kickoff_time).getTime();
+  const timestamp = toTimestamp(match.kickoff_time);
   return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
 }
 

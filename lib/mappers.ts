@@ -1,4 +1,5 @@
 import type { Match, MatchWithTeamsRow, Team, TeamRow } from '@/types';
+import { toIsoTimestamp } from '@/lib/dates';
 
 export function mapTeam(row: TeamRow): Team {
   return {
@@ -39,7 +40,7 @@ export function mapMatch(row: MatchWithTeamsRow): Match {
     status: row.status,
     stage: row.stage,
     group_name: row.group_name,
-    kickoff_time: row.kickoff_time,
+    kickoff_time: toIsoTimestamp(row.kickoff_time),
     venue: row.venue,
     points_multiplier: row.points_multiplier || 1,
   };

@@ -14,6 +14,7 @@ import Theme from '@/constants/theme/design-system';
 import { useMatches } from '@/hooks/useMatches';
 import { useMyPoints } from '@/hooks/usePoints';
 import { useMyPredictions } from '@/hooks/usePredictions';
+import { toTimestamp } from '@/lib/dates';
 import type { Match } from '@/types';
 
 type PredictionsTab = 'UPCOMING' | 'PENDING' | 'HISTORY' | 'MISSED';
@@ -125,11 +126,11 @@ function normalizeTab(value: string | string[] | undefined): PredictionsTab | nu
 }
 
 function byKickoffAsc(a: Match, b: Match): number {
-  return new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime();
+  return toTimestamp(a.kickoff_time) - toTimestamp(b.kickoff_time);
 }
 
 function byKickoffDesc(a: Match, b: Match): number {
-  return new Date(b.kickoff_time).getTime() - new Date(a.kickoff_time).getTime();
+  return toTimestamp(b.kickoff_time) - toTimestamp(a.kickoff_time);
 }
 
 function SummaryStat({

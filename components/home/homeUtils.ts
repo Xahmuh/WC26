@@ -4,6 +4,7 @@ import {
   isLiveMatchStatus,
   isPredictionOpenStatus,
 } from '@/lib/matchStatus';
+import { parseAppDate, toTimestamp } from '@/lib/dates';
 
 export type HomeMatch = Match & {
   is_golden?: boolean;
@@ -24,14 +25,14 @@ export function isNotStartedMatch(status: string | undefined, kickoffTime: strin
   const normalized = status?.toUpperCase() ?? '';
   if (normalized !== 'UPCOMING' && !isPredictionOpenStatus(status)) return false;
 
-  const kickoffMs = new Date(kickoffTime).getTime();
+  const kickoffMs = toTimestamp(kickoffTime);
   if (Number.isNaN(kickoffMs)) return false;
 
   return kickoffMs > nowMs;
 }
 
 export function isVisibleTodayMatch(match: Match, nowMs = Date.now()): boolean {
-  if (!isTodayLocal(match.kickoff_time)) return false;
+  if (!isTodayLocal(match.kickoff_time, nowMs)) return false;
   return isLiveMatchStatus(match.status) || isNotStartedMatch(match.status, match.kickoff_time, nowMs);
 }
 
@@ -48,7 +49,7 @@ export function isPredictionClosedMatch(status: string | undefined, kickoffTime:
   if (normalized === 'POSTPONED' || normalized === 'CANCELLED') return false;
   if (isLiveMatchStatus(status) || isFinishedMatchStatus(status) || normalized === 'SUSPENDED') return true;
 
-  const kickoffMs = new Date(kickoffTime).getTime();
+  const kickoffMs = toTimestamp(kickoffTime);
   if (Number.isNaN(kickoffMs)) return false;
 
   return kickoffMs <= nowMs;
@@ -58,11 +59,11 @@ export function isMissedPredictionMatch(match: Match, nowMs = Date.now()): boole
   return hasConcreteTeams(match) && isPredictionClosedMatch(match.status, match.kickoff_time, nowMs);
 }
 
-export function isTodayLocal(iso: string): boolean {
-  const date = new Date(iso);
+export function isTodayLocal(iso: string, nowMs = Date.now()): boolean {
+  const date = parseAppDate(iso);
   if (Number.isNaN(date.getTime())) return false;
 
-  const today = new Date();
+  const today = new Date(nowMs);
   return (
     date.getFullYear() === today.getFullYear() &&
     date.getMonth() === today.getMonth() &&
@@ -71,7 +72,7 @@ export function isTodayLocal(iso: string): boolean {
 }
 
 export function formatShortMatchTime(iso: string): string {
-  const date = new Date(iso);
+  const date = parseAppDate(iso);
   if (Number.isNaN(date.getTime())) return 'TBD';
 
   const now = new Date();
@@ -109,7 +110,7 @@ export function formatCountdownParts(iso: string): {
   remainingMs: number;
   isElapsed: boolean;
 } {
-  const target = new Date(iso).getTime();
+  const target = toTimestamp(iso);
   const remainingMs = Math.max(0, target - Date.now());
   const isElapsed = remainingMs <= 0;
   const totalSeconds = Math.floor(remainingMs / 1000);

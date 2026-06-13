@@ -5,9 +5,27 @@
 
 const VALID = (d: Date): boolean => !Number.isNaN(d.getTime());
 
+export function toIsoTimestamp(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  return trimmed
+    .replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T')
+    .replace(/([+-]\d{2})(\d{2})$/, '$1:$2')
+    .replace(/([+-]\d{2})$/, '$1:00');
+}
+
+export function parseAppDate(value: string): Date {
+  return new Date(toIsoTimestamp(value));
+}
+
+export function toTimestamp(value: string): number {
+  return parseAppDate(value).getTime();
+}
+
 /** "Mon, Jun 8 · 21:00" in the device's local timezone. */
 export function formatKickoff(iso: string): string {
-  const date = new Date(iso);
+  const date = parseAppDate(iso);
   if (!VALID(date)) return 'TBD';
   const day = date.toLocaleDateString(undefined, {
     weekday: 'short',
@@ -23,7 +41,7 @@ export function formatKickoff(iso: string): string {
 
 /** "21:00" local time. */
 export function formatTime(iso: string): string {
-  const date = new Date(iso);
+  const date = parseAppDate(iso);
   if (!VALID(date)) return '--:--';
   return date.toLocaleTimeString(undefined, {
     hour: '2-digit',
@@ -32,7 +50,7 @@ export function formatTime(iso: string): string {
 }
 
 export function isToday(iso: string): boolean {
-  const date = new Date(iso);
+  const date = parseAppDate(iso);
   if (!VALID(date)) return false;
   const now = new Date();
   return (
@@ -43,7 +61,7 @@ export function isToday(iso: string): boolean {
 }
 
 export function isPast(iso: string): boolean {
-  const date = new Date(iso);
+  const date = parseAppDate(iso);
   if (!VALID(date)) return false;
   return date.getTime() <= Date.now();
 }
@@ -58,7 +76,7 @@ export interface Countdown {
 }
 
 export function getCountdown(iso: string, from: number = Date.now()): Countdown {
-  const target = new Date(iso).getTime();
+  const target = toTimestamp(iso);
   const total = Math.max(0, target - from);
   const isElapsed = total <= 0;
   const seconds = Math.floor((total / 1000) % 60);

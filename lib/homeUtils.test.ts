@@ -46,6 +46,15 @@ describe('home prediction match helpers', () => {
     expect(isOpenPredictionMatch(makeMatch(), nowMs)).toBe(true);
   });
 
+  it('counts Postgres timestamptz strings as open on native-safe parsing', () => {
+    const match = makeMatch({
+      status: 'TIMED',
+      kickoff_time: '2026-06-13 19:00:00+00',
+    });
+
+    expect(isOpenPredictionMatch(match, new Date('2026-06-13T06:20:00.000Z').getTime())).toBe(true);
+  });
+
   it('does not count future TBD placeholders as open to pick', () => {
     const tbdMatch = makeMatch({
       is_placeholder: true,
